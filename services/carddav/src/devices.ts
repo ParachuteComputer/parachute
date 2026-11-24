@@ -1,6 +1,6 @@
 // The devices that may sync: a file of `name:<scrypt hash>` lines, one per phone. A device's app password is made here,
 // shown once, and only its hash is kept. Checked with HTTP Basic on every request, in constant time.
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scrypt, scryptSync, timingSafeEqual, type ScryptOptions } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -14,14 +14,15 @@ export function hashPassword(password: string): string {
 }
 
 /** Whether `password` matches a stored hash. Always runs one scrypt and one constant-time compare. */
-export function checkPassword(stored: string, password: string): boolean {
+export async function checkPassword(stored: string, password: string): Promise<boolean> {
   const m = /^scrypt\$(\d+)\$(\d+)\$(\d+)\$([\w-]+)\$([\w-]+)$/.exec(stored);
   const [n, r, p] = m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [N, R, P];
   const salt = m ? Buffer.from(m[4], "base64url") : Buffer.alloc(16);
   const held = m ? Buffer.from(m[5], "base64url") : Buffer.alloc(0);
   const want = held.length === LEN ? held : Buffer.alloc(LEN);
   const ok = n >= 2 && (n & (n - 1)) === 0 && n <= 1 << 20 && r <= 32 && p <= 16 && held.length === LEN;
-  const got = scryptSync(password, salt, LEN, ok ? { N: n, r, p, maxmem: 256 * n * r + 1024 * 1024 } : { N, r: R, p: P });
+  // off the event loop: a run of wrong passwords doesn't stall the other requests
+  const got = await new Promise<Buffer>((res, rej) => scrypt(password, salt, LEN, (ok ? { N: n, r, p, maxmem: 256 * n * r + 1024 * 1024 } : { N, r: R, p: P }) as ScryptOptions, (e, k) => (e ? rej(e) : res(k))));
   return timingSafeEqual(got, want) && !!m && ok;
 }
 
@@ -66,7 +67,7 @@ export function revokeDevice(file: string, name: string): boolean {
 export function deviceChecker(file: string) {
   const ok = new Map<string, number>();
   const DUMMY = hashPassword(randomBytes(12).toString("base64url"));
-  return (header: string | undefined): string | null => {
+  return async (header: string | undefined): Promise<string | null> => {
     const m = /^Basic\s+([A-Za-z0-9+/=]+)\s*$/i.exec(header ?? "");
     if (!m) return null;
     const decoded = Buffer.from(m[1], "base64").toString("utf8");
@@ -78,7 +79,7 @@ export function deviceChecker(file: string) {
     const until = ok.get(key);
     if (stored && until && until > Date.now()) return name;
     // an unknown name costs the same scrypt as a known one
-    const good = checkPassword(stored ?? DUMMY, password) && !!stored;
+    const good = (await checkPassword(stored ?? DUMMY, password)) && !!stored;
     if (!good) return null;
     if (ok.size > 200) ok.clear();
     ok.set(key, Date.now() + 5 * 60_000);

@@ -109,9 +109,12 @@ export function createBridge(o: BridgeOptions) {
   /** Every person in the folder, and which are on the phone (all but `on_phone: false`), by card name. */
   async function members() {
     const all = await vault.list(folder);
+    // one card per name: a person on the phone before one left off it, then the oldest made (two records can carry one
+    // `uid` or `href`, by a copy or an edit by hand; the other isn't served until that is fixed in the vault)
     const byName = new Map<string, Person>();
-    for (const p of all) if (!byName.has(resourceOf(p))) byName.set(resourceOf(p), p);
-    const shown = all.filter((p) => p.fields.on_phone !== false);
+    const on = (p: Person) => p.fields.on_phone !== false;
+    for (const p of [...all.filter(on), ...all.filter((p) => !on(p))]) if (!byName.has(resourceOf(p))) byName.set(resourceOf(p), p);
+    const shown = all.filter((p) => on(p) && byName.get(resourceOf(p)) === p);
     return { all, byName, shown };
   }
   const ctagOf = (shown: Person[]) =>
@@ -120,7 +123,9 @@ export function createBridge(o: BridgeOptions) {
   /** The card as served: its photo inline, read from the record's attachment. */
   async function served(p: Person): Promise<string> {
     const path = str(p.fields.photo);
-    const photo = path ? await vault.file(path, photoMax).catch(() => null) : null;
+    // a picture the vault can't give now fails the request (the phone asks again later): served without it under the
+    // same ETag, the phone would keep the card without its photo. One that is gone or too big is left out, always.
+    const photo = path ? await vault.file(path, photoMax) : null;
     return cardText(p, folder, photo ? { type: photoType(path), base64: Buffer.from(photo.bytes).toString("base64") } : null);
   }
 
@@ -247,6 +252,7 @@ export function createBridge(o: BridgeOptions) {
    *  different PRODID, REV or line order doesn't count; a name People kept, a fact it reads differently or a photo it
    *  didn't take does. */
   async function storedAsSent(card: PhoneCard, rec: Person, tookPhoto: boolean): Promise<boolean> {
+    if (card.lost) return false;
     const asSent: Person = {
       id: rec.id, path: `${folder}${card.fn || card.name}`, updatedAt: "",
       fields: { ...factsToFields(card.facts), vcard_extra: card.extra, uid: card.uid, href: rec.fields.href },
@@ -300,7 +306,12 @@ export function createBridge(o: BridgeOptions) {
       rec = await create(card, t.name, all);
       created = true;
     }
-    const [after, took] = await takePhoto(rec, card);
+    // the card's facts are written; a picture that won't attach doesn't undo that (the answer then has no ETag, so the
+    // phone reads the card back without it)
+    const [after, took] = await takePhoto(rec, card).catch((e: unknown): [Person, boolean] => {
+      log(`photo not attached: ${e instanceof Error ? e.message : String(e)}`);
+      return [rec, false];
+    });
     const same = await storedAsSent(card, after, took);
     send(res, created ? 201 : 204, "", same ? { etag: etagOf(after, folder) } : {});
   }
@@ -357,7 +368,7 @@ export function createBridge(o: BridgeOptions) {
     try {
       const pathname = new URL(req.url ?? "/", "http://x").pathname;
       if (/^\/\.well-known\/carddav\/?$/.test(pathname)) { send(res, 301, "", { location: "/dav/" }); return; }
-      const who = check(req.headers.authorization);
+      const who = await check(req.headers.authorization);
       if (!who) {
         req.resume();
         send(res, 401, "A device name and app password (node src/main.ts add-device <name>)\n", { "www-authenticate": 'Basic realm="Parachute People", charset="UTF-8"', "content-type": "text/plain; charset=utf-8" });

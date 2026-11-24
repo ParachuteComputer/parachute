@@ -191,3 +191,25 @@ test("an N with more than the name gives (a middle name, a title) is kept while 
   // renamed in the vault: the kept N no longer spells it, so one is made from the new name
   assert.match(cardText({ ...p, path: "People/Ana Ruiz" }, F), /\r\nN:Ruiz;Ana;;;\r\n/);
 });
+
+test("a phone label People can't hold is reduced to one it can, never left inside the number", () => {
+  const c = readPhoneCard("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ada Byrne\r\nitem1.TEL:123 4567\r\nitem1.X-ABLabel:Dr. Office\r\nitem2.TEL:+1 303-555-0188\r\nitem2.X-ABLabel:★\r\nEND:VCARD\r\n");
+  assert.deepEqual(c.facts.phones, ["dr office: 123 4567", "+1 303-555-0188"]);
+  const served = cardText({ id: "a", path: "People/Ada Byrne", updatedAt: "", fields: { phones: c.facts.phones } }, F);
+  assert.match(served, /\r\nitem1\.TEL:123 4567\r\nitem1\.X-ABLabel:dr office\r\n/);
+  assert.match(served, /\r\nTEL:\+1 303-555-0188\r\n/);
+});
+
+test("merge: links the card couldn't show stay when the phone changes its links", () => {
+  const fields = { links: ["https://maya.example", "ftp://files.maya.example"] };
+  const p: Person = { ...maya, fields };
+  const edited = cardText(p, F).replace("URL:https://maya.example", "URL:https://maya.example/new");
+  assert.deepEqual(patchFor(fields, readPhoneCard(edited)), { links: ["https://maya.example/new", "ftp://files.maya.example"] });
+  const emptied = cardText(p, F).replace(/URL:[^\r]*\r\n/, "");
+  assert.deepEqual(patchFor(fields, readPhoneCard(emptied)), { links: ["ftp://files.maya.example"] });
+});
+
+test("a name of dots names no note", () => {
+  assert.equal(readPhoneCard("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:..\r\nEND:VCARD\r\n").name, "");
+  assert.equal(readPhoneCard("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:.\r\nEMAIL:dot@example.test\r\nEND:VCARD\r\n").name, "dot@example.test");
+});

@@ -27,7 +27,7 @@ test("the XML DAVx5 sends parses into names and namespaces", () => {
   assert.throws(() => parseXml("<x:a/>"));
 });
 
-test("devices: a password works once added, a wrong one never, and not after revoke; only the hash is kept", () => {
+test("devices: a password works once added, a wrong one never, and not after revoke; only the hash is kept", async () => {
   const dir = mkdtempSync(join(tmpdir(), "carddav-devices-"));
   try {
     const file = join(dir, "devices");
@@ -38,15 +38,22 @@ test("devices: a password works once added, a wrong one never, and not after rev
     assert.doesNotMatch(held, new RegExp(pw.replace(/[-]/g, "\\-")));
     const check = deviceChecker(file);
     const basic = (u: string, p: string) => `Basic ${Buffer.from(`${u}:${p}`).toString("base64")}`;
-    assert.equal(check(basic("pixel", pw)), "pixel");
-    assert.equal(check(basic("pixel", pw)), "pixel"); // remembered
-    assert.equal(check(basic("pixel", `${pw}x`)), null);
-    assert.equal(check(basic("other", pw)), null);
-    assert.equal(check(undefined), null);
-    assert.equal(check("Bearer x"), null);
+    assert.equal(await check(basic("pixel", pw)), "pixel");
+    assert.equal(await check(basic("pixel", pw)), "pixel"); // remembered
+    assert.equal(await check(basic("pixel", `${pw}x`)), null);
+    assert.equal(await check(basic("other", pw)), null);
+    assert.equal(await check(undefined), null);
+    assert.equal(await check("Bearer x"), null);
     assert.throws(() => addDevice(file, "bad name"));
     assert.equal(revokeDevice(file, "pixel"), true);
-    assert.equal(check(basic("pixel", pw)), null);
+    assert.equal(await check(basic("pixel", pw)), null);
     assert.equal(revokeDevice(file, "pixel"), false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("text a card holds stays well-formed XML: control characters dropped, markup escaped", async () => {
+  const { esc } = await import("../src/xml.ts");
+  const out = `<a>${esc("NOTE:x\u0001y </a><b> & \"q\"")}</a>`;
+  assert.equal(parseXml(out).text, "NOTE:xy </a><b> & \"q\"");
+  assert.equal(esc("a\uD800b 😀"), "ab 😀");
 });

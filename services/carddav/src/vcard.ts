@@ -206,9 +206,11 @@ export function dedupe(items: string[], key: (s: string) => string = (s) => s.to
   return out;
 }
 
-/** The applet's `cleanPersonName`: what a note name may hold. */
+/** The applet's `cleanPersonName`: what a note name may hold; and never only dots. */
 export function cleanName(raw: string): string {
-  return raw.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  const name = raw.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  // "." and ".." name no note (a path segment of dots means this folder or the one above)
+  return /^\.+$/.test(name) ? "" : name;
 }
 
 /** The applet's `webLink`: an http(s) address on one line. */

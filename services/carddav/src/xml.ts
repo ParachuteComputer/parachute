@@ -78,4 +78,7 @@ export function parseXml(xml: string): El {
 export const child = (el: El | undefined, ns: string, name: string) => el?.children.find((c) => c.ns === ns && c.name === name);
 export const children = (el: El | undefined, ns: string, name: string) => el?.children.filter((c) => c.ns === ns && c.name === name) ?? [];
 
-export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+/** Text for XML: escaped, and without the characters XML 1.0 can't hold (a control character in a card would make the
+ *  whole multistatus unreadable). */
+// eslint-disable-next-line no-control-regex
+export const esc = (s: string) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, "").replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

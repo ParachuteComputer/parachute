@@ -148,7 +148,17 @@ export type PhoneCard = {
   photo: { mime: string; bytes: Uint8Array } | null;
   /** A group card (DAVx5's group-vCard method), which People doesn't take. */
   group: boolean;
+  /** Something the card said that won't be kept: a line too long to keep, a picture that isn't inline, a second one. */
+  lost: boolean;
 };
+
+/** A label as a phone entry can hold it (`"<label>: <number>"`, the applet's `parsePhoneEntry`): letters, digits,
+ *  space, _ and -, starting with a letter, up to 21 characters; anything else is dropped from it. A label left empty
+ *  leaves the number unlabelled (a label People couldn't read back would end up inside the number). */
+export function labelFor(raw: string): string {
+  const cleaned = raw.toLowerCase().replace(/[^a-z0-9 _-]+/g, " ").replace(/\s+/g, " ").trim().replace(/^[^a-z]+/, "").slice(0, 21).trim();
+  return parsePhoneEntry(`${cleaned}: 1`).label === cleaned ? cleaned : "";
+}
 
 const KIND_GROUP = (p: Prop) => (p.name === "KIND" || p.name === "X-ADDRESSBOOKSERVER-KIND") && p.value.trim().toLowerCase() === "group";
 const LONGEST_EXTRA = 8192;
@@ -170,6 +180,7 @@ export function readPhoneCard(text: string): PhoneCard {
   const links: string[] = [];
   const groups: string[] = [];
   let photo: PhoneCard["photo"] = null;
+  let lost = false;
   const labelled = new Set<string>();
 
   for (const p of props) {
@@ -189,7 +200,7 @@ export function readPhoneCard(text: string): PhoneCard {
         if (!n) break;
         const gl = p.group ? groupLabels.get(p.group.toLowerCase()) : undefined;
         if (gl) labelled.add(p.group.toLowerCase());
-        const label = phoneLabelFromTypes(p.params.TYPE ?? [], gl ? unescapeValue(gl.value).trim() : undefined);
+        const label = labelFor(phoneLabelFromTypes(p.params.TYPE ?? [], gl ? unescapeValue(gl.value).trim() : undefined));
         phones.push(label ? `${label}: ${n}` : n);
         break;
       }
@@ -227,20 +238,23 @@ export function readPhoneCard(text: string): PhoneCard {
       case "NOTE": { const n = unescapeValue(val).trim(); if (!summary) { take(p); summary = n; } else if (!n) take(p); break; }
       case "PHOTO": {
         take(p);
-        if (photo) break;
+        if (photo) { lost = true; break; }
         const data = /^data:([^;,]+);base64,(.+)$/i.exec(val.trim());
         const encs = (p.params.ENCODING ?? []).map((e) => e.toUpperCase());
         const b64 = data ? data[2] : encs.includes("B") || encs.includes("BASE64") ? val : "";
         const mime = data ? data[1].toLowerCase() : `image/${((p.params.TYPE ?? p.params.MEDIATYPE ?? ["jpeg"])[0] ?? "jpeg").toLowerCase().replace(/^image\//, "").replace(/^jpg$/, "jpeg")}`;
         const bytes = b64 ? Buffer.from(b64.replace(/\s+/g, ""), "base64") : null;
         if (bytes && bytes.length && mime.startsWith("image/")) photo = { mime, bytes: new Uint8Array(bytes) };
+        else lost = true;
         break;
       }
     }
   }
   // a label goes with the property it names; one left over stays with what it labels, in vcard_extra
   for (const g of labelled) { const l = groupLabels.get(g); if (l) used.add(l); }
-  const extra = props.filter((p) => !used.has(p) && p.line.length <= LONGEST_EXTRA).map((p) => p.line);
+  const left = props.filter((p) => !used.has(p));
+  if (left.some((p) => p.line.length > LONGEST_EXTRA)) lost = true;
+  const extra = left.filter((p) => p.line.length <= LONGEST_EXTRA).map((p) => p.line);
 
   const pref = emails.find((e) => e.pref);
   const ordered = dedupe([...(pref ? [pref.v] : []), ...emails.map((e) => e.v)]);
@@ -255,8 +269,9 @@ export function readPhoneCard(text: string): PhoneCard {
     groups: dedupe(groups),
     summary,
   };
-  const name = cleanName(fn || nName || org || facts.email || (dedupedPhones[0] ? parsePhoneEntry(dedupedPhones[0]).number : ""));
-  return { uid, name, fn, facts, extra, photo, group: props.some(KIND_GROUP) };
+  // the first of these that makes a note name (an FN of dots makes none)
+  const name = [fn, nName, org, facts.email, dedupedPhones[0] ? parsePhoneEntry(dedupedPhones[0]).number : ""].map(cleanName).find(Boolean) ?? "";
+  return { uid, name, fn, facts, extra, photo, group: props.some(KIND_GROUP), lost };
 }
 
 /** The fields a card's facts become on a record: empty facts left out. */
@@ -287,6 +302,11 @@ export function patchFor(fields: Record<string, unknown>, card: PhoneCard): Reco
     const v = want[k];
     if (same(now[k], v)) continue;
     patch[k] = (Array.isArray(v) ? v.length === 0 : v === "") ? null : v;
+  }
+  // links the card couldn't show (not http/https) were never on the phone: they stay
+  if ("links" in patch) {
+    const unseen = strList(fields.links).filter((l) => !webLink(l));
+    if (unseen.length) patch.links = [...want.links, ...unseen];
   }
   const extraNow = strList(fields.vcard_extra);
   if (!same(extraNow, card.extra)) patch.vcard_extra = card.extra.length ? card.extra : null;

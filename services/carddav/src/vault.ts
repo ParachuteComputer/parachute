@@ -73,10 +73,15 @@ export function vaultClient(base: string, token: string, f: typeof fetch = fetch
       await call("POST", `/records/${encodeURIComponent(id)}/attachments`, { path, mimeType: mime });
       return path;
     },
-    /** A stored file's bytes, or null when it is gone or bigger than `max`. */
+    /** A stored file's bytes; null when the path isn't a storage path (`<day>/<file>`: no `.` or `..` part, which would
+     *  reach past storage with this token), when it is gone, or when it is bigger than `max`. Throws when the hub
+     *  doesn't answer as it should. */
     async file(path: string, max: number): Promise<{ mime: string; bytes: Uint8Array } | null> {
-      const r = await f(`${api}/storage/${path.split("/").map(encodeURIComponent).join("/")}`, { headers: auth });
-      if (!r.ok) { await r.body?.cancel(); return null; }
+      const parts = path.split("/");
+      if (parts.some((x) => x === "" || x === "." || x === ".." || /[\\\u0000-\u001f]/.test(x))) return null;
+      const r = await f(`${api}/storage/${parts.map(encodeURIComponent).join("/")}`, { headers: auth });
+      if (r.status === 404) { await r.body?.cancel(); return null; }
+      if (!r.ok) { await r.body?.cancel(); throw new VaultError(r.status, `storage: ${r.status}`); }
       const len = Number(r.headers.get("content-length") ?? "0");
       if (len > max) { await r.body?.cancel(); return null; }
       const bytes = new Uint8Array(await r.arrayBuffer());

@@ -47,7 +47,9 @@ the summary. `tags` don't cross.
 - **Which people:** every record in `People/` unless it has `on_phone: false`. Each card is `<record id>.vcf`, or
   `<uid>.vcf` (or `<href>.vcf`) when the record has one.
 - **An edit on the phone:** the card's facts replace the record's card facts, and a fact cleared on the phone is
-  removed. Every other field and the body are left alone. The write goes through only if nobody changed the record since
+  removed. Every other field and the body are left alone, and so are links the card couldn't show (not http or
+  https). A custom phone label is kept as People can hold it: letters, digits, spaces, `_` and `-`, so `Dr. Office`
+  becomes `dr office`. The write goes through only if nobody changed the record since
   the phone last read it. If someone did, the phone gets `412`, then downloads the vault's version.
 - **A new name on the phone doesn't rename the note.** Renaming would break links to it, so the note keeps its name
   and the phone shows that name again after its next sync. Rename a person in People.
@@ -120,10 +122,10 @@ Node 22.18 or newer runs the `.ts` files directly; there are no runtime dependen
 4. **Put it on the tailnet** with `tailscale serve`, at the root of its own port, because the hrefs are absolute paths:
 
    ```sh
-   tailscale serve --bg --https=8443 http://127.0.0.1:5232
+   tailscale serve --bg --https=8493 http://127.0.0.1:5232
    ```
 
-   In DAVx5: **Add account → Login with URL and user name**. Base URL `https://<machine>.<tailnet>.ts.net:8443/`, the
+   In DAVx5: **Add account → Login with URL and user name**. Base URL `https://<machine>.<tailnet>.ts.net:8493/`, the
    device name, and its app password. Choose **Groups are per-contact categories**. Nothing goes on a public port. If
    the phone must reach it off the tailnet, put it behind a Cloudflare Tunnel; it already requires Basic auth on every
    request.
@@ -151,7 +153,8 @@ one; change a summary in the vault and sync.
 
 ```sh
 npm run typecheck
-npm test                     # vCard mapping both ways, the privacy allowlist, the merge rules, XML, devices
+npm test                     # vCard mapping both ways, the privacy allowlist, the merge rules, XML, devices,
+                             # and the bridge's answers to a hub that fails or holds odd records
 PATH=$(dirname $(mise which bun)):$PATH PARACHUTE_CORE=/path/to/parachute-core npm run e2e
 ```
 
