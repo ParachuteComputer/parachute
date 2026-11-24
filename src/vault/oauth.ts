@@ -6,7 +6,7 @@
 //   open    one vault at one level (read, or read and write): the home at sign-in (read), a vault the person opens
 //           (read), what an applet they allow needs (its vault, read or write), or a change they make (write). Each
 //           vault keeps one token, at the most any of those needs; asking again for more replaces it.
-// The app registers itself on each hub as "Parachute" (on Parachute Cloud, which keeps that name, CLOUD_CLIENT_NAME); the hub keeps a new registration pending until its owner
+// The app registers itself on each hub as "Parachute" (on Parachute Cloud, which keeps that name, cloudClientName()); the hub keeps a new registration pending until its owner
 // approves it once (the hub's own approve step). In a browser the redirect comes back to the page's own origin,
 // /oauth/callback; in the shell, to a loopback address the shell catches (SHELL_RETURN below).
 
@@ -28,7 +28,7 @@ export const CLOUD_CLIENT_NAME = "Vault app";
  *  kind tells them apart, and reads plainly on Cloud's pages; signing in again on the same device still replaces its
  *  own earlier sign-in. */
 export function cloudClientName(ua: string = typeof navigator === "undefined" ? "" : navigator.userAgent): string {
-  const on = /Android/i.test(ua) ? "Android" : /iPhone|iPad/i.test(ua) ? "iPhone" : /Macintosh|Mac OS X/i.test(ua) ? "a Mac"
+  const on = /Android/i.test(ua) ? "Android" : /iPad/i.test(ua) ? "iPad" : /iPhone/i.test(ua) ? "iPhone" : /Macintosh|Mac OS X/i.test(ua) ? "a Mac"
     : /Windows/i.test(ua) ? "Windows" : /Linux|X11/i.test(ua) ? "Linux" : null;
   return on ? `${CLOUD_CLIENT_NAME} on ${on}` : CLOUD_CLIENT_NAME;
 }
@@ -96,7 +96,7 @@ function refuseReserved(issuer: string) {
 }
 
 /** In the shell, the loopback address the shell catches (src-tauri/src/lib.rs SIGNIN_RETURN): a core hub keeps the
- *  name "Parachute" for redirects only this device can receive (Parachute Cloud doesn't: CLOUD_CLIENT_NAME). In a
+ *  name "Parachute" for redirects only this device can receive (Parachute Cloud doesn't: cloudClientName()). In a
  *  browser, this page's own origin. */
 export const SHELL_RETURN = "http://127.0.0.1:47219/oauth/callback";
 export const inShell = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -129,6 +129,12 @@ function cacheClient(issuer: string, redirect: string, clientId: string, as?: st
   const all = readJson<Record<string, string>>(CLIENTS_KEY) ?? {};
   all[clientKey(issuer, redirect, as)] = clientId;
   try { localStorage.setItem(CLIENTS_KEY, JSON.stringify(all)); } catch { /* registers again next time */ }
+}
+function dropClient(issuer: string, redirect: string) {
+  const all = readJson<Record<string, string>>(CLIENTS_KEY) ?? {};
+  if (!(clientKey(issuer, redirect) in all)) return;
+  delete all[clientKey(issuer, redirect)];
+  try { localStorage.setItem(CLIENTS_KEY, JSON.stringify(all)); } catch { /* nothing to do */ }
 }
 /** Forget this app's registration on a hub (the hub refused it as unknown). */
 export function forgetClient(issuer: string) {
@@ -171,6 +177,8 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   if (!clientId) {
     clientId = (await registerClient(meta.registration_endpoint, { clientName: as ?? CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
     cacheClient(parachute.issuer, redirect, clientId, as);
+    // the registration an earlier build kept under the plain name goes: it is never used again
+    if (as) dropClient(parachute.issuer, redirect);
   }
   const codeVerifier = generateCodeVerifier();
   const state = generateState();
