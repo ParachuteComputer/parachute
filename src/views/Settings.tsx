@@ -1,4 +1,5 @@
 import UpdateSettings from "./UpdateSettings";
+import { HomeUnreached } from "./HomeChoice";
 import { OWN } from "../shell/updates";
 import { openLinkOut } from "../shell/device";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -204,6 +205,8 @@ export default function Settings({ children }: { children?: ReactNode }) {
   return (
     <main className="screen settings">
       <Bar title="Settings" back={true} onBack={backOrLauncher} />
+      {/* the home can't be reached: said first, with the vaults that can be made home */}
+      <HomeUnreached />
       <Group id="g-you" title="You">
         <KeySettings />
         {shown.approving && <ApprovalSettings />}

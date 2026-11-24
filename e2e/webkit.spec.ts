@@ -46,7 +46,7 @@ test("a Parachute that doesn't answer: the list and Journal say so in plain word
   await page.route(hub, (r) => r.abort("connectionrefused"));
   await page.goto("/");
   const list = ui(page).getByRole("list", { name: "Applets" });
-  await expect(list.getByText(`Can't reach ${VAULT} just now.`)).toBeVisible({ timeout: 30_000 });
+  await expect(list.getByText(`Can't reach ${VAULT}, your home vault, just now.`)).toBeVisible({ timeout: 30_000 });
   await expect(list.getByText(/couldn't be read/)).toHaveCount(0);
 
   await page.goto(`/v/${VAULT}/a/parachute:journal`);
