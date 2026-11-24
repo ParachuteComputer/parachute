@@ -67,6 +67,8 @@ async function pooled<T, R>(xs: T[], n: number, f: (x: T) => Promise<R>): Promis
 function paint(st: Store, snap: unknown, relay: string): string | null {
   const x = snap as Snapshot | null;
   if (!x || x.v !== 2 || x.relay !== relay || typeof x.me !== "string" || !Array.isArray(x.rooms) || !Array.isArray(x.msgs)) return null;
+  // no rooms in it: nothing to keep showing (and the read that follows isn't one taken for cut short)
+  if (!x.rooms.length) return null;
   const s = st.s;
   for (const r of x.rooms) if (r && typeof r.id === "string") s.rooms.set(r.id, r);
   for (const [k, v] of Object.entries(x.names ?? {})) if (typeof v === "string") s.names.set(k, v);
@@ -208,8 +210,9 @@ export default function Rooms() {
 
   useEffect(() => {
     let stop: (() => void) | null = null, stopWord: (() => void) | null = null, on = true, url = "", painted: string | null = null, mine = false;
-    // the rooms followed live: those of the first read (one subscription for all of them), and those come since (one each)
-    let first = new Set<string>();
+    // the rooms followed live: those of the first read (one subscription for all of them, held till the end: `held` of
+    // the relay's subscriptions, whichever of those rooms you leave), and those come since (one each)
+    let first = new Set<string>(), held = 0;
     const live = new Map<string, () => void>();
     // each room's newest description, by time (a late older one changes nothing)
     const described = new Map<string, number>();
@@ -244,7 +247,8 @@ export default function Rooms() {
       return true;
     };
     const onEvents = (evs: Ev[]) => {
-      const msgs = evs.filter((e) => e.kind !== 39000);
+      // only for rooms still listed (a room left may still be followed, as one of the first read)
+      const msgs = evs.filter((e) => e.kind !== 39000 && (!tag(e, "h") || s.rooms.has(tag(e, "h")!)));
       const metas = evs.filter((e) => e.kind === 39000).map(describe).some(Boolean);
       msgs.forEach(st.add);
       if (metas) changed(); else { st.bump(); keepSoon(); }
@@ -252,10 +256,12 @@ export default function Rooms() {
     };
     /** Word from the relay that you were put in a room (44100) or taken out (44101). The word decides, when the relay
      *  signed it (the key its rooms' descriptions and member lists are signed with): its member list may still be the
-     *  old one a moment after. Put in, the room comes with its name, its last lines and a live subscription. */
+     *  old one a moment after. Put in, the room comes with its name, its last lines and a live subscription. A read the
+     *  relay didn't answer (it went away) throws: the word waits for it to be back. */
     const reread = async (id: string, word: Ev) => {
       const from = now() - 5;
-      const m = ((await relay.query([{ kinds: [39000], "#d": [id] }]).catch(() => [])) as Ev[]).sort((a, b) => b.created_at - a.created_at)[0];
+      const m = ((await relay.query([{ kinds: [39000], "#d": [id] }])) as Ev[]).sort((a, b) => b.created_at - a.created_at)[0];
+      if (down) throw new Error("away");
       if (!on || (word.pubkey !== relayKey && word.pubkey !== m?.pubkey)) return;
       relayKey ||= word.pubkey;
       if (word.kind === 44101) { if (drop(id)) changed(); return; }
@@ -269,19 +275,35 @@ export default function Rooms() {
         history.forEach(st.add); endings.forEach(st.add);
         void names(history.map((e) => e.pubkey));
       }
-      described.set(id, m!.created_at);
-      s.rooms.set(id, meta);
-      if (!first.has(id) && !live.has(id) && first.size + live.size < LIVE_ROOMS) live.set(id, relay.subscribeMany([roomFilters(id, from)], onEvents));
+      if (!s.rooms.has(id) || (described.get(id) ?? 0) <= m!.created_at) { described.set(id, m!.created_at); s.rooms.set(id, meta); }
+      if (!first.has(id) && !live.has(id) && held + live.size < LIVE_ROOMS) live.set(id, relay.subscribeMany([roomFilters(id, from)], onEvents));
       changed();
     };
-    // the newest word on each room waiting to be read again, read one room at a time
-    const heard = new Map<string, Ev>();
+    // the newest word on each room waiting to be read again, read one room at a time; and the words done with (the relay
+    // sends them all again when it is back), with each room's newest, so an older word never undoes a newer one
+    const heard = new Map<string, Ev>(), done = new Set<string>(), newest = new Map<string, number>();
     let reading = Promise.resolve();
     const onWord = (evs: Ev[]) => {
-      for (const n of evs) { const id = tag(n, "h"); if (id && n.created_at >= (heard.get(id)?.created_at ?? 0)) heard.set(id, n); }
+      for (const n of evs) {
+        const id = tag(n, "h");
+        if (!id || done.has(n.id) || (newest.get(id) ?? 0) > n.created_at) continue;
+        if (n.created_at >= (heard.get(id)?.created_at ?? 0)) heard.set(id, n);
+      }
       reading = reading.then(async () => {
-        for (const [id, n] of [...heard]) { heard.delete(id); await reread(id, n).catch(() => {}); }
+        for (const [id, n] of [...heard]) {
+          if (down) return;
+          heard.delete(id);
+          try { await reread(id, n); done.add(n.id); newest.set(id, Math.max(newest.get(id) ?? 0, n.created_at)); }
+          catch { if (!heard.has(id)) heard.set(id, n); }
+        }
       });
+    };
+    /** Hear the relay's word on your rooms from `since` (once). */
+    const listen = (since: number) => {
+      // the rooms you are put in or taken out of, wherever that was done: the relay says so to each person (44100 put
+      // in, 44101 taken out). Its member lists (39002) go live only to a room's own subscription, so one asking for every
+      // list with you in it hears nothing new.
+      stopWord ??= relay.subscribe([{ kinds: [44100, 44101], "#p": [s.me], since }], (evs) => onWord(evs as Ev[]));
     };
     const sync = async () => {
       if (!on) return;
@@ -301,7 +323,7 @@ export default function Rooms() {
         // no rooms at all, over a list it painted: more likely a read cut short than every room left at once (so the
         // rare person who did leave every room keeps seeing the old list, with no live updates, until they are in a room
         // again)
-        if (painted && !synced && !ids.length) { setStatus({ k: "note", t: "This is what you last saw: the relay didn't list your rooms just now." }); return; }
+        if (painted && !synced && !ids.length) { setStatus({ k: "note", t: "This is what you last saw: the relay didn't list your rooms just now." }); listen(now() - 5); return; }
         // what comes after starts now: anything posted while the history below is read still arrives
         const since = now() - 5;
         // side by side, but at most a few calls at a time: the shell holds 8 of an applet's calls waiting at once
@@ -314,7 +336,7 @@ export default function Rooms() {
         const endings = await askEndings(relay, (history as Ev[][]).flat());
         if (!on || down) return;
         // rooms listed but none of them described: a read cut short, not every room gone (what is painted stays)
-        if (painted && !synced && ids.length && !(metas as Ev[]).length) { setStatus({ k: "note", t: "This is what you last saw: the relay didn't describe your rooms just now." }); return; }
+        if (painted && !synced && ids.length && !(metas as Ev[]).length) { setStatus({ k: "note", t: "This is what you last saw: the relay didn't describe your rooms just now." }); listen(since); return; }
         // what was read now takes the snapshot's place: rooms left and messages gone since go with it
         s.rooms.clear();
         for (const m of metas as Ev[]) {
@@ -334,13 +356,10 @@ export default function Rooms() {
         // the first read, with its names, is kept at once: a Rooms closed a moment later still opens painted
         keep.current ??= { relay: url, timer: null, written: "" };
         keepSoon(true);
-        // what comes after, room by room (roomFilters)
-        first = new Set(rooms.slice(0, LIVE_ROOMS));
+        // what comes after, room by room (roomFilters; a room come by word meanwhile is followed already), and the word
+        first = new Set(rooms.filter((id) => !live.has(id)).slice(0, LIVE_ROOMS - live.size)); held = first.size;
         stop = relay.subscribeMany([...first].map((id) => roomFilters(id, since)), onEvents);
-        // and the rooms you are put in or taken out of from now on, wherever that was done: the relay says so to each
-        // person (44100 put in, 44101 taken out). Its member lists (39002) go live only to a room's own subscription, so
-        // one asking for every list with you in it hears nothing new.
-        stopWord = relay.subscribe([{ kinds: [44100, 44101], "#p": [s.me], since }], (evs) => onWord(evs as Ev[]));
+        listen(since);
       } catch (e: any) { if (on) setStatus({ k: "problem", t: "Couldn't read your rooms", e }); } finally {
         syncing = false;
         if (again && !synced && !down) { again = false; void sync(); }
@@ -350,7 +369,7 @@ export default function Rooms() {
       if (x.sub) return;
       if (x.status === "closed") { down = true; away(x.why ?? "closed"); }
       // ready: a read that never completed goes again (it says why the list may be old until then)
-      if (x.status === "ready") { down = false; if (mine && !synced) void sync(); else setStatus({ k: "" }); }
+      if (x.status === "ready") { down = false; if (mine && !synced) void sync(); else setStatus({ k: "" }); if (heard.size) onWord([]); }
     });
     (async () => {
       const ctx: any = await ready();
