@@ -18,9 +18,10 @@ runtime=$(xcrun simctl list runtimes -j | node -e 'const r=JSON.parse(require("f
 read -r rt dt <<<"$runtime"
 udid=$(xcrun simctl create "ios-t520-drive-$$" "$dt" "$rt")
 world=$(mktemp -d)
-worldpid=""; matchpid=""
+worldpid=""; matchpid=""; logpid=""
 cleanup() {
   [ -n "$matchpid" ] && kill "$matchpid" 2>/dev/null || true
+  [ -n "$logpid" ] && kill "$logpid" 2>/dev/null || true
   [ -n "$worldpid" ] && kill "$worldpid" 2>/dev/null && wait "$worldpid" 2>/dev/null || true
   xcrun simctl io "$udid" screenshot "$out/last.png" >/dev/null 2>&1 || true
   xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true
@@ -34,6 +35,11 @@ xcrun simctl bootstatus "$udid" -b >/dev/null
 # Face ID enrolled, as on a phone that has it (the unlock before Allow: src-tauri/src/keyring.rs)
 xcrun simctl spawn "$udid" notifyutil -s com.apple.BiometricKit.enrollmentChanged 1
 xcrun simctl spawn "$udid" notifyutil -p com.apple.BiometricKit.enrollmentChanged
+
+# the app's own log and WebKit's, for when a step fails (app.log beside the screenshots)
+xcrun simctl spawn "$udid" log stream --level debug --style compact \
+  --predicate 'process == "parachute" OR process == "Parachute" OR process CONTAINS "WebContent" OR process CONTAINS "Networking"' > "$out/app.log" 2>&1 &
+logpid=$!
 
 say "install the app"
 xcrun simctl install "$udid" "$app"
