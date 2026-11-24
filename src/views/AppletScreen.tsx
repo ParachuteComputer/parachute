@@ -481,8 +481,11 @@ export default function AppletScreen() {
   useEffect(() => () => vaultsModule?.stop(), [vaultsModule]);
   // Techne (docs/design/TECHNE.md): what it holds is read at each call from what is allowed now, and its requests go
   // through a broker of the shell's own for the AppView, closed with the frame's grant
-  const techneNow = useRef<{ grantKey: string; code: string; asks: string; approval: ReturnType<typeof approvalSubject> } | null>(null);
-  techneNow.current = rec && entry && keys && loaded.state === "ok" && !loaded.official ? { grantKey: keys.scope, code: keys.html, asks: loaded.asks, approval: approvalSubject(rec, entry.noteId, entry.manifest.id) } : null;
+  // `grantKey` names this device's Allow too (when it was given), and `under` the applet's own signed approval: Revoke
+  // then Allow again starts both afresh, so a write given before doesn't come back with it
+  const techneNow = useRef<{ grantKey: string; code: string; asks: string; approval: ReturnType<typeof approvalSubject>; under: number | null } | null>(null);
+  techneNow.current = rec && entry && keys && loaded.state === "ok" && !loaded.official
+    ? { grantKey: `${keys.scope}|${grants.record(subjectOf(rec.key, entry.noteId))?.grantedAt ?? ""}`, code: keys.html, asks: loaded.asks, approval: approvalSubject(rec, entry.noteId, entry.manifest.id), under: signedNow?.run ? signedNow.content.n : null } : null;
   const techne = useMemo(() => (rec && entry?.techne ? techneDeps({ techne: entry.techne, name: entry.manifest.name, subject: subjectOf(rec.key, entry.noteId),
     // only while it is allowed here: a frame still going for a moment after Revoke holds nothing
     now: () => (grants.record(subjectOf(rec.key, entry.noteId)) ? techneNow.current : null),

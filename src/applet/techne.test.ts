@@ -121,12 +121,12 @@ const T0 = Date.UTC(2026, 10, 23, 9, 0);
 
 /** The signed side as a device with the key has it: approvals in the home vault (here a list), the floor it keeps, and
  *  `decide` for each capability with this code and these asks. */
-function signedDevice(events: SignedEvent[] = [], clock = { now: T0 }) {
+function signedDevice(events: SignedEvent[] = [], clock = { now: T0 }, under = 1) {
   const floors = new Map<string, number>();
   const signed: Signed = {
     holds: async (cap) => {
       const s = capSubject(cap);
-      const d = decide(events, s, CODE, capScope(ASKS, cap), new Set([ME]), clock.now, floors.get(dOf(s)) ?? null);
+      const d = decide(events, s, CODE, capScope(ASKS, cap, under), new Set([ME]), clock.now, floors.get(dOf(s)) ?? null);
       const newest = d.run ? d.content : d.newest;
       if (newest && (d.run || d.why !== "older")) floors.set(dOf(s), Math.max(floors.get(dOf(s)) ?? 0, newest.n + (newest.approved ? 0 : 0.5)));
       return d.run;
@@ -134,7 +134,7 @@ function signedDevice(events: SignedEvent[] = [], clock = { now: T0 }) {
     sign: async (cap, approved) => {
       clock.now += 1000;
       const s = capSubject(cap);
-      const c = approvalContent({ subject: s, approved, code: CODE, scope: capScope(ASKS, cap), now: clock.now, seen: floors.get(dOf(s)) ?? null });
+      const c = approvalContent({ subject: s, approved, code: CODE, scope: capScope(ASKS, cap, under), now: clock.now, seen: floors.get(dOf(s)) ?? null });
       events.push(finalizeEvent({ kind: APPROVAL_KIND, created_at: Math.floor(clock.now / 1000), tags: [["d", dOf(s)]], content: JSON.stringify(c) }, me) as SignedEvent);
       floors.set(dOf(s), c.n + (approved ? 0 : 0.5));
     },
@@ -147,7 +147,7 @@ describe("signed: one capability, one approval", () => {
     const dev = signedDevice();
     await applet({ signed: dev.signed }).call(POST, { input: {} });
     expect(dev.events).toHaveLength(1);
-    expect(JSON.parse(dev.events[0].content)).toMatchObject({ subject: { record: "01TECHNE.techne.post" }, scope: "techne:post:asks1", approved: true });
+    expect(JSON.parse(dev.events[0].content)).toMatchObject({ subject: { record: "01TECHNE.techne.post" }, scope: "techne:post:1:asks1", approved: true });
     const other = applet({ signed: signedDevice(dev.events).signed, answer: "no" });
     await other.call(POST, { input: {} });
     expect(other.asked).toEqual([]);
@@ -158,7 +158,7 @@ describe("signed: one capability, one approval", () => {
     expect(await dev.signed.holds("follow")).toBe(false);
     // a vault writer relabels the post approval as follow: the d tag, subject and scope no longer match, or the signature breaks
     const ev = dev.events[0];
-    const relabelled = { ...ev, content: ev.content.replaceAll("techne.post", "techne.follow").replace("techne:post", "techne:follow"), tags: [["d", dOf(capSubject("follow"))]] };
+    const relabelled = { ...ev, content: ev.content.replaceAll("techne.post", "techne.follow").replace("techne:post:", "techne:follow:"), tags: [["d", dOf(capSubject("follow"))]] };
     expect(await signedDevice([relabelled]).signed.holds("follow")).toBe(false);
     // the applet's own approval (same code and record) is never a capability's
     const own = finalizeEvent({ kind: APPROVAL_KIND, created_at: Math.floor(T0 / 1000), tags: [["d", dOf(applet0)]], content: JSON.stringify(approvalContent({ subject: applet0, approved: true, code: CODE, scope: ASKS, now: T0, seen: null })) }, me) as SignedEvent;
@@ -168,7 +168,15 @@ describe("signed: one capability, one approval", () => {
     const dev = signedDevice();
     await dev.signed.sign("post", true);
     const s = capSubject("post");
-    expect(decide(dev.events, s, "tsx:v2", capScope(ASKS, "post"), new Set([ME]), dev.clock.now, null)).toMatchObject({ run: false, why: "other" });
+    expect(decide(dev.events, s, "tsx:v2", capScope(ASKS, "post", 1), new Set([ME]), dev.clock.now, null)).toMatchObject({ run: false, why: "other" });
+  });
+  it("Revoke the applet, then Allow the same version again: a write given before doesn't come back", async () => {
+    const before = signedDevice([], { now: T0 }, 1);
+    await before.signed.sign("post", true);
+    // the applet's own approval is signed again on Allow: a new number
+    const after = signedDevice([...before.events], { now: T0 + 60_000 }, 2);
+    expect(await after.signed.holds("post")).toBe(false);
+    expect(await signedDevice([...before.events], { now: T0 + 60_000 }, 1).signed.holds("post")).toBe(true);
   });
   it("Take back signs a taking back: every device stops, and the older approval can't be put back", async () => {
     const dev = signedDevice();
@@ -212,8 +220,8 @@ describe("the declaration and the card", () => {
   });
   it("the card: read stressed, the writes it may ask for on one line; part of the grant's key only when declared", async () => {
     expect(techneLines(T).map((l) => l.text)).toEqual([
-      "Read what you see on Techne at techne.example, as you (your profile, posts and circles), signed with your key",
-      "Asks you before it first posts as you in your circles there, or connects with someone as you at techne.example",
+      "Read what you see on Techne at techne.example, your private circles included, as you (with your key)",
+      "Will ask you once before it can post as you in your circles, or follow people as you (anyone can see who you follow) at techne.example",
     ]);
     const m = parseManifest({ contract: 2, id: "t", name: "T" });
     if (!m.ok) throw new Error(m.error);
@@ -223,5 +231,14 @@ describe("the declaration and the card", () => {
     expect(await grantKey(withT, "Applets/T")).not.toBe(plainKey);
     expect(await grantKey({ ...withT, techne: { ...T, can: ["read"] } }, "Applets/T")).not.toBe(await grantKey(withT, "Applets/T"));
     expect(grantLines(withT, null).map((l) => l.text)).toEqual(expect.arrayContaining(techneLines(T).map((l) => l.text)));
+    // what it reads there could leave through a server it also declares: the card says so
+    expect(grantLines(withT, null).some((l) => l.text.startsWith("What it reads on Techne"))).toBe(false);
+    const out = grantLines({ ...withT, services: [{ id: "x", kind: "http", url: "https://elsewhere.example/", auth: "none" }] }, null);
+    expect(out).toContainEqual({ text: "What it reads on Techne, your private circles too, could reach elsewhere.example", stress: true });
+  });
+  it("post creates only: deleting any of your posts isn't in it", async () => {
+    const a = applet();
+    await expect(a.call("social.scenius.deleteCirclePost", { input: { collective: "did:plc:c", rkey: "x" } })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(a.sent).toEqual([]);
   });
 });

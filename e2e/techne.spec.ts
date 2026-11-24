@@ -37,7 +37,8 @@ test("techne: reads as you from the card; the first post asks and is signed for 
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Techne/ }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toContainText(`Read what you see on Techne at ${host}`);
-    await expect(card).toContainText(`Asks you before it first posts as you in your circles there at ${host}`);
+    await expect(card).toContainText(`your private circles included`);
+    await expect(card).toContainText(`Will ask you once before it can post as you in your circles at ${host}`);
     await page.getByRole("button", { name: "Allow" }).click();
 
     // read at once, as Maya, signed with her key
@@ -51,7 +52,7 @@ test("techne: reads as you from the card; the first post asks and is signed for 
     const sheet = page.getByRole("dialog", { name: "«Techne» wants to post as you on Techne" });
     await app.getByLabel("Post in your circle").fill("Tomatoes are ready to share, come by the garden.");
     await app.getByRole("button", { name: "Post" }).click();
-    await expect(sheet).toContainText(`In your circles at ${host}, signed with your key.`);
+    await expect(sheet).toContainText(`In your circles at ${host}, using your Techne account. Once you allow it, it does this without asking again.`);
     await sheet.getByRole("button", { name: "Cancel" }).click();
     await expect(sheet).toBeHidden();
     expect(ap.seen.filter((s) => s.nsid === "social.scenius.createCirclePost")).toEqual([]);
@@ -59,7 +60,7 @@ test("techne: reads as you from the card; the first post asks and is signed for 
     // Allow: an approval of posting only is signed, and the post lands
     const before = (await approvalsSigned(page)).length;
     await app.getByRole("button", { name: "Post" }).click();
-    await sheet.getByRole("button", { name: "Allow posting" }).click();
+    await sheet.getByRole("button", { name: "Allow from now on" }).click();
     await expect(app.getByRole("region", { name: "Your recent posts" })).toContainText("Tomatoes are ready to share", { timeout: 20_000 });
     expect(ap.posts.some((p) => p.author === maya.did && p.value.text === "Tomatoes are ready to share, come by the garden.")).toBe(true);
     expect((await approvalsSigned(page)).slice(before)).toEqual(["Techne"]);

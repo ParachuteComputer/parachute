@@ -17,7 +17,7 @@ export type TechneShell = {
   /** this device's grants subject for the applet (grants.ts subjectOf) */
   subject: string;
   /** the grant's key and code now, and the applet's approval subject and asks' hash (for its capabilities' approvals) */
-  now: () => { grantKey: string; code: string; asks: string; approval: Subject } | null;
+  now: () => { grantKey: string; code: string; asks: string; approval: Subject; under: number | null } | null;
   confirm: (q: { title: string; body: string; act: string }) => Promise<"yes" | "no" | "untapped">;
   shell: () => Shell;
 };
@@ -27,12 +27,17 @@ async function signedFor(o: TechneShell): Promise<Signed | null> {
   const n = o.now();
   if (!n || !(await signsHere())) return null;
   const sub = (cap: TechneCap): Subject => ({ ...n.approval, record: capRecord(n.approval.record, cap) });
+  // under the applet's own approval as this device read it; not read yet, nothing is held (it asks)
+  const under = n.under;
   return {
-    holds: async (cap) => (await approvalFor(sub(cap), n.code, capScope(n.asks, cap)))?.run === true,
+    holds: async (cap) => under !== null && (await approvalFor(sub(cap), n.code, capScope(n.asks, cap, under)))?.run === true,
     sign: async (cap, approved) => {
       // this device's level for approving (the unlock, or the passcode first when set), asked on the shell's own sheet
-      await withPasscode(o.shell(), `Let «${o.name}» ${cap === "post" ? "post" : "connect with people"} as you on Techne`,
-        (passcode) => signApproval({ subject: sub(cap), name: o.name, approved, code: approved ? n.code : "", scope: approved ? capScope(n.asks, cap) : "", passcode }));
+      await withPasscode(o.shell(), `Let «${o.name}» ${cap === "post" ? "post" : "follow people"} as you on Techne`,
+        async (passcode) => {
+          if (approved && under === null) throw new Error("its approval isn't read yet: try again in a moment");
+          return signApproval({ subject: sub(cap), name: o.name, approved, code: approved ? n.code : "", scope: approved ? capScope(n.asks, cap, under ?? 0) : "", passcode });
+        });
     },
   };
 }

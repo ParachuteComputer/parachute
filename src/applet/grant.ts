@@ -7,10 +7,10 @@ import type { Manifest, Reach, Rule, Verb } from "./manifest.ts";
 import type { Opens } from "./opens.ts";
 import { sha256Hex } from "./needs.ts";
 import { appLines, type AppWord } from "./app.ts";
-import { serviceLines, servicesKeyPart, type LineOptions, type Service } from "./services.ts";
+import { hostLine, serviceLines, servicesKeyPart, type LineOptions, type Service } from "./services.ts";
 import { signalLines, signalsKeyPart, type Signal } from "./signals.ts";
 import { settingsKeyPart, settingsLine, type SettingsSection } from "./settingsSection.ts";
-import { techneKeyPart, techneLines, type Techne } from "./techne.ts";
+import { techneKeyPart, techneLines, techneOutLine, type Techne } from "./techne.ts";
 
 /** The card's line for a page whose embeds come from someone else's vaults ("techne at techne.example"). */
 export function embedsLine(from: readonly string[]): string | null {
@@ -87,6 +87,8 @@ export function grantLines(g: Grant, ownFolder: string | null, keyring: LineOpti
   if (g.reach?.includes("voice")) out.push({ text: "Record from your microphone when you press record (the app shows its own recorder)", stress: false });
   out.push(...serviceLines(g.services ?? [], keyring));
   if (g.techne) out.push(...techneLines(g.techne));
+  // what it reads as the person on Techne could leave through a server it declares: said, as for its notes
+  if (g.techne?.can.includes("read") && g.services?.length) out.push(techneOutLine([...new Set(g.services.map(hostLine))]));
   out.push(...signalLines(g.signals ?? []));
   if (g.settings) out.push(settingsLine(g.settings, g.applet.name));
   const page = embedsLine(g.embedsFrom ?? []);

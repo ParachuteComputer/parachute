@@ -25,8 +25,9 @@ export const METHODS: Readonly<Record<string, { cap: TechneCap; http: "GET" | "P
   "social.scenius.listCirclePosts": { cap: "read", http: "GET" },
   "social.scenius.getCircleThread": { cap: "read", http: "GET" },
   "social.scenius.listCircleProfiles": { cap: "read", http: "GET" },
+  // creating only: deleteCirclePost deletes any of the person's posts in a circle, not only this applet's, so deleting
+  // is a capability of its own when it comes (TECHNE.md)
   "social.scenius.createCirclePost": { cap: "post", http: "POST" },
-  "social.scenius.deleteCirclePost": { cap: "post", http: "POST" },
   "social.scenius.offerConnection": { cap: "follow", http: "POST" },
 });
 /** Who the shell signs in as (`techne.me()`): the shell's own call, not the applet's. Assumed (TECHNE.md). */
@@ -63,30 +64,33 @@ export function isTechneOrigin(origin: string, t: Techne | null): boolean {
 
 export const techneHost = (t: Techne) => new URL(t.at).host;
 
-/** What each capability is, in the card's words (after "Asks you before it first …" for a write). */
-const WRITE_WORDS: Record<Exclude<TechneCap, "read">, string> = { post: "posts as you in your circles there", follow: "connects with someone as you" };
-const ASK_WORDS: Record<Exclude<TechneCap, "read">, { title: string; body: string; act: string; line: string }> = {
-  post: { title: "post as you on Techne", body: "In your circles at {host}, signed with your key.", act: "Allow posting", line: "Posts as you on Techne" },
-  follow: { title: "connect with people as you on Techne", body: "A public, one-way connection at {host}, signed with your key.", act: "Allow connecting", line: "Connects with people as you on Techne" },
+/** What each write capability is, in the card's words (after "Will ask you once before it can …"). */
+const WRITE_WORDS: Record<Exclude<TechneCap, "read">, string> = { post: "post as you in your circles", follow: "follow people as you (anyone can see who you follow)" };
+const ASK_WORDS: Record<Exclude<TechneCap, "read">, { title: string; body: string; line: string }> = {
+  post: { title: "post as you on Techne", body: "In your circles at {host}, using your Techne account.", line: "Posts as you on Techne" },
+  follow: { title: "follow people as you on Techne", body: "At {host}, using your Techne account. Anyone can see who you follow.", line: "Follows people as you on Techne" },
 };
 
-/** The card's lines: reading is stressed (it is as you, and private circles too); the writes it may ask for, on one. */
+/** The card's lines: reading is stressed (it is as you, private circles too); the writes it may ask for, on one. */
 export function techneLines(t: Techne): { text: string; stress: boolean }[] {
   const host = techneHost(t);
   const out: { text: string; stress: boolean }[] = [];
-  if (t.can.includes("read")) out.push({ text: `Read what you see on Techne at ${host}, as you (your profile, posts and circles), signed with your key`, stress: true });
+  if (t.can.includes("read")) out.push({ text: `Read what you see on Techne at ${host}, your private circles included, as you (with your key)`, stress: true });
   const writes = t.can.filter(isWrite) as Exclude<TechneCap, "read">[];
   if (writes.length) {
     const w = writes.map((c) => WRITE_WORDS[c]);
-    out.push({ text: `Asks you before it first ${w.length === 1 ? w[0] : `${w.slice(0, -1).join(", ")}, or ${w[w.length - 1]}`} at ${host}`, stress: true });
+    out.push({ text: `Will ask you once before it can ${w.length === 1 ? w[0] : `${w.slice(0, -1).join(", ")}, or ${w[w.length - 1]}`} at ${host}`, stress: true });
   }
   return out;
 }
 
-/** The shell's sheet the first time a write capability is used. */
+/** The card's line when what it reads on Techne could leave through a server it also declares (services.ts). */
+export const techneOutLine = (hosts: readonly string[]) => ({ text: `What it reads on Techne, your private circles too, could reach ${hosts.length === 1 ? hosts[0] : `${hosts.slice(0, -1).join(", ")} and ${hosts[hosts.length - 1]}`}`, stress: true });
+
+/** The shell's sheet the first time a write capability is used: what Allow grants, and that it lasts. */
 export function askOf(name: string, t: Techne, cap: Exclude<TechneCap, "read">): { title: string; body: string; act: string } {
   const a = ASK_WORDS[cap];
-  return { title: `«${name}» wants to ${a.title}`, body: `${a.body.replace("{host}", techneHost(t))} It asks this once; take it back in Settings → Applets.`, act: a.act };
+  return { title: `«${name}» wants to ${a.title}`, body: `${a.body.replace("{host}", techneHost(t))} Once you allow it, it does this without asking again. Take it back any time in Settings → Applets.`, act: "Allow from now on" };
 }
 /** A held capability's line in Settings. */
 export const heldLine = (cap: Exclude<TechneCap, "read">) => ASK_WORDS[cap].line;
@@ -117,6 +121,8 @@ export function checkCall(t: Techne, held: ReadonlySet<TechneCap>, nsid: unknown
   return { ok: true, cap: m.cap, http: m.http };
 }
 
-/** A capability's signed approval sits beside the applet's own (approvals.ts): its record and its scope name it. */
+/** A capability's signed approval sits beside the applet's own (approvals.ts): its record and its scope name it. The
+ *  scope also names the applet's own approval it was given under (its number, `n`): Revoke then Allow again makes a
+ *  new one, so a write given before the Revoke doesn't come back with it. */
 export const capRecord = (record: string, cap: TechneCap) => `${record}.techne.${cap}`;
-export const capScope = (scope: string, cap: TechneCap) => `techne:${cap}:${scope}`;
+export const capScope = (scope: string, cap: TechneCap, under: number) => `techne:${cap}:${under}:${scope}`;
