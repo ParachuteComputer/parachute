@@ -46,6 +46,12 @@ changed, which the person also changed) is not built.
   fields (translator, language, kind, source, rights, and `at`, where you stopped), so a vault may hold either or both.
   Its chapters and summaries come from importing a book (a script an AI runs today; Import a book in Vault later),
   its quotes from reading.
+- No pack ships for the **Writing** applet ([WRITING.md](WRITING.md)): `piece` and `reference` are already in the vault
+  it serves. It writes three fields on `reference`, additive: `piece` (the piece's name, as Uni already writes it on the research
+  it prepares; not `for`, which names the person a thing is for), `used_in` (the pieces a quote went into) and `state`
+  (`asked | ready | kept | let go`). `piece` keeps its fields and their meaning (`stage`: `seed | draft | ready |
+  published`, `slug`, `url`, `published_at`): unforced.org is made from them. WRITING.md has the pack it would ship,
+  checked against the starter packs in `src/applet/writingApplet.test.tsx`.
 - `vaults.packs(vault)`: Parachute's starter packs and the vault's receipts (`installed`, with `newer` when the app
   ships a newer version). `vaults.addPack(vault, id)`: apply a starter pack; `{ added, kept, notes, changed }`.
   Shell side: `src/applet/modules/packs.ts`. An applet can't hand the app a pack of its own to apply: only the packs
