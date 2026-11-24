@@ -16,6 +16,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { bareName, FILE_MAX, mediaType, PICK_MAX } from "../applet/files";
 import type { PickedFile } from "../applet/modules/app";
 import type { Recording } from "../applet/modules/voice";
+import { saveFileOut } from "../shell/device";
 
 type Asking =
   | { kind: "record"; id: number; max: number; done: (r: Recording | null) => void }
@@ -45,12 +46,15 @@ const STOPPED: Record<Stopped, string> = {
 /** What was recorded when its screen went, with no frame left to send it to: kept per applet's screen until it is saved
  *  or let go. In memory, like the recorder's own: it is for the way back, not for a restart. */
 type Held = { blob: Blob; type: string; duration: number };
-const held = new Map<string, Held>();
+const held = new Map<string, Held[]>();
+const NONE: Held[] = [];
 const heldWatchers = new Set<() => void>();
-const heldChanged = () => heldWatchers.forEach((f) => f());
-const useHeld = (key: string): Held | null => useSyncExternalStore((f) => { heldWatchers.add(f); return () => { heldWatchers.delete(f); }; }, () => held.get(key) ?? null);
+/** Hold one for a screen, after any already held there (a second one never replaces the first); an empty one isn't worth holding. */
+const hold = (key: string, h: Held) => { if (!h.blob.size) return; held.set(key, [...(held.get(key) ?? []), h]); heldWatchers.forEach((f) => f()); };
+const release1 = (key: string) => { const [, ...rest] = held.get(key) ?? []; if (rest.length) held.set(key, rest); else held.delete(key); heldWatchers.forEach((f) => f()); };
+const useHeld = (key: string): Held[] => useSyncExternalStore((f) => { heldWatchers.add(f); return () => { heldWatchers.delete(f); }; }, () => held.get(key) ?? NONE);
 /** Test hook: what is held for a screen. */
-export const heldFor = (key: string): Held | null => held.get(key) ?? null;
+export const heldFor = (key: string): Held[] => held.get(key) ?? NONE;
 /** How long after the sheet opens Send waits: a quick second tap on the applet's button can't send a blink of sound. */
 export const SEND_ARM_MS = 400;
 /** The shape drawn while it records: one bar per tenth of a second, the newest at the right. */
@@ -245,14 +249,14 @@ function RecorderSheet({ name, max, away: left, keep, done }: { name: string; ma
 
 /** A recording whose screen went before it was sent: the applet that asked for it isn't waiting any more, so it can be
  *  kept as a file or let go, not sent. At the foot of the applet's screen, as the recorder is. */
-function HeldSheet({ name, held: h, onGone }: { name: string; held: Held; onGone: () => void }) {
+function HeldSheet({ name, held: h, more, onGone }: { name: string; held: Held; more: number; onGone: () => void }) {
+  const [saved, setSaved] = useState<string | null>(null);
+  const [why, setWhy] = useState("");
+  const [busy, setBusy] = useState(false);
   const save = () => {
-    const url = URL.createObjectURL(h.blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Recording for ${name} ${new Date().toISOString().slice(0, 16).replace("T", " ")}.${/ogg/.test(h.type) ? "ogg" : /mp4/.test(h.type) ? "m4a" : "webm"}`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    setBusy(true); setWhy("");
+    const file = `Recording for ${name} ${new Date().toISOString().slice(0, 16).replace("T", " ")}.${/ogg/.test(h.type) ? "ogg" : /mp4/.test(h.type) ? "m4a" : "webm"}`;
+    void h.blob.arrayBuffer().then((b) => saveFileOut(file, b, h.type)).then(setSaved, () => setWhy("It couldn't be saved. It is still kept here.")).finally(() => setBusy(false));
   };
   return (
     <div className="recorder-dock">
@@ -260,11 +264,16 @@ function HeldSheet({ name, held: h, onGone }: { name: string; held: Held; onGone
         <div className="record-head">
           <p className="record-time" role="timer" aria-label="Recorded time"><strong>Recorded</strong> {clock(h.duration)}</p>
           <div className="grant-actions">
-            <button type="button" className="quiet-button" onClick={onGone}>Discard</button>
-            <button type="button" className="primary" onClick={save}>Save a copy</button>
+            {saved === null ? <>
+              <button type="button" className="quiet-button" onClick={onGone}>Discard</button>
+              <button type="button" className="primary" disabled={busy} onClick={save}>Save a copy</button>
+            </> : <button type="button" className="primary" onClick={onGone}>Done</button>}
           </div>
         </div>
-        <p className="quiet small" role="status">Your recording is kept. {name} had closed before you sent it, so save a copy, or discard it.</p>
+        {why && <p role="alert">{why}</p>}
+        <p className="quiet small" role="status">{saved === null
+          ? `Your recording is kept. ${name} had closed before you sent it, so save a copy, or discard it.${more ? ` ${more} more kept after it.` : ""}`
+          : `Saved as ${saved}.`}</p>
       </section>
     </div>
   );
@@ -330,9 +339,9 @@ export function useDeviceSheets(name: string, shown = true, screen: string | nul
       leave: () => { if (open.current?.kind === "pick") api.current?.cancel(); },
     };
   }
-  const keep = (h: Held) => { held.set(key, h); heldChanged(); };
+  const keep = (h: Held) => hold(key, h);
   const ui = asking?.kind === "record" ? <RecorderSheet key={asking.id} name={name} max={asking.max} away={!shown} keep={keep} done={asking.done} />
     : asking?.kind === "pick" ? <PickSheet key={asking.id} name={name} accept={asking.accept} multiple={asking.multiple} max={asking.max} note={asking.note} done={asking.done} />
-    : keptHere ? <HeldSheet name={name} held={keptHere} onGone={() => { held.delete(key); heldChanged(); }} /> : null;
+    : keptHere.length ? <HeldSheet key={`${keptHere[0].duration}|${keptHere[0].blob.size}|${keptHere.length}`} name={name} held={keptHere[0]} more={keptHere.length - 1} onGone={() => release1(key)} /> : null;
   return { record: api.current.record, pick: api.current.pick, cancel: api.current.cancel, leave: api.current.leave, ui };
 }
