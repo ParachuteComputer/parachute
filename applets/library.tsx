@@ -5,7 +5,11 @@
 //   chapter  Books/<Title>/<NN Chapter>   book, part, order, words
 //   summary  Books/<Title>/Summaries/...  of, sources, by, made
 //   quote    Quotes/<Book>/<stamp slug>   from, book, block, before, after, by, used_in
+//   job      Jobs/Library/<date> <name>    do, kind, status, upload, by, result, note (docs/design/UPLOADS.md)
 //
+// Add a book: the person picks an epub or a PDF in the app's own picker; the app carries it onto a `job` record in
+// pieces (the applet never holds the bytes), and an AI watching the vault (the book importer, Uni) takes the job and
+// makes the book. "Being added" shows each job until its book is made.
 // Scrolling everywhere (no page-turning). Quotes are marked directly in the reading view and round-trip via
 // block + before/after context locators. Where you stopped (`book.fields.at`) is written to the book when you leave.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -13,6 +17,7 @@ import {
   app, Button, Card, Drawer, Empty, Fields, List, Loading, Note, onBack, onOpen, onShown, Page, Problem,
   ready, Search, still as kitStill, Tabs, toast, useSaved, vault, when, Write,
 } from "parachute";
+import type { PickedFile } from "parachute";
 
 const isStill = kitStill ?? (() => typeof document !== "undefined" && getComputedStyle(document.documentElement).getPropertyValue("--t-state").trim() === "0ms");
 
@@ -102,6 +107,43 @@ type OrganizedLibrary = {
   quotes: ParsedQuote[];
 };
 
+type JobUpload = { name: string; size: number; parts: unknown[] };
+type Sending = { name: string; sent: number; size: number };
+
+/** A job's file, as its `upload` field says. */
+function jobUpload(job: LibraryRecord): JobUpload | null {
+  const u = job.fields?.upload as Record<string, unknown> | undefined;
+  return u && typeof u.name === "string" && typeof u.size === "number" && Array.isArray(u.parts) ? { name: u.name, size: u.size, parts: u.parts } : null;
+}
+
+/** Megabytes, as a person reads them. */
+function mb(n: number): string {
+  const m = n / 1_000_000;
+  return m < 10 ? m.toFixed(1).replace(/\.0$/, "") : String(Math.round(m));
+}
+
+/** Where a job stands, in a line. `sending`: the upload going now on this screen. */
+function jobLine(job: LibraryRecord, sending: Sending | undefined): string {
+  const status = str(job.fields?.status);
+  if (sending) return `Uploading: ${mb(sending.sent)} of ${mb(sending.size)} MB`;
+  if (status === "uploading") {
+    const u = jobUpload(job);
+    const all = u ? Math.max(1, Math.ceil(u.size / (8 * 1024 * 1024))) : 0;
+    return u && u.parts.length ? `Not finished: ${u.parts.length} of ${all} pieces arrived. Pick the same file again to go on.` : "Not finished. Pick the file again to go on.";
+  }
+  if (status === "waiting") return "Waiting for an AI to add it to your library.";
+  if (status === "working") return `Being added${str(job.fields?.by) ? ` by ${str(job.fields?.by)}` : ""}.`;
+  if (status === "failed") return `Couldn't be added${str(job.fields?.note) ? `: ${str(job.fields?.note)}` : "."}`;
+  return status || "Waiting.";
+}
+
+/** A job's place: the day and time, and the file's name with its ending in words ("Walden (epub)"). */
+function jobPath(name: string, now: Date, n = 1): string {
+  // its ending in words ("Walden (epub)"): an epub and a PDF of one book, added in one minute, are two jobs
+  const named = cleanPathSegment(name.replace(/\.([a-z0-9]{1,5})$/i, " ($1)"), 80) || "book";
+  return `${JOBS_FOLDER}${when.stamp(now)} ${named}${n > 1 ? ` ${n}` : ""}`;
+}
+
 type HighlightSlice = {
   start: number;
   end: number;
@@ -110,6 +152,10 @@ type HighlightSlice = {
 
 const BOOKS_FOLDER = "Books/";
 const QUOTES_FOLDER = "Quotes/";
+const JOBS_FOLDER = "Jobs/Library/";
+const BOOK_FILES = ".epub,.pdf,application/epub+zip,application/pdf";
+/** What the job asks, in words any AI reads. */
+const JOB_DO = "Add this book to the library: a book record in Books/ with its chapters and pictures, as the Library pack's types.";
 const BOOK_STATUSES = ["want to read", "reading", "read"] as const;
 const BOOK_KINDS = ["book", "scripture", "cookbook", "method"] as const;
 const CONTEXT_LEN = 48;
@@ -1164,6 +1210,24 @@ const STYLES = `
   font-size: var(--fs-small);
   color: var(--muted);
 }
+.lib-add {
+  margin: 0 0 var(--gap);
+}
+.lib-job {
+  display: grid;
+  gap: 6px;
+}
+.lib-job-name {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: var(--fs-body);
+  overflow-wrap: anywhere;
+}
+.lib-job progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
 .lib-shelf-section {
   margin: 0 0 calc(var(--gap) * 1.4);
 }
@@ -1419,6 +1483,9 @@ export default function Library() {
   const [bookTab, setBookTab] = useSaved<BookTab>("bookTab", "contents");
   const [route, setRoute] = useSaved<Route>("route", { view: "home" });
   const [shelfQuery, setShelfQuery] = useState("");
+  // Add a book: the jobs in Jobs/Library/, and the uploads going now on this screen (by job id)
+  const [jobs, setJobs] = useState<LibraryRecord[]>([]);
+  const [sending, setSending] = useState<Record<string, Sending>>({});
   const [quotesQuery, setQuotesQuery] = useState("");
 
   // Loaded full chapter record for Read view (with body)
@@ -1518,13 +1585,16 @@ export default function Library() {
           const q = (params: Record<string, unknown>) => vault.queryRecords(params) as Promise<LibraryRecord[]>;
           // Books/ with fields (books, chapters, parts, summaries); the books again with their bodies (the cover is
           // in the body); Quotes/ with bodies (the quoted words and the note). Summary bodies load per book, on open.
-          const [booksRes, quotesRes, bookBodies] = await Promise.all([
+          const [booksRes, quotesRes, bookBodies, jobsRes] = await Promise.all([
             readFolder(q, { pathPrefix: BOOKS_FOLDER, includeFields: true }),
             readFolder(q, { pathPrefix: QUOTES_FOLDER, includeFields: true, includeBody: true }),
             // without them the covers show as words: not a reason to show nothing
             readFolder(q, { pathPrefix: BOOKS_FOLDER, tag: "book", includeFields: true, includeBody: true })
               .catch(() => ({ rows: [] as LibraryRecord[], capped: false })),
+            // the books being added (an install from before Add a book can't read Jobs/: none)
+            readFolder(q, { pathPrefix: JOBS_FOLDER, includeFields: true }).catch(() => ({ rows: [] as LibraryRecord[], capped: false })),
           ]);
+          if (mounted.current) setJobs(jobsRes.rows.filter((j) => hasRecordKind(j, "job")));
           const merged = new Map<string, LibraryRecord>();
           for (const r of [...booksRes.rows, ...bookBodies.rows, ...quotesRes.rows]) {
             const prev = merged.get(r.id);
@@ -1940,6 +2010,84 @@ export default function Library() {
     }
     toast("Could not find the chapter for this quote.");
   }, [lib, openChapter, setRoute, setBookTab]);
+
+  // ── Add a book ──
+  /** The jobs alone, read again (an upload or a retry changed only them). */
+  const loadJobs = useCallback(async () => {
+    try {
+      const q = (params: Record<string, unknown>) => vault.queryRecords(params) as Promise<LibraryRecord[]>;
+      const { rows } = await readFolder(q, { pathPrefix: JOBS_FOLDER, includeFields: true });
+      if (mounted.current) setJobs(rows.filter((j) => hasRecordKind(j, "job")));
+    } catch { /* the list stays as it was; the next refresh reads it */ }
+  }, []);
+  const canAdd = typeof vault.upload === "function" && typeof app?.pick === "function";
+  /** The file onto job `job`, with its progress shown; then the job waits for an AI. */
+  const sendFile = useCallback(async (job: LibraryRecord, file: PickedFile) => {
+    setSending((m) => ({ ...m, [job.id]: { name: file.name, sent: 0, size: file.size } }));
+    try {
+      await vault.upload!(job.id, file, { onProgress: (p) => { if (mounted.current) setSending((m) => ({ ...m, [job.id]: { name: file.name, sent: p.sent, size: p.size } })); } });
+      // the file is all there: an AI may take it now (on the version the upload left)
+      const fresh = await vault.getRecord(job.id) as LibraryRecord | null;
+      if (!fresh?.updatedAt) throw new Error("the job couldn't be read again");
+      await vault.updateRecord(job.id, { if_updated_at: fresh.updatedAt, fields: { status: "waiting" } });
+    } catch (e) {
+      toast(`${file.name} didn't finish: ${e instanceof Error ? e.message : String(e)}. Pick it again to go on.`, { error: true });
+    } finally {
+      if (mounted.current) setSending((m) => { const n = { ...m }; delete n[job.id]; return n; });
+      void loadJobs();
+    }
+  }, [loadJobs]);
+
+  const addBook = useCallback(async () => {
+    let picked: PickedFile[];
+    try { picked = await app.pick({ accept: BOOK_FILES, bytes: false }); } catch (e) { toast(`Could not open the picker: ${e instanceof Error ? e.message : String(e)}`, { error: true }); return; }
+    const f = picked[0];
+    if (!f) return;
+    let job: LibraryRecord | null = null;
+    const now = new Date();
+    try {
+      // the same file added twice in a minute: the second is "… 2"
+      for (let n = 1; !job; n++) job = await vault.createRecord({
+        path: jobPath(f.name, now, n),
+        body: `Add *${f.name.replace(/[*_[\]]/g, "")}* to the library.\n\nThe file is attached to this record. Its \`upload\` field lists its pieces in order, each with its SHA-256: join them in that order.\n`,
+        // its `job` type comes from the folder (the manifest opens job in Jobs/Library/), as a quote's does
+        fields: { do: JOB_DO, kind: "import-book", status: "uploading" },
+      }).catch((e: unknown) => { if (n < 4 && (e as { status?: number })?.status === 409) return null; throw e; }) as LibraryRecord | null;
+    } catch (e) {
+      toast(`Could not add ${f.name}: ${e instanceof Error ? e.message : String(e)}`, { error: true });
+      return;
+    }
+    const made = job;
+    setJobs((js) => [made, ...js]);
+    await sendFile(made, f);
+  }, [sendFile]);
+
+  /** An unfinished upload: the same file picked again goes on from the pieces already there. */
+  const resumeJob = useCallback(async (job: LibraryRecord) => {
+    const was = jobUpload(job);
+    let picked: PickedFile[];
+    try { picked = await app.pick({ accept: BOOK_FILES, bytes: false }); } catch (e) { toast(`Could not open the picker: ${e instanceof Error ? e.message : String(e)}`, { error: true }); return; }
+    const f = picked[0];
+    if (!f) return;
+    if (was && (f.name !== was.name || f.size !== was.size)) { toast(`That's another file. Pick ${was.name} to go on.`, { error: true }); return; }
+    await sendFile(job, f);
+  }, [sendFile]);
+
+  /** A job that couldn't be added, asked again: an AI takes it as a new one. */
+  const retryJob = useCallback(async (job: LibraryRecord) => {
+    try {
+      const fresh = await vault.getRecord(job.id) as LibraryRecord | null;
+      if (!fresh?.updatedAt) throw new Error("it couldn't be read again");
+      await vault.updateRecord(job.id, { if_updated_at: fresh.updatedAt, fields: { status: "waiting", note: null, by: null } });
+    } catch (e) {
+      toast(`Could not ask again: ${e instanceof Error ? e.message : String(e)}`, { error: true });
+    }
+    void loadJobs();
+  }, [loadJobs]);
+
+  // one upload at a time: each holds one of the frame's few open calls while it goes
+  const busy = Object.keys(sending).length > 0;
+  const openJobs = jobs.filter((j) => str(j.fields?.status) !== "done").sort((a, b) => (b.path > a.path ? 1 : -1));
 
   const shelfFilter = shelfQuery.trim().toLowerCase();
   const visibleBooks = useMemo(() => {
@@ -2490,6 +2638,36 @@ export default function Library() {
           <Loading>Opening your library…</Loading>
         ) : homeTab === "shelf" ? (
           <>
+            {canAdd && (
+              <div className="pa-actions lib-add">
+                <Button kind="primary" disabled={busy} onClick={() => void addBook()}>Add a book</Button>
+              </div>
+            )}
+            {openJobs.length > 0 && (
+              <section className="lib-shelf-section" aria-label="Being added">
+                <p className="lib-section-label">Being added</p>
+                {openJobs.map((j) => {
+                  const up = jobUpload(j);
+                  const now = sending[j.id];
+                  const name = now?.name ?? up?.name ?? basenameOf(j.path);
+                  return (
+                    <Card key={j.id}>
+                      <div className="lib-job">
+                        <p className="lib-job-name">{name}</p>
+                        <p className="lib-muted">{jobLine(j, now)}</p>
+                        {now && <progress max={now.size || 1} value={now.sent} aria-label={`Uploading ${name}`} />}
+                        {!now && str(j.fields?.status) === "uploading" && canAdd && (
+                          <div className="pa-actions"><Button small disabled={busy} onClick={() => void resumeJob(j)}>Pick it again</Button></div>
+                        )}
+                        {str(j.fields?.status) === "failed" && (
+                          <div className="pa-actions"><Button small onClick={() => void retryJob(j)}>Try again</Button></div>
+                        )}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </section>
+            )}
             {lib.books.length > 0 && (
               <Search
                 label="Search books"
@@ -2501,11 +2679,11 @@ export default function Library() {
               />
             )}
 
-            {visibleBooks.length === 0 ? (
+            {visibleBooks.length === 0 ? (shelfFilter || !openJobs.length) && (
               <Empty>
                 {shelfFilter
                   ? `No books match “${shelfQuery}”.`
-                  : "No books in Books/ yet. Import a book into your vault to see it on the shelf."}
+                  : canAdd ? "No books yet. Add one: an epub or a PDF." : "No books in Books/ yet. Import a book into your vault to see it on the shelf."}
               </Empty>
             ) : (
               <>

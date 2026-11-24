@@ -1,6 +1,6 @@
 // The shell's answers to an applet's `app` calls (applet/modules/app.ts), from what the shell holds.
 import type { Note } from "@openparachute/surface-client";
-import { notTapped, type AppDeps, type PickedFile, type RecentNote } from "../applet/modules/app";
+import { notTapped, type AppDeps, type HandedFile, type PickedFile, type RecentNote } from "../applet/modules/app";
 import { openLinkOut, pictureOut, saveFileOut } from "./device";
 import { markTap } from "../open/mark";
 import { clientFor, keptClientFor } from "../vault/client";
@@ -33,7 +33,9 @@ export const tappingIn = (frame: () => HTMLIFrameElement | null) => {
 };
 
 /** The shell's own picker sheet (views/DeviceSheets.tsx). */
-export type Picker = { pick(accept: string[], multiple: boolean): Promise<PickedFile[]> };
+export type Picker = { pick(accept: string[], multiple: boolean): Promise<PickedFile[]>;
+  /** The files kept by the shell, handed over as handles (`app.pick({bytes: false})`, for `vault.upload`). */
+  choose?(accept: string[], multiple: boolean): Promise<HandedFile[]> };
 
 export const MISS_MS = 60_000;
 /** How long a link's read may take before its hub counts as not answering (links/resolve.ts: such a note is still a
@@ -177,5 +179,6 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
       if (!tappingInApplet()) return Promise.reject(notTapped());
       return picker.pick(accept, multiple);
     },
+    ...(picker.choose ? { choose: (accept: string[], multiple: boolean) => (tappingInApplet() ? picker.choose!(accept, multiple) : Promise.reject(notTapped())) } : {}),
   };
 }

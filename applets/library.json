@@ -9,13 +9,14 @@
       "id": "library",
       "name": "Library",
       "glyph": "❧",
-      "note": "your shelf of books, chapters in a reading serif, summaries and marked quotes",
+      "note": "your shelf of books, chapters in a reading serif, summaries and marked quotes; add a book from an epub or a PDF",
       "access": [
         {
           "vault": "here",
           "allow": [
             { "path": "Books/", "verbs": ["read", "update"] },
-            { "path": "Quotes/", "verbs": ["read", "create", "update"] }
+            { "path": "Quotes/", "verbs": ["read", "create", "update"] },
+            { "path": "Jobs/Library/", "verbs": ["read", "create", "update"] }
           ]
         }
       ],
@@ -28,12 +29,13 @@
       ]
     },
     "needs": 4,
-    "app": ["copy"],
+    "app": ["copy", "attach"],
     "opens": [
       { "type": "book", "path": "Books/" },
       { "type": "chapter", "path": "Books/" },
       { "type": "summary", "path": "Books/" },
-      { "type": "quote", "path": "Quotes/" }
+      { "type": "quote", "path": "Quotes/" },
+      { "type": "job", "path": "Jobs/Library/" }
     ]
   }
 }

@@ -789,6 +789,57 @@ describe("vault.attachFrom: a picture attached to a record it reads, attached to
   });
 });
 
+describe("vault.upload: a file the person picked on this screen, carried onto a record it may change (UPLOADS.md)", () => {
+  const picked = { name: "Walden.epub", type: "application/epub+zip", size: 20, file: new File(["x"], "Walden.epub") };
+  const make = (o: { upload?: boolean; files?: boolean; closed?: () => boolean } = {}) => {
+    const calls: [string, string][] = [], events: [string, unknown][] = [];
+    const deps: VaultDeps = {
+      ...vault,
+      ...(o.upload === false ? {} : {
+        async upload(id: string, f: { name: string }, progress: (p: { sent: number; size: number }) => void) {
+          calls.push([id, f.name]); progress({ sent: 10, size: 20 }); progress({ sent: 20, size: 20 });
+          if (f.name === "fails.epub") throw new Error("piece 1 of 1: down");
+          return { name: f.name, type: "application/epub+zip", size: 20, parts: [{ path: "2026-11-24/1-Walden.epub", size: 20, sha256: "ab", id: "att1" }] };
+        },
+      }),
+    };
+    const chosen: Record<string, typeof picked> = { f1: picked, f2: { ...picked, name: "fails.epub" } };
+    const router = createRouter([createVaultModule(deps, { ...(o.files === false ? {} : { files: (h: string) => chosen[h] }), emit: (e, d) => events.push([e, d]) })]);
+    const grant = { "vault.read": ["Recipes/"], "vault.update": ["Recipes/"] };
+    const ctx = { charge() {}, closed: o.closed ?? (() => false) };
+    return { calls, events, upload: (params: unknown, g: Record<string, string[]> = grant) => router.call("vault", "upload", params, g, ctx) as Promise<{ parts: unknown[] }> };
+  };
+  it("carries the picked file onto a record in its folders, its progress named by the call's id", async () => {
+    const { upload, calls, events } = make();
+    expect((await upload({ noteId: "Recipes/Toast", file: "f1", id: "u1" })).parts).toHaveLength(1);
+    expect(calls).toEqual([["r1", "Walden.epub"]]);
+    expect(events).toEqual([["vault.upload", { id: "u1", sent: 10, size: 20 }], ["vault.upload", { id: "u1", sent: 20, size: 20 }]]);
+  });
+  it("carries only a file picked on this screen, onto only a record it may change", async () => {
+    const { upload, calls } = make();
+    await expect(upload({ noteId: "r1", file: "f9" })).rejects.toMatchObject({ code: "out_of_scope" });
+    for (const file of ["../f1", "x", 3, ""]) await expect(upload({ noteId: "r1", file }), String(file)).rejects.toMatchObject({ code: "bad_params" });
+    await expect(upload({ noteId: "r1", file: "f1", id: "<script>" })).rejects.toMatchObject({ code: "bad_params" });
+    await expect(upload({ noteId: "r1", file: "f1", bytes: new ArrayBuffer(2) })).rejects.toMatchObject({ code: "bad_params" });
+    await expect(upload({ noteId: "j1", file: "f1" })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(upload({ noteId: "a2", file: "f1" })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(upload({ noteId: "r1", file: "f1" }, { "vault.read": ["Recipes/"] })).rejects.toMatchObject({ code: "not_granted" });
+    await expect(make({ upload: false }).upload({ noteId: "r1", file: "f1" })).rejects.toMatchObject({ code: "not_granted" });
+    await expect(make({ files: false }).upload({ noteId: "r1", file: "f1" })).rejects.toMatchObject({ code: "not_granted" });
+    expect(calls).toEqual([]);
+  });
+  it("says why an upload stopped, and tells a closed screen nothing", async () => {
+    const { upload } = make();
+    await expect(upload({ noteId: "r1", file: "f2" })).rejects.toMatchObject({ code: "failed", message: expect.stringContaining("piece 1 of 1: down") });
+    let closed = false;
+    const late = make({ closed: () => closed });
+    const p = late.upload({ noteId: "r1", file: "f1", id: "u2" });
+    closed = true;
+    await p.catch(() => {});
+    expect(late.events).toEqual([]);
+  });
+});
+
 describe("an applet granted only to add, in one folder (Home's line into Inbox/)", () => {
   const home = (() => { const r = parseManifest((homeRecord as { fields: { applet: unknown } }).fields.applet); if (!r.ok) throw new Error(r.error); return r.manifest; })();
   it("adds a record there", async () => {

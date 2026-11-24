@@ -50,6 +50,10 @@ declare module "parachute" {
   /** One end of a link: a record in a folder it may read. */
   export interface AppletLinkEnd { id: string; path: string | null; tags: string[]; fields: Record<string, unknown>; createdAt: string | null; updatedAt: string | null }
   export interface AppletLink { sourceId: string; targetId: string; relationship: string | null; fields: Record<string, unknown>; createdAt: string | null; sourceNote?: AppletLinkEnd; targetNote?: AppletLinkEnd }
+  /** A file picked for the app to carry (`app.pick({ bytes: false })`): its name, type and size, and a handle. */
+  export type PickedFile = { name: string; type: string; size: number; file: string };
+  /** What landed on a record (its `upload` field): the file, and its pieces in order (one: the whole file). */
+  export type UploadManifest = { name: string; type: string; size: number; parts: { path: string; size: number; sha256: string; id: string | null }[] };
   /** A field filter: a value (equals: text, a number or yes/no), or one or more operators ({ gte: 2, lte: 5 }). An operator
    *  compares text and numbers, not yes/no; on a 0.8 hub it, or ordering by a field, needs the field indexed. An empty
    *  `in` filters nothing. */
@@ -115,6 +119,10 @@ declare module "parachute" {
     /** A picture attached to record `fromId` (one it reads) attached to `noteId` (one it may change) too, with no new bytes:
      *  a picture shown on a second record. Already there: nothing more. Absent in an app before 11-23. */
     attachFrom?(noteId: string, fromId: string, path: string): Promise<{ id: string | null; path: string; type: string }>;
+    /** A file picked with `app.pick({ bytes: false })`, carried by the app onto `noteId` (one it may change) in pieces,
+     *  with `onProgress` as they land. The record's `upload` field says what landed, so picking the same file again and
+     *  uploading it onto the same record goes on from there. Absent in an app before 11-24. */
+    upload?(noteId: string, file: PickedFile | string, opts?: { onProgress?(p: { sent: number; size: number }): void }): Promise<UploadManifest>;
   }
   export const vault: AppletVault;
 
@@ -172,7 +180,9 @@ declare module "parachute" {
     /** With `pictures`: a web picture the shell fetched (public addresses only, 10 MB, PNG/JPEG/GIF/WebP). MailBody asks it. */
     picture(url: string): Promise<{ type: string; bytes: ArrayBuffer }>;
     save(name: string, bytes: ArrayBuffer | ArrayBufferView, type: string): Promise<{ saved: string }>;
-    pick(opts?: { accept?: string; multiple?: boolean }): Promise<{ name: string; type: string; bytes: ArrayBuffer }[]>;
+    pick(opts?: { accept?: string; multiple?: boolean; bytes?: true }): Promise<{ name: string; type: string; bytes: ArrayBuffer }[]>;
+    /** With `bytes: false`: no bytes, a handle (`file`) for `vault.upload`, which the app carries; up to 2 GB a file. */
+    pick(opts: { accept?: string; multiple?: boolean; bytes: false }): Promise<PickedFile[]>;
   };
   export const voice: { record(opts?: { max_s?: number }): Promise<{ bytes: ArrayBuffer; type: string; duration: number } | null> };
   export const saved: {

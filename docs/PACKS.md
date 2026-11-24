@@ -39,7 +39,7 @@ changed, which the person also changed) is not built.
   landed under).
 - Parachute's starter packs (`src/kit/packs/*.json`, each the block of its page at parachute.computer/docs/build/packs/<id>):
   **Core types** (person, project, meeting, task), **Clients and sessions** (client, session, follow-up: a practice, a
-  coach's or a tutor's), **Reading list** (book), **Library** (book, chapter, quote, summary: books you own, read
+  coach's or a tutor's), **Reading list** (book), **Library** (book, chapter, quote, summary, job: books you own, read
   chapter by chapter) and **Languages** (word, card; `from` and `word` are links). Core types, Clients and Reading list
   each have a template per type and a saved view; Library's book shares Reading list's Reading now, so it ships none of
   its own; Languages has neither, since the Languages applet is its view. All five go into one vault together, in any
