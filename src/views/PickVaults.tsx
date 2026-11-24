@@ -15,7 +15,8 @@ export default function PickVaults({ pick, onError, onCancel }: { pick: VaultPic
   async function go() {
     if (!chosen) return;
     setBusy(true);
-    try { window.location.assign(await pick.go(mine, chosen)); } catch (e) { setBusy(false); onError(e); }
+    console.error("[T520] pick go", JSON.stringify({ mine, chosen }));
+    try { const u = await pick.go(mine, chosen); console.error("[T520] pick to", u); window.location.assign(u); } catch (e) { console.error("[T520] pick failed", e instanceof Error ? `${e.name}: ${e.message} ${e.stack}` : JSON.stringify(e)); setBusy(false); onError(e); }
   }
   return (
     <div className="stack">

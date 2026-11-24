@@ -37,6 +37,7 @@ export default function AddParachute({ first = false }: { first?: boolean }) {
       window.location.assign(next.go);
     } catch (e) {
       setBusy(false);
+      console.error("[T520] add failed", e instanceof Error ? `${e.name}: ${e.message}` : JSON.stringify(e));
       if (isRefusal(e)) setRefusal(e); else setError(words(e));
     }
   }
