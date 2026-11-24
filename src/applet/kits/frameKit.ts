@@ -28,7 +28,8 @@
 //   uni.app.openLink(url)            → (links) an http/https/mailto address in the browser, during a tap: whether it went
 //   uni.app.picture(url)             → (pictures) a web picture the shell fetched: {type, bytes} (the kit's MailBody)
 //   uni.app.save(name, bytes, type)  → (save) a file into Downloads, during a tap: {saved: name}
-//   uni.app.pick({accept, multiple}) → (attach) the shell's own picker, during a tap: [{name, type, bytes}], [] for none
+//   uni.app.pick({accept, multiple}) → (attach) the shell's own picker, during a tap: [{name, type, bytes}], [] for none;
+//                                    with bytes: false, [{name, type, size, file}] (`file` a handle, for vault.upload)
 //                                      or when the shell makes the session again
 //   uni.voice.record({max_s})        → (reach: [voice]) the shell's recorder, during a tap: {bytes, type, duration}
 //                                      on Send, null on Cancel or when the shell makes the session again
@@ -44,6 +45,8 @@
 //   uni.vault.attach(noteId, bytes, type, {transcribe}) → a file onto a note it may change, through the hub
 //   uni.vault.file(id, path)         → a picture attached to a record in its folders, as a Blob (path as its words link
 //                                      it, /api/storage/…): the kit's Note asks it by itself when given the record's id
+//   uni.vault.upload(noteId, file, {onProgress}) → a file picked with app.pick({bytes: false}) onto a note it may change, in
+//                                    pieces, carried by the shell: the note's `upload` field {name, type, size, parts}
 //   uni.vault.attachFrom(noteId, fromId, path) → a picture attached to a record it reads, attached to one it may change too
 //   uni.services.*                   → the servers it declared (docs/design/SERVICES.md); card/answer/secret: Uni's
 //                                      approvals, with the approval key (docs/design/KEYRING.md)
@@ -56,6 +59,7 @@
 
 export const FRAME_KIT = String.raw`(function () {
   var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
+  var uploadCbs = {};
   var svcSubs = {}, vaultWatches = {}, svcStatus = [], launchCbs = [], shownNow = true, shownCbs = [], freshCbs = [], backCbs = [];
   // how many it holds Back for (onBack): the shell is told each change (modules/back.ts), once a tick, so letting go
   // and holding again in one go (an effect run again) says nothing; "again", after a new session, says it anyway
@@ -80,7 +84,9 @@ export const FRAME_KIT = String.raw`(function () {
   var readied = false;
   // the person may take a while: a recording of up to 10 minutes and then Send, a file being chosen; and the shell may:
   // a Notion export is chosen, then its records written and up to 150 MB of its files uploaded one at a time
-  var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000, "vaults.importNotion": 3600000, "vaults.addPack": 600000, "vaults.file": 120000, "vault.file": 120000, "vault.attachFrom": 120000 };
+  var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000, "vaults.importNotion": 3600000, "vaults.addPack": 600000, "vaults.file": 120000, "vault.file": 120000, "vault.attachFrom": 120000,
+    // a picked file carried in pieces by the shell (docs/design/UPLOADS.md): 2 GB over a slow phone line takes hours
+    "vault.upload": 8 * 3600000 };
   // bytes as an ArrayBuffer (what the shell takes), from an ArrayBuffer or a view of one
   function buf(b) { return b instanceof ArrayBuffer ? b : b && ArrayBuffer.isView(b) ? b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) : null; }
   function post(m) { parent.postMessage(m, "*"); }
@@ -286,8 +292,10 @@ export const FRAME_KIT = String.raw`(function () {
       if (readied) {
         Object.keys(pending).forEach(function (id) {
           var j = pending[id], what = j.msg.ns + "." + j.msg.method;
-          if (!j.out || (what !== "voice.record" && what !== "app.pick")) return;
+          if (!j.out || (what !== "voice.record" && what !== "app.pick" && what !== "vault.upload")) return;
           delete pending[id]; free(j); j.out = false; out--;
+          // an upload the old session was carrying stopped with it: what landed is on the record, for a resume
+          if (what === "vault.upload") { j.rej(new Error("the upload stopped: pick the file again to go on")); return; }
           j.res(what === "app.pick" ? [] : null);
         });
         pump();
@@ -315,6 +323,11 @@ export const FRAME_KIT = String.raw`(function () {
     if (m.event === "services.events") {
       var d = m.data || {}, h = svcSubs[d.service + "|" + d.sub];
       if (h) { if (d.events && d.events.length) { h.tries = 0; try { h.onEvents(d.events); } catch (e) {} } if (d.eose && h.onEose) { try { h.onEose(); } catch (e) {} } }
+      return;
+    }
+    if (m.event === "vault.upload") {
+      var ud = m.data || {}, uc = uploadCbs[ud.id];
+      if (uc) { try { uc({ sent: ud.sent, size: ud.size }); } catch (e) {} }
       return;
     }
     if (m.event === "vaults.events") {
@@ -673,6 +686,16 @@ export const FRAME_KIT = String.raw`(function () {
     vc.file = function (id, path) { return call("vault", "file", { id: id, path: path }).then(function (r) { return new Blob([r.bytes], { type: r.type }); }); };
     // a picture shown on another record attached to this one too (no new bytes): {id, path, type}
     vc.attachFrom = function (noteId, fromId, path) { return call("vault", "attachFrom", { noteId: noteId, from: fromId, path: path }); };
+    // a file the person picked (app.pick({bytes: false}): its "file", or the picked object itself), carried by the shell
+    // onto a note it may change, in pieces; onProgress({sent, size}) as they land. Resolves the record's "upload" field:
+    // {name, type, size, parts: [{path, size, sha256, id}]}
+    vc.upload = function (noteId, file, o) {
+      var h = file && typeof file === "object" ? file.file : file;
+      var uid = "u" + Math.random().toString(36).slice(2, 12);
+      if (o && typeof o.onProgress === "function") uploadCbs[uid] = o.onProgress;
+      var done = function () { delete uploadCbs[uid]; };
+      return call("vault", "upload", { noteId: noteId, file: h, id: uid }).then(function (r) { done(); return r; }, function (e) { done(); throw e; });
+    };
     uni.vault = vc;
   }
   Object.freeze(uni.theme);

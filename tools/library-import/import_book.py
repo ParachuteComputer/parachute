@@ -2,11 +2,14 @@
 """A book into a Parachute vault, as records (T-476; stdlib only). The spike (appletweb/spike/epub2vault.py), hardened.
 
     python3 -I import_book.py SOURCE --vault library --token-file F [--hub http://127.0.0.1:1939] [--dry] [--report out.json]
+    python3 -I import_book.py --job RECORD --vault library --token-file F [--hub ...] [--by NAME]
 
-SOURCE is an epub, or a folder already made from one in the ecociv-work layout (structure.json, metadata.json,
-text/NN-*.md, assets/, summaries/). See README.md for what it writes and how a second run changes nothing.
+SOURCE is an epub, or a folder already made from one (structure.json, metadata.json, text/NN-*.md, assets/,
+summaries/). --job takes a `job` record Library's Add a book left (docs/design/UPLOADS.md in the app repo): it joins
+the epub from the pieces attached to it, imports it, and says on the job how it went. See README.md for what it
+writes and how a second run changes nothing.
 """
-import argparse, base64, hashlib, json, mimetypes, os, posixpath, re, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid, zipfile
+import argparse, base64, hashlib, json, mimetypes, os, posixpath, re, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request, uuid, zipfile
 from html.parser import HTMLParser
 import xml.etree.ElementTree as ET
 
@@ -441,7 +444,7 @@ def read_epub(path, split_depth=None):
     return book
 
 
-# ---------- a folder already made from an epub (the ecociv-work layout) ----------
+# ---------- a folder already made from an epub (structure.json, metadata.json, text/, assets/, summaries/) ----------
 ANCHOR = re.compile(r'<a id="b\d+"></a><!-- block \d+; page [^>]*? -->\n?')
 MD_LINK = re.compile(r"(!?)\[([^\]]*)\]\(([^)\s]+)\)")
 
@@ -983,9 +986,100 @@ def counts(book, recs):
             "hard": book["hard"]}
 
 
+# ---------- a job: a book someone added in Library, waiting for an AI ----------
+JOB_KIND, EPUB = "import-book", "application/epub+zip"
+
+
+class Job:
+    """The job record over REST (the note door, core 0.8 and 0.9 alike): read it, change its fields on the version
+    read, and read a stored piece."""
+    def __init__(self, hub, ref):
+        self.hub, self.ref = hub, ref
+        self.rec = hub.req("GET", f"/notes/{urllib.parse.quote(ref, safe='')}?include_metadata=true")
+        self.id = self.rec["id"]
+
+    @property
+    def fields(self): return self.rec.get("metadata") or self.rec.get("fields") or {}
+
+    def set(self, **fields):
+        """Fields set on the version last read; a 409 (someone changed it) raises."""
+        self.rec = self.hub.req("PATCH", f"/notes/{self.id}", {"metadata": fields, "if_updated_at": updated_of(self.rec)})
+
+    def fetch(self, path, out):
+        """A stored piece into the open file `out`, read in 1 MiB steps: its SHA-256 and size."""
+        url = f"{self.hub.api}/storage/{urllib.parse.quote(path)}"
+        for attempt in range(12):
+            h, n, at = hashlib.sha256(), 0, out.tell()
+            try:
+                r = urllib.request.Request(url, headers={"authorization": "Bearer " + self.hub.token})
+                with urllib.request.urlopen(r, timeout=120) as res:
+                    while True:
+                        b = res.read(1 << 20)
+                        if not b: return h.hexdigest(), n
+                        h.update(b); n += len(b); out.write(b)
+            except urllib.error.HTTPError as e:
+                if e.code not in (502, 503, 504): raise RuntimeError(f"GET storage/{path}: {e.code}") from None
+            except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
+                pass
+            out.seek(at); out.truncate()
+            wait(attempt, f"storage/{path}")
+        raise RuntimeError(f"storage/{path}: the hub didn't answer after several tries")
+
+
+def run_job(a, hub, types_hub=None):
+    """Take a waiting import-book job, join its epub, import it, and say on the job how it went."""
+    job = Job(hub, a.job)
+    f = job.fields
+    if "job" not in (job.rec.get("types") or []) + (job.rec.get("tags") or []):
+        raise SystemExit(f"{job.rec.get('path')} is not a job: left as it is")
+    if f.get("kind") != JOB_KIND:
+        raise SystemExit(f"{job.rec.get('path')} asks for {f.get('kind')!r}, not {JOB_KIND}: left as it is")
+    if f.get("status") != "waiting":
+        raise SystemExit(f"{job.rec.get('path')} is {f.get('status')!r}, not waiting: left as it is")
+    up = f.get("upload") or {}
+    parts = up.get("parts") or []
+    name = os.path.basename(str(up.get("name") or "book.epub"))
+    if not (up.get("type") == EPUB or name.lower().endswith(".epub")):
+        raise SystemExit(f"this tool takes only an epub; {name} ({up.get('type')}) is left waiting for an AI that reads it")
+    if not parts or not isinstance(up.get("size"), int) or sum(p.get("size", 0) for p in parts) != up["size"]:
+        raise SystemExit(f"{job.rec.get('path')}: its upload isn't whole (the pieces don't add up to its size): left as it is")
+    # taken: on the version read, so two takers can't both have it
+    try: job.set(status="working", by=a.by)
+    except RuntimeError as e:
+        if " 409 " in str(e): raise SystemExit(f"{job.rec.get('path')} was taken or changed meanwhile: left to whoever has it") from None
+        raise
+    try:
+        with tempfile.TemporaryDirectory(prefix="library-job-") as tmp:
+            path = os.path.join(tmp, name)
+            with open(path, "wb") as out:
+                for i, p in enumerate(parts):
+                    sha, n = job.fetch(p["path"], out)
+                    if n != p.get("size") or sha != p.get("sha256"):
+                        raise RuntimeError(f"piece {i + 1} of {len(parts)} isn't what was sent (its size or SHA-256 differs)")
+            book = read_epub(path, a.split_depth)
+            if a.title: book["title"] = slugless(a.title)
+            recs = plan(book)
+            did = run(book, recs, hub, path, types_hub)
+        folder = f"Books/{book['title']}"
+        note = (f"{len(recs)} records ({len(book['chapters'])} chapters), {len(book['files'])} pictures."
+                + (f" Left as someone changed them: {', '.join(did['theirs'] + did['changed_since'])[:300]}" if did["theirs"] or did["changed_since"] else ""))
+        job.set(status="done", result=folder, note=note)
+        return {"job": job.id, "status": "done", "result": folder, "plan": counts(book, recs), "run": did}
+    except BaseException as e:
+        why = str(e) if isinstance(e, (RuntimeError, SystemExit, ValueError, KeyError, zipfile.BadZipFile)) else type(e).__name__
+        try:
+            job.rec = hub.req("GET", f"/notes/{job.id}?include_metadata=true")
+            job.set(status="failed", note=why[:400] or "the import stopped")
+        except Exception as e2:
+            print(f"  the job couldn't be marked failed: {e2}", file=sys.stderr)
+        raise
+
+
 def main():
     ap = argparse.ArgumentParser(description="A book (an epub, or a folder made from one) into a Parachute vault.")
-    ap.add_argument("source", help="an .epub, or a folder in the ecociv-work layout")
+    ap.add_argument("source", nargs="?", help="an .epub, or a folder made from one")
+    ap.add_argument("--job", help="a job record (id or path) Library's Add a book left: its epub, imported, and the job "
+                    "marked done or failed")
     ap.add_argument("--vault", required=True)
     ap.add_argument("--hub", default=os.environ.get("LIBRARY_HUB", "http://127.0.0.1:1939"))
     ap.add_argument("--token-file", help="a file holding a key with write on the vault (never the key itself)")
@@ -993,12 +1087,22 @@ def main():
                     "where write can't (core 0.9.0-pre.1); everything else uses --token-file")
     ap.add_argument("--title", help="the book's folder name, Books/<title> (default: its title up to a colon); for a "
                     "second edition or translation of a book already in, e.g. \"Meditations (Hays)\"")
-    ap.add_argument("--by", default="Uni", help="who wrote the folder's summaries (the summary's `by`)")
+    ap.add_argument("--by", default="Uni", help="who does it: the summaries' `by`, and the taker a job names")
     ap.add_argument("--split-depth", type=int, help="epub: cut at contents entries down to this depth (default: "
                     "chapters under parts, else the top level)")
     ap.add_argument("--dry", action="store_true", help="read and plan only; print what would be written")
     ap.add_argument("--report", help="write the run's report (paths and counts, never the book's text) here")
     a = ap.parse_args()
+    if a.job:
+        if a.source or a.dry: ap.error("--job takes no SOURCE and no --dry")
+        if not a.token_file: ap.error("--job needs --token-file")
+        types_hub = Hub(a.hub, a.vault, read_token(a.types_token_file)) if a.types_token_file else None
+        report = run_job(a, Hub(a.hub, a.vault, read_token(a.token_file)), types_hub)
+        print(json.dumps(report, indent=1, ensure_ascii=False))
+        if a.report:
+            with open(a.report, "w") as f: json.dump(report, f, indent=1, ensure_ascii=False)
+        return
+    if not a.source: ap.error("give a SOURCE (an epub or a folder), or --job")
     book = read_folder(a.source, a.by) if os.path.isdir(a.source) else read_epub(a.source, a.split_depth)
     if a.title: book["title"] = slugless(a.title)
     recs = plan(book)

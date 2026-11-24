@@ -253,7 +253,8 @@ alone are refused. Not room-scoped, said on the card's notes: media on that rela
 - **Save** (`save`): `app.save(name, bytes, type)`: Android MediaStore Downloads; desktop the Downloads folder, a free
   name. At most 25 MB.
 - **Attach** (`attach`): `app.pick({accept, multiple})` shows the shell's own file picker; the applet gets the files the
-  person picked (`{name, type, bytes}`, at most 25 MB each).
+  person picked (`{name, type, bytes}`, at most 25 MB each). With `bytes: false` it gets no bytes: `{name, type, size,
+  file}`, `file` a handle only the shell resolves (up to 2 GB), for `vault.upload` ([UPLOADS.md](UPLOADS.md)).
 - **Storage** (`storage`): `storage.get(key)` / `storage.set(key, value)`, kept by the shell per applet on this device,
   256 KB in all; a value goes as JSON text in bytes (`params.bytes`, read only once it is within the 256 KB), so one
   call keeps a whole list. Why not the two places that already keep an applet's state: drafts are written at every pause in
@@ -262,6 +263,9 @@ alone are refused. Not room-scoped, said on the card's notes: media on that rela
 - **Vault attachments** (new call `vault.attach(noteId, bytes, type, {transcribe})`): adds a file to a note the applet
   may `update` (its access rule governs it), through the hub's own upload and attach routes; `transcribe` asks the hub
   to transcribe audio.
+- **Vault uploads** (`vault.upload(noteId, file, {onProgress})`): a file picked with `bytes: false`, carried by the
+  shell onto a note it may `update` (judged as `vault.attach`), in 8 MiB pieces, resumable, with progress
+  ([UPLOADS.md](UPLOADS.md)). The applet never holds the bytes.
 - **Save** names are reduced to a bare file name (no separators, no leading dot, at most 100 characters); one file a
   second.
 - As built: `voice.record({max_s})` (1–600 s, default 600); `app.pick` gives at most 10 files; `storage.keys()` lists

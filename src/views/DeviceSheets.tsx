@@ -14,13 +14,16 @@
 // coming back: the frame that asked for it is gone, so it can't be sent, but it can be saved or let go.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { bareName, FILE_MAX, mediaType, PICK_MAX } from "../applet/files";
-import type { PickedFile } from "../applet/modules/app";
+import type { ChosenFile, PickedFile } from "../applet/modules/app";
+import { UPLOAD_MAX } from "../applet/upload";
 import type { Recording } from "../applet/modules/voice";
 import { saveFileOut } from "../shell/device";
 
 type Asking =
   | { kind: "record"; id: number; max: number; done: (r: Recording | null) => void }
-  | { kind: "pick"; id: number; accept: string[]; multiple: boolean; max: number; note?: string; done: (files: PickedFile[]) => void };
+  | { kind: "pick"; id: number; accept: string[]; multiple: boolean; max: number; note?: string; done: (files: PickedFile[]) => void }
+  // a pick the app carries (`app.pick({bytes: false})`, then `vault.upload`): the files themselves, never read here
+  | { kind: "choose"; id: number; accept: string[]; multiple: boolean; done: (files: ChosenFile[]) => void };
 let asks = 0;
 
 /** The recorder's format, as the Uni app picks it: WebM Opus where the webview has it (Chromium, Android). */
@@ -281,7 +284,9 @@ function HeldSheet({ name, held: h, more, onGone }: { name: string; held: Held; 
   );
 }
 
-function PickSheet({ name, accept, multiple, max, note, done }: { name: string; accept: string[]; multiple: boolean; max: number; note?: string; done: (files: PickedFile[]) => void }) {
+/** `done` with the bytes read (`app.pick`), or with `chosen` the files as they are, unread (`app.pick({bytes: false})`:
+ *  the app uploads them itself, in pieces, so they may be as large as UPLOAD_MAX). */
+function PickSheet({ name, accept, multiple, max, note, done, chosen: keep }: { name: string; accept: string[]; multiple: boolean; max: number; note?: string; done: (files: PickedFile[]) => void; chosen?: (files: ChosenFile[]) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [why, setWhy] = useState("");
   const [busy, setBusy] = useState(false);
@@ -291,7 +296,10 @@ function PickSheet({ name, accept, multiple, max, note, done }: { name: string; 
     if (!files.length) return;
     if (files.length > PICK_MAX) { setWhy(`Choose at most ${PICK_MAX} files.`); return; }
     const big = files.find((f) => f.size > max);
-    if (big) { setWhy(`${big.name} is over ${Math.round(max / 1024 / 1024)} MB. Choose a smaller one.`); return; }
+    if (big) { setWhy(`${big.name} is over ${size(max)}. Choose a smaller one.`); return; }
+    const empty = files.find((f) => !f.size);
+    if (empty) { setWhy(`${empty.name} is empty. Choose another.`); return; }
+    if (keep) { keep(files.map((f) => ({ name: bareName(f.name), type: mediaType(f.type) ?? BY_ENDING[f.name.split(".").pop()?.toLowerCase() ?? ""] ?? "application/octet-stream", size: f.size, file: f }))); return; }
     setBusy(true);
     try {
       done(await Promise.all(files.map(async (f) => ({ name: bareName(f.name), type: mediaType(f.type) ?? "application/octet-stream", bytes: await f.arrayBuffer() }))));
@@ -301,7 +309,7 @@ function PickSheet({ name, accept, multiple, max, note, done }: { name: string; 
     <div className="sheet-scrim sheet-over-frames" role="presentation">
       <section className="sheet device-sheet" role="dialog" aria-modal="true" aria-label={`${name} asks for ${what}`}>
         <h2>{name} asks for {what}</h2>
-        <p className="quiet">{note ? `${note} At most ${Math.round(max / 1024 / 1024)} MB.` : `It gets only what you choose here${multiple ? `, up to ${PICK_MAX} files` : ""}, each at most ${Math.round(max / 1024 / 1024)} MB.`}</p>
+        <p className="quiet">{note ? `${note} At most ${size(max)}.` : keep ? `Parachute puts what you choose here into your vault, at most ${size(max)}${multiple ? ` a file, up to ${PICK_MAX} files` : ""}. ${name} sees its name and where it went, not what is in it.` : `It gets only what you choose here${multiple ? `, up to ${PICK_MAX} files` : ""}, each at most ${size(max)}.`}</p>
         {why && <p role="alert">{why}</p>}
         <input ref={input} type="file" hidden data-shell-pick="" aria-label={`Choose ${what} for ${name}`} accept={accept.join(",") || undefined} multiple={multiple}
           onChange={(e) => { void chosen(e.target.files); e.target.value = ""; }} />
@@ -314,6 +322,12 @@ function PickSheet({ name, accept, multiple, max, note, done }: { name: string; 
   );
 }
 
+/** A file's type by its ending, for a picker that gives none (Android's often doesn't for a book). */
+const BY_ENDING: Record<string, string> = { epub: "application/epub+zip", pdf: "application/pdf", zip: "application/zip", txt: "text/plain", md: "text/markdown" };
+
+/** A size as the picker says it: "25 MB", "2 GB". */
+const size = (n: number) => (n >= 1024 ** 3 ? `${Math.round(n / 1024 ** 3)} GB` : `${Math.round(n / 1024 / 1024)} MB`);
+
 /** The shell's recorder and picker for one applet's screen. `record` and `pick` are stable (the frame's router keeps
  *  them); one sheet at a time, and an open one answers "none" when the screen goes or `cancel` is called (its frame's
  *  session ended). `ui` goes last in the applet's screen: the recorder rests at its foot, the picker over the frame. */
@@ -323,7 +337,7 @@ export function useDeviceSheets(name: string, shown = true, screen: string | nul
   const keptHere = useHeld(key);
   const open = useRef<Asking | null>(null);
   useEffect(() => () => api.current?.cancel(), []);
-  const api = useRef<{ record(max: number): Promise<Recording | null>; pick(accept: string[], multiple: boolean, max?: number, note?: string): Promise<PickedFile[]>; cancel(): void; leave(): void } | null>(null);
+  const api = useRef<{ record(max: number): Promise<Recording | null>; pick(accept: string[], multiple: boolean, max?: number, note?: string): Promise<PickedFile[]>; choose(accept: string[], multiple: boolean): Promise<ChosenFile[]>; cancel(): void; leave(): void } | null>(null);
   if (!api.current) {
     // one sheet at a time. A tap on another mic or attach control while one is open changes nothing: it answers "none"
     // (no recording, no files) and the open one stays as it is
@@ -336,14 +350,16 @@ export function useDeviceSheets(name: string, shown = true, screen: string | nul
     api.current = {
       record: (max) => ask<Recording | null>(null, (done) => ({ kind: "record", id: ++asks, max, done })),
       pick: (accept, multiple, max = FILE_MAX, note?: string) => ask<PickedFile[]>([], (done) => ({ kind: "pick", id: ++asks, accept, multiple, max, ...(note ? { note } : {}), done })),
-      cancel: () => { const a = open.current; if (a?.kind === "record") a.done(null); else if (a?.kind === "pick") a.done([]); },
+      choose: (accept, multiple) => ask<ChosenFile[]>([], (done) => ({ kind: "choose", id: ++asks, accept, multiple, done })),
+      cancel: () => { const a = open.current; if (a?.kind === "record") a.done(null); else if (a?.kind === "pick" || a?.kind === "choose") a.done([]); },
       // its screen is out of sight but kept: an open picker closes (nothing chosen); a recorder stops and waits, for Send
-      leave: () => { if (open.current?.kind === "pick") api.current?.cancel(); },
+      leave: () => { if (open.current?.kind === "pick" || open.current?.kind === "choose") api.current?.cancel(); },
     };
   }
   const keep = (h: Held) => hold(key, h);
   const ui = asking?.kind === "record" ? <RecorderSheet key={asking.id} name={name} max={asking.max} away={!shown} keep={keep} done={asking.done} />
     : asking?.kind === "pick" ? <PickSheet key={asking.id} name={name} accept={asking.accept} multiple={asking.multiple} max={asking.max} note={asking.note} done={asking.done} />
+    : asking?.kind === "choose" ? <PickSheet key={asking.id} name={name} accept={asking.accept} multiple={asking.multiple} max={UPLOAD_MAX} done={() => asking.done([])} chosen={asking.done} />
     : keptHere.length ? <HeldSheet key={`${keptHere[0].duration}|${keptHere[0].blob.size}|${keptHere.length}`} name={name} held={keptHere[0]} more={keptHere.length - 1} onGone={() => release1(key)} /> : null;
-  return { record: api.current.record, pick: api.current.pick, cancel: api.current.cancel, leave: api.current.leave, ui };
+  return { record: api.current.record, pick: api.current.pick, choose: api.current.choose, cancel: api.current.cancel, leave: api.current.leave, ui };
 }

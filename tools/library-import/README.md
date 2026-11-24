@@ -1,15 +1,16 @@
 # library-import: a book into a Parachute vault
 
-T-476. One book, as records, into a vault (Aaron's `library`). The spike `wt/wknd/appletweb/spike/epub2vault.py`,
-hardened. Design: `wt/wknd/appletweb/WEB.md` §1–2.
+T-476. One book, as records, into a vault, for the Library applet (`applets/library.*`) and its pack
+(`src/kit/packs/library.json`). It runs by hand on a file, or from a **job** someone left with Library's **Add a book**
+([UPLOADS.md](../../docs/design/UPLOADS.md)).
 
 ```sh
 python3 -I import_book.py SOURCE --vault library --token-file F [--types-token-file A] [--dry] [--report out.json]
+python3 -I import_book.py --job RECORD --vault library --token-file F [--by NAME]
 ```
 
 - **SOURCE** is an `.epub` (DRM-free; a locked one is refused and nothing is written), or a folder already made from
-  one in the `~/Code/ecociv-work` layout: `metadata.json`, `structure.json`, `text/NN-*.md` with their block anchors,
-  `assets/`, `summaries/`.
+  one: `metadata.json`, `structure.json`, `text/NN-*.md` with their block anchors, `assets/`, `summaries/`.
 - **--token-file**: a file holding a key with write on the vault. Mint a short-lived one and revoke it after:
   `parachute-core keys new <name> --vault library --can write --ephemeral --json` (keep the token in a 0600 file, never
   print it), then `parachute-core keys revoke <name>`.
@@ -22,6 +23,23 @@ python3 -I import_book.py SOURCE --vault library --token-file F [--types-token-f
 - **--dry** reads and plans, and prints the paths it would write. **--report** saves the counts and paths, never the
   book's text.
 - Default hub: `http://127.0.0.1:1939` (`LIBRARY_HUB` or `--hub` for another).
+
+## From a job (`--job`)
+
+Library's **Add a book** leaves a `job` record in `Jobs/Library/` with the file attached: `kind: import-book`,
+`status: waiting`, and an `upload` field listing the file's pieces in order, each with its SHA-256 (one piece for a
+file up to 8 MiB). `--job <id or path>`:
+
+1. reads the job and takes it only if it is a waiting `import-book` job for an epub. A PDF, or anything else, is left
+   `waiting` for an AI that reads it, and the run says so and exits 1.
+2. takes it: `status: working`, `by: <--by>`, on the version it read (another taker's change first: a 409, and it
+   leaves the job to them);
+3. reads each piece, checks its size and SHA-256, and joins them into the epub, in a temporary folder;
+4. imports it as below;
+5. writes `status: done`, `result: Books/<title>`, and a `note` with the counts; or `status: failed` with why.
+
+Any AI can do the same by hand: find jobs with `types: job, status: waiting`, take one on its version, and say how it
+went in `status`, `result` and `note`.
 
 ## What it writes
 
@@ -85,19 +103,19 @@ his words and gets no new picture when a better parse comes, while the others ar
 midway is finished by the next; an edit he makes as the import writes (a 409), or between a stopped run and the
 next, stays his.
 
-## Checked (2026-11-23)
+## Checked
 
-- Ecocivilization from `~/Code/ecociv-work` into throwaway `library-t476-a`, then into `library`: 57 records
-  (the book, 28 chapter records, 28 summaries), 9 pictures; a second run changed nothing (every `updatedAt` the same).
-- A made-up epub (the spike's `make-test-epub.py`: parts, footnotes, endnotes, a picture, cross-references) into the
-  app's e2e hub, then drawn in Vault with its picture.
+- A folder import of a whole book (57 records: the book, 28 chapters, 28 summaries; 9 pictures) into a throwaway
+  vault and then a real one; a second run changed nothing (every `updatedAt` the same).
+- A made-up epub (`make_test_epub.py`: parts, footnotes, endnotes, a picture, cross-references), drawn in Vault with
+  its picture; and from a job, end to end, in `e2e/libraryadd.spec.ts`.
 
-**The epub parser's known limits** (from review; none of them hit the folder import of Ecocivilization): text in a
+**The epub parser's known limits** (from review; none of them hit the folder import above): text in a
 blockquote outside its paragraphs (a `<cite>` after the last `<p>`) comes before the quote; nested lists are
 flattened into their item; paragraphs wrapped in a `<span>` or `<center>` merge into one; a block holding two
 note targets is copied into each note; a short opening chapter (under 1,000 characters, not titled "Chapter n")
 is filed under Front matter. If a picture is taken off an imported chapter, the next import attaches it again. A field a newer plan no longer
 writes keeps its old value on the record (the hub merges fields, and the import never sends a null).
 
-Not here yet: verses and passages (WEB.md step 7), summaries made by a model (Uni's step, per chapter), and the
-import in the app (`src/kit/epub.ts`, WEB.md step 6), which will replace this script.
+Not here yet: verses and passages, summaries made by a model (an AI's step, per chapter), and the import in the
+app (`src/kit/epub.ts`), which will replace this script.

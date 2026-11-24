@@ -51,6 +51,13 @@ async function openLibrary(page: Page, made: string[]) {
   await expect(frame(page).getByRole("heading", { name: "Library" })).toBeVisible({ timeout: 30_000 });
 }
 
+/** The app opened again (a reload): a person's applet waits for a tap to run again. */
+async function reopen(page: Page) {
+  await page.reload();
+  await page.getByRole("button", { name: "Open Library" }).click();
+  await expect(frame(page).getByRole("heading", { name: "Library" })).toBeVisible({ timeout: 30_000 });
+}
+
 /** The shell's own picker, opened by the applet: choose `file` in it. */
 async function choose(page: Page, file: string) {
   await expect(page.getByRole("dialog", { name: /Library asks for a file/ })).toBeVisible();
@@ -88,7 +95,7 @@ test("Add a book: an epub picked in Library becomes a job, and the importer make
     await expect(adding).toContainText(/Waiting for an AI/, { timeout: 30_000 });
     await shot(page, "uploads-02-waiting");
     const [job] = await jobs();
-    expect(job.types).toContain("job");
+    expect([...(job.types ?? []), ...((job as { tags?: string[] }).tags ?? [])]).toContain("job");
     expect(job.metadata).toMatchObject({ kind: "import-book", status: "waiting" });
     const up = job.metadata!.upload as Upload;
     expect(up).toMatchObject({ name: "A Small Garden.epub", type: "application/epub+zip" });
@@ -107,8 +114,7 @@ test("Add a book: an epub picked in Library becomes a job, and the importer make
     expect(done.metadata).toMatchObject({ status: "done", by: "the e2e", result: "Books/A Small Garden" });
 
     // the book is on the shelf; the job is gone from Being added
-    await page.reload();
-    await expect(f.getByRole("heading", { name: "Library" })).toBeVisible({ timeout: 30_000 });
+    await reopen(page);
     await expect(f.getByRole("button", { name: /A Small Garden/ }).first()).toBeVisible({ timeout: 20_000 });
     await expect(f.getByRole("region", { name: "Being added" })).toHaveCount(0);
     await shot(page, "uploads-04-on-the-shelf");
@@ -133,7 +139,10 @@ test("Add a book: a 210 MB file goes up in parts through a reload and a dropped 
     const sha = whole.digest("hex");
     const count = Math.ceil(210_000_000 / PART);
 
+    // a phone's upload speed (about 16 MB/s), so the reload and the drop land midway on any machine
+    const slow = async () => (await context.newCDPSession(page)).send("Network.emulateNetworkConditions", { offline: false, latency: 20, downloadThroughput: -1, uploadThroughput: 16 * 1024 * 1024 });
     await openLibrary(page, made);
+    await slow();
     const f = frame(page);
     await f.getByRole("button", { name: "Add a book" }).click();
     await choose(page, big);
@@ -144,13 +153,14 @@ test("Add a book: a 210 MB file goes up in parts through a reload and a dropped 
 
     // three parts in, the app goes away (a reload): the job keeps what landed
     await expect.poll(async () => ((await jobs())[0]?.metadata?.upload as Upload | undefined)?.parts.length ?? 0, { timeout: 120_000 }).toBeGreaterThanOrEqual(3);
-    await page.reload();
-    await expect(f.getByRole("heading", { name: "Library" })).toBeVisible({ timeout: 30_000 });
-    const before = ((await jobs())[0].metadata!.upload as Upload).parts.length;
+    await reopen(page);
+    const landed = ((await jobs())[0].metadata!.upload as Upload).parts.map((p) => p.path);
+    const before = landed.length;
     expect(before).toBeLessThan(count);
     await expect(f.getByRole("region", { name: "Being added" })).toContainText(/Not finished/);
 
     // picked again, it goes on from there: only the parts it lacks go up
+    await slow();
     let sent = 0;
     page.on("request", (r) => { if (r.method() === "POST" && r.url().includes("/api/storage/upload")) sent++; });
     await f.getByRole("button", { name: "Pick it again" }).click();
@@ -158,7 +168,10 @@ test("Add a book: a 210 MB file goes up in parts through a reload and a dropped 
     // and the network drops for a moment midway: it waits and goes on
     await expect.poll(async () => ((await jobs())[0].metadata!.upload as Upload).parts.length, { timeout: 120_000 }).toBeGreaterThanOrEqual(before + 2);
     await context.setOffline(true);
+    const midway = ((await jobs())[0].metadata!.upload as Upload).parts.length;
+    expect(midway).toBeLessThan(count);
     await page.waitForTimeout(4000);
+    expect(((await jobs())[0].metadata!.upload as Upload).parts.length).toBeLessThanOrEqual(midway + 1);  // nothing goes while it is offline
     await context.setOffline(false);
     await expect(f.getByRole("region", { name: "Being added" })).toContainText(/Waiting for an AI/, { timeout: 240_000 });
 
@@ -167,7 +180,9 @@ test("Add a book: a 210 MB file goes up in parts through a reload and a dropped 
     const up = job.metadata!.upload as Upload;
     expect(up).toMatchObject({ name: "Big Atlas.pdf", type: "application/pdf", size: 210_000_000 });
     expect(up.parts).toHaveLength(count);
-    expect(sent).toBeLessThanOrEqual(count - before + 2);   // a part the drop cut off may go twice; the rest weren't sent again
+    // the pieces there before the reload are the same stored files, not sent again; only a piece the drop cut off goes twice
+    expect(up.parts.slice(0, before).map((p) => p.path)).toEqual(landed);
+    expect(sent).toBeLessThanOrEqual(count - before + 1);
     expect(up.parts.reduce((n, p) => n + p.size, 0)).toBe(210_000_000);
 
     // the parts, read back and joined in order, are the file

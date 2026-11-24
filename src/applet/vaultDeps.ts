@@ -3,6 +3,10 @@
 import { VaultConflictError, type CreateNotePayload, type UpdateNotePayload, type VaultClient } from "@openparachute/surface-client";
 import type { VaultDeps, VaultNote } from "./modules/vault";
 import { mediaType } from "./files";
+import { sha256Hex, uploadInParts, type UploadIo } from "./upload";
+
+/** A piece of an upload that sends nothing for this long is cut off and sent again. */
+const STALL_MS = 60_000;
 
 /** A stored file's ending, where the media type's own second half isn't the one the hub reads it by. */
 const EXTENSION: Record<string, string> = { "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/mpeg": "mp3", "audio/mp3": "mp3" };
@@ -69,5 +73,29 @@ export function vaultDeps(c: VaultClient, kept?: VaultClient): VaultDeps {
     file: (path) => c.fetchAttachmentBlob(`/api/storage/${path.split("/").map(encodeURIComponent).join("/")}`),
     // a file already in storage onto another note (the hub's attach route alone: no new bytes)
     attachPath: async (id, path, mimeType) => { const a = await c.addAttachment(id, { path, mimeType }); return { id: a.id, path: a.path ?? path, mimeType: a.mimeType ?? mimeType }; },
+    // a picked file onto the note, in pieces (upload.ts): the hub's own upload and attach routes, and the note's
+    // `upload` field (fields merge on the hub: nothing else of the note changes)
+    upload: (id, chosen, progress, closed) => {
+      const io: UploadIo = {
+        read: async () => { const n = await c.getNote(id); if (!n) throw Object.assign(new Error("the record is gone"), { status: 404 }); return { upload: (n.metadata as Record<string, unknown> | undefined)?.upload ?? null, updatedAt: n.updatedAt ?? null }; },
+        // a piece that stops moving for a minute (a phone between networks) is cut off and tried again
+        put: (piece, name, type, onSent) => new Promise((resolve, reject) => {
+          const stop = new AbortController();
+          let still: ReturnType<typeof setTimeout> = setTimeout(() => stop.abort(), STALL_MS);
+          const moved = () => { clearTimeout(still); still = setTimeout(() => stop.abort(), STALL_MS); };
+          c.uploadStorageFile(new File([piece], name, { type }), { signal: stop.signal, onProgress: ({ loaded }) => { moved(); onSent(loaded); } })
+            .then((r) => resolve({ path: r.path }), (e: unknown) => reject(stop.signal.aborted ? Object.assign(new Error("the connection stalled"), { status: 0 }) : e))
+            .finally(() => clearTimeout(still));
+        }),
+        attach: async (path, mimeType) => { const a = await c.addAttachment(id, { path, mimeType }); return { id: a.id ?? null }; },
+        write: async (upload, at) => { await c.updateNote(id, { metadata: { upload }, ...(at ? { if_updated_at: at } : { force: true }) } as UpdateNotePayload); },
+        hash: sha256Hex,
+        online: () => typeof navigator === "undefined" || navigator.onLine !== false,
+        whenOnline: () => new Promise<void>((r) => addEventListener("online", () => r(), { once: true })),
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+        closed,
+      };
+      return uploadInParts(chosen.file, chosen.name, chosen.type, io, progress);
+    },
   };
 }
