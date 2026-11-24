@@ -28,13 +28,13 @@ export default defineConfig({
     // Last, on a sign-in of its own, so nothing before it waits on it. PW_WEBKIT_WS: a Playwright server to run WebKit in
     // (on a machine whose own libraries Playwright's WebKit can't use)
     { name: "webkit-setup", dependencies: ["plain"], testMatch: /auth\.setup\.ts/, use: { ...devices["Pixel 7"], browserName: "chromium" } },
-    { name: "webkit", dependencies: ["pick"], testMatch: [/webkit\.spec\.ts/], use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 900 }, storageState: "e2e/.hub-session.json",
+    { name: "webkit", dependencies: ["webkit-setup"], testMatch: [/webkit\.spec\.ts/], use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 900 }, storageState: "e2e/.hub-session.json",
       ...(process.env.PW_WEBKIT_WS ? { connectOptions: { wsEndpoint: process.env.PW_WEBKIT_WS } } : {}) } },
-    // the vaults an applet reaches (docs/ACCESS.md proposal 5), on webkit-setup's fresh sign-in (a fourth password sign-in
-    // in one run meets the hub's limit), before webkit (whose last walk has the hub refuse this device's sign-in): its
-    // walks open several devices from that start, and by the end of the phone project's long run the first start's
-    // sign-in has run out
-    { name: "pick", dependencies: ["webkit-setup"], testMatch: [/vaultpick\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.signed-in.json" } },
+    // the vaults an applet reaches (docs/ACCESS.md proposal 5), last, on a sign-in of its own through the key door
+    // (e2e/pick.setup.ts): its walks open several devices from one start, the phone project's start has run out by the
+    // end of its long run, and webkit's walks share and retire webkit-setup's
+    { name: "pick-setup", dependencies: ["webkit"], testMatch: /pick\.setup\.ts/, use: { ...devices["Pixel 7"], browserName: "chromium" } },
+    { name: "pick", dependencies: ["pick-setup"], testMatch: [/vaultpick\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.pick-signed-in.json" } },
   ],
   // VITE_E2E_SIGNER: the test signer for the services tests (src/services/e2eNative.ts); only this build has it
   webServer: { command: `VITE_E2E_SIGNER=1 npm run build && npx vite preview --port ${PORT} --strictPort`, url: `http://localhost:${PORT}`, reuseExistingServer: !process.env.CI, timeout: 120_000 },

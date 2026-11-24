@@ -7,8 +7,10 @@ import { readFileSync } from "node:fs";
 import { devices, expect, test, type Browser, type Page } from "@playwright/test";
 import { api, hubState, mintToken, record, VAULT } from "./hub";
 import { newKey } from "./keys";
+// its own sign-in (e2e/pick.setup.ts writes it; a spec can't import a setup file)
+const PICK_SIGNED_IN = "e2e/.pick-signed-in.json";
 
-test.use({ storageState: "e2e/.signed-in.json" });
+test.use({ storageState: PICK_SIGNED_IN });
 const REACH = readFileSync(new URL("./fixtures/pick/Reach.tsx", import.meta.url), "utf8");
 const { defaultBrowserType: _b, ...phone } = devices["Pixel 7"];
 const vaultApplet = `/v/${VAULT}/a/parachute%3Avault`;
@@ -18,7 +20,7 @@ const sheet = (page: Page) => page.getByRole("dialog", { name: /^Which vaults ma
 
 /** A device with no picks kept on it (the shared start ticked every vault for Parachute's own): `key`, the person's. */
 async function device(browser: Browser, key?: string): Promise<Page> {
-  const ctx = await browser.newContext({ ...phone, storageState: "e2e/.signed-in.json" });
+  const ctx = await browser.newContext({ ...phone, storageState: PICK_SIGNED_IN });
   await ctx.addInitScript(() => { if (window === window.top && !sessionStorage.getItem("picks-cleared")) { localStorage.removeItem("parachute.picks.v1"); sessionStorage.setItem("picks-cleared", "1"); } });
   if (key) await ctx.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, key);
   const page = await ctx.newPage();
