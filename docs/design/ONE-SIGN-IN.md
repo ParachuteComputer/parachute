@@ -52,7 +52,8 @@ vaults; the per-vault steps after it came back with no page, as the source said.
 
 - **It keeps the name "Parachute"** for apps whose return address is one of its own: any other registration named
   like it is refused (`400 client_name is reserved`). (Its source also lets two exact names of self-hosted Parachute
-  software through: "Parachute Notes", "Parachute Hub (agent connector)".) The app registers there as **Vault app**
+  software through: "Parachute Notes", "Parachute Hub (agent connector)".) The app registers there as **Vault app on Android**, **on a Mac** and so on (since 2026-11-23: under one
+  name, Cloud took a second device's sign-in for the same app reconnecting and disconnected the first; `cloudClientName`)
   (`CLOUD_CLIENT_NAME`, chosen by the descriptor's `door: "cloud"`); core hubs still see "Parachute". Its consent pages say *Unverified app* above
   the ask, as for any app that registered itself.
 - **On Android** the Cloud page opens inside the app's sign-in; the 6-digit code from the mail works there as well as

@@ -21,6 +21,17 @@ export const CLIENT_NAME = "Parachute";
 /** Parachute Cloud refuses a name like "Parachute" from an app whose return address isn't one of Cloud's own (its guard
  *  against look-alikes, 2026-11-18): there the app registers under this, which its consent page shows. */
 export const CLOUD_CLIENT_NAME = "Vault app";
+/** The name the app registers under on Parachute Cloud, with the kind of device it runs on. Cloud takes a sign-in from an
+ *  app with the same name and return address as that app reconnecting, and by default disconnects its earlier sign-in
+ *  (made for claude.ai, which registers anew each time). On a device every copy of the app returns to the same loopback
+ *  address (SHELL_RETURN), so under one name a sign-in on the Mac signed the phone out (T-476 journey walk). The device's
+ *  kind tells them apart, and reads plainly on Cloud's pages; signing in again on the same device still replaces its
+ *  own earlier sign-in. */
+export function cloudClientName(ua: string = typeof navigator === "undefined" ? "" : navigator.userAgent): string {
+  const on = /Android/i.test(ua) ? "Android" : /iPhone|iPad/i.test(ua) ? "iPhone" : /Macintosh|Mac OS X/i.test(ua) ? "a Mac"
+    : /Windows/i.test(ua) ? "Windows" : /Linux|X11/i.test(ua) ? "Linux" : null;
+  return on ? `${CLOUD_CLIENT_NAME} on ${on}` : CLOUD_CLIENT_NAME;
+}
 const PENDING_KEY = "parachute.oauth.pending.v1";
 const CLIENTS_KEY = "parachute.oauth.clients.v1";
 /** A flow older than this is stale: its code verifier is dropped. */
@@ -153,7 +164,7 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   const reserved = !!parachute.appClientId && redirect === SHELL_RETURN && iss && !reservedRefused(parachute.issuer);
   let clientId = reserved ? parachute.appClientId! : cachedClient(parachute.issuer, redirect);
   if (!clientId) {
-    clientId = (await registerClient(meta.registration_endpoint, { clientName: parachute.door === "cloud" ? CLOUD_CLIENT_NAME : CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
+    clientId = (await registerClient(meta.registration_endpoint, { clientName: parachute.door === "cloud" ? cloudClientName() : CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
     cacheClient(parachute.issuer, redirect, clientId);
   }
   const codeVerifier = generateCodeVerifier();
