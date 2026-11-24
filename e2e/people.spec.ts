@@ -257,6 +257,13 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
     await summaryInput.fill("Ceramicist, trail runner, and tea fan in Boulder");
     await summaryInput.press("Enter");
     await expect(f.getByText("Saved")).toBeVisible();
+    // off the phone's Contacts, and back: only "off" is written down
+    const onPhone = f.getByLabel("On my phone (Contacts sync)");
+    await expect(onPhone).toBeChecked();
+    await onPhone.uncheck();
+    await expect.poll(async () => { const r = await api(hub, "GET", `notes?id=${encodeURIComponent("People/Maya Lin")}&include_metadata=true`); return (Array.isArray(r) ? r[0] : r).metadata.on_phone; }).toBe(false);
+    await onPhone.check();
+    await expect.poll(async () => { const r = await api(hub, "GET", `notes?id=${encodeURIComponent("People/Maya Lin")}&include_metadata=true`); return (Array.isArray(r) ? r[0] : r).metadata.on_phone; }).toBeUndefined();
     await f.getByRole("button", { name: "Done" }).click();
     await expect(f.getByText("Ceramicist, trail runner, and tea fan in Boulder")).toBeVisible();
 

@@ -23,7 +23,8 @@
 //   keep_in_touch     string    how often to be in touch: "every week" … "every year" (or a number of days)
 //   talked            string[]  times you were in touch with no note of their own: "YYYY-MM-DD" or "YYYY-MM-DD: what"
 //   how_we_met        string    the story of how you met
-//   met               string    when you met: "YYYY-MM-DD" or "YYYY"
+//   met               string    when you met: "YYYY-MM-DD", "YYYY-MM" or "YYYY"
+//   on_phone          boolean   false keeps them off the phone's Contacts (services/carddav); absent means on
 //
 // Body: markdown (e.g. "## Memories and moments"), editable in place with device-saved drafts.
 // Links: reads links from Meetings/, Journal/, Notes/, Organizations/ and People/ for each person's timeline and the
@@ -865,8 +866,9 @@ function parseVCard(text: string): VCardContact[] {
         const cleaned = unescapeVCard(val).replace(/^mailto:/i, "").trim().toLowerCase();
         if (cleaned) emails.push(cleaned);
       } else if (p.name === "ADR") {
-        const parts = splitVCardEscaped(val, ";").map((x) => unescapeVCard(x).trim());
-        // ADR: po;ext;street;city;region;postal;country
+        // ADR: po;ext;street;city;region;postal;country; each part may be a list (an unescaped comma between items), and
+        // Android sends an address's lines as a list in the street part: a list's items are lines
+        const parts = splitVCardEscaped(val, ";").map((x) => splitVCardEscaped(x, ",").map((y) => unescapeVCard(y).trim()).filter(Boolean).join("\n"));
         const street = [parts[0], parts[1], parts[2]].filter(Boolean).join(", ");
         const cityRegion = [parts[3], parts[4]].filter(Boolean).join(", ");
         const cityLine = [cityRegion, parts[5]].filter(Boolean).join(" ").trim();
@@ -1585,6 +1587,8 @@ export default function People() {
     if (name === "email" && typeof value === "string") clean = value.trim().toLowerCase() || null;
     else if (name === "emails" && Array.isArray(value)) clean = dedupeStrings(value.map((x) => String(x).toLowerCase()));
     else if (name === "favorite") clean = value === true ? true : null;
+    // on the phone is the default: only "off" is written down
+    else if (name === "on_phone") clean = value === false ? false : null;
     else if (name === "birthday") {
       const b = String(value ?? "").trim();
       if (b && !parseYmd(b)) { toast("A birthday is YYYY-MM-DD, or --MM-DD without the year.", { error: true }); return; }
@@ -2088,7 +2092,7 @@ export default function People() {
                 { name: "status", label: "Status", kind: "choice", choices: STATUSES, value: pf.status },
                 { name: "keep_in_touch", label: "Keep in touch", kind: "choice", choices: CADENCES, value: typeof selected.fields?.keep_in_touch === "number" ? String(selected.fields.keep_in_touch) : str(selected.fields?.keep_in_touch) },
                 { name: "how_we_met", label: "How we met", kind: "long", value: howWeMet },
-                { name: "met", label: "When we met (YYYY-MM-DD or YYYY)", kind: "text", value: met },
+                { name: "met", label: "When we met (YYYY-MM-DD, YYYY-MM or YYYY)", kind: "text", value: met },
                 { name: "email", label: "Email", kind: "text", value: pf.email },
                 { name: "emails", label: "More emails", kind: "list", value: pf.emails },
                 { name: "phones", label: "Phones", kind: "list", value: pf.phones },
@@ -2102,6 +2106,7 @@ export default function People() {
                 { name: "ways_of_working", label: "Ways of working", kind: "list", value: pf.ways_of_working },
                 { name: "source", label: "Source", kind: "text", value: pf.source },
                 { name: "favorite", label: "Favorite", kind: "yesno", value: pf.favorite },
+                { name: "on_phone", label: "On my phone (Contacts sync)", kind: "yesno", value: selected.fields?.on_phone !== false },
               ]}
             />
             <p className="pe-small pe-muted">Changes save automatically when you press Enter or leave a field. Separate list items with commas.</p>

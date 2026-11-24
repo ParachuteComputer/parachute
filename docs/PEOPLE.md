@@ -33,7 +33,7 @@ Records live at `People/<Name>` with type `person` (parent `entity`). All new fi
 | `keep_in_touch` | `string` | How often to be in touch: `"every week"`, `"every 2 weeks"`, `"every month"`, `"every 3 months"`, `"every 6 months"`, `"every year"`. People also reads `"monthly"`, `"quarterly"`, `"yearly"` and a number of days (`45`, `"45 days"`) |
 | `talked` | `string[]` | Times you were in touch that left no note of their own, newest first: `"YYYY-MM-DD"` or `"YYYY-MM-DD: what about"` |
 | `how_we_met` | `string` | How you met, in your words |
-| `met` | `string` | When you met: `"YYYY-MM-DD"`, or `"YYYY"` when that's all you know |
+| `met` | `string` | When you met: `"YYYY-MM-DD"`, `"YYYY-MM"`, or `"YYYY"` when that's all you know |
 
 ### Body
 
