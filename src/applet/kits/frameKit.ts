@@ -74,6 +74,7 @@ export const FRAME_KIT = String.raw`(function () {
   var savedVals = {}, savedDirty = null, savedTimer = null, savedFirst = 0, savedOn = false, SAVE_MS = 250, SAVE_MAX_MS = 1000, SCROLL = "parachute:scroll";
   var measuring = false, lastHeight = -1, queued = false;
   var readyP = new Promise(function (r) { readyRes = r; });
+  var readied = false;
   // the person may take a while: a recording of up to 10 minutes and then Send, a file being chosen; and the shell may:
   // a Notion export is chosen, then its records written and up to 150 MB of its files uploaded one at a time
   var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000, "vaults.importNotion": 3600000, "vaults.addPack": 600000, "vaults.file": 120000, "vault.file": 120000, "vault.attachFrom": 120000 };
@@ -275,6 +276,20 @@ export const FRAME_KIT = String.raw`(function () {
     }
     if (m.uni !== 1) return;
     if (m.event === "ready") {
+      // a session made again under this page: what the old one held out is never answered (the shell drops an ended
+      // session's replies), so it is settled now, not at its own timeout (a recording's is an hour); what is still in
+      // line goes to the new one
+      if (readied) {
+        [pending, fetches].forEach(function (table) {
+          Object.keys(table).forEach(function (id) {
+            var j = table[id]; if (!j.out) return;
+            delete table[id]; free(j); j.out = false; out--;
+            var er = new Error("the app opened this applet's session again; ask again"); er.code = "failed"; j.rej(er);
+          });
+        });
+        pump();
+      }
+      readied = true;
       if (m.data && m.data.saved && typeof m.data.saved === "object") { savedOn = true; savedVals = m.data.saved; restoreScroll(); }
       if (m.data && m.data.theme) applyTheme(m.data.theme);
       if (m.data && m.data.props) applyProps(m.data.props);
