@@ -677,11 +677,12 @@ test("a room you are put in after the list loaded shows at once, with its name a
     expect((await owner.publish({ kind: 9, content: `The shed door sticks ${stamp}.`, tags: [["h", shed]] })).ok).toBe(true);
     expect((await owner.publish({ kind: 9000, tags: [["h", shed], ["p", alice]] })).ok).toBe(true);
     await expect(row("Shed")).toContainText(`The shed door sticks ${stamp}.`, { timeout: 5_000 });
-    // and it is live: a new line shows in its row, a new name too
+    // and it is live: a new line shows in its row, a new name too (its subscription may wait its turn a moment: the shell
+    // paces what it asks of a relay)
     expect((await owner.publish({ kind: 9, content: `Oiled it ${stamp}.`, tags: [["h", shed]] })).ok).toBe(true);
-    await expect(row("Shed")).toContainText(`Oiled it ${stamp}.`, { timeout: 5_000 });
+    await expect(row("Shed")).toContainText(`Oiled it ${stamp}.`, { timeout: 10_000 });
     expect((await owner.publish({ kind: 9002, tags: [["h", shed], ["name", `Tool shed ${stamp}`]] })).ok).toBe(true);
-    await expect(row("Tool shed")).toBeVisible({ timeout: 5_000 });
+    await expect(row("Tool shed")).toBeVisible({ timeout: 10_000 });
 
     // taken out of a room: it goes from the list (the one from the first read, and the one that came later)
     expect((await owner.publish({ kind: 9001, tags: [["h", porch], ["p", alice]] })).ok).toBe(true);

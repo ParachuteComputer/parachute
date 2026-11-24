@@ -49,7 +49,9 @@ production, so the shell's pacing is tested. Its per-key quota (60 stored messag
 specs' keys post far more than a person does. A rooms applet's person in many rooms is the case it holds: a burst of
 subscriptions is paced, and a post goes ahead of them.
 
-What the relay taught the applet (and the tests hold it to): it sends live events only to a subscription for one room;
+What the relay taught the applet (and the tests hold it to): it sends live events only to a subscription for one room
+(a room's member list, 39002, too: news that you were put in or taken out of a room comes as its own word to you, kinds
+44100 and 44101, a moment before the member list says so);
 typing (kind 20002) goes in a filter of its own; a file with metadata in it (camera data, encoder tags) is refused, so
 the applet draws a picture again before it sends it; read markers and message times are whole seconds.
 
