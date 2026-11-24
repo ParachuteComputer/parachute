@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tasks · Parachute</title>
+<!--
+  T-476 Spike A: a live Claude artifact over the Parachute connector.
+  It reads with watchTool("query-records") and writes with callTool("update-record"), on the viewer's own connector,
+  through window.claude.use("mcp") (artifact runtime contract 0.2.96). Publish with manifest.json's capabilities.
+  Two tools only; nothing else is declared, so nothing else can be called.
+-->
+<style>
+  :root { --ink:#1f1d1a; --soft:#6b665e; --line:#e6e1d8; --paper:#fbf9f5; --accent:#2f5d50; --warn:#9a3b2e; }
+  @media (prefers-color-scheme: dark) { :root { --ink:#ece8e1; --soft:#a39d93; --line:#34312c; --paper:#1b1a18; --accent:#8cc4b2; --warn:#e39a8c; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.45 Georgia, "Iowan Old Style", serif; }
+  main { max-width:640px; margin:0 auto; padding:20px 16px 40px; }
+  header { display:flex; align-items:baseline; gap:12px; margin-bottom:8px; }
+  h1 { font-size:22px; margin:0; font-weight:600; }
+  .meta { color:var(--soft); font:13px/1.4 system-ui, sans-serif; }
+  .meta button { font:inherit; color:var(--accent); background:none; border:0; padding:0; cursor:pointer; }
+  #note { min-height:20px; color:var(--warn); font:13px/1.4 system-ui, sans-serif; margin:4px 0 10px; }
+  h2 { font:600 12px/1 system-ui, sans-serif; letter-spacing:.06em; text-transform:uppercase; color:var(--soft); margin:18px 0 6px; }
+  ul { list-style:none; margin:0; padding:0; }
+  li { border-top:1px solid var(--line); padding:9px 0; display:grid; grid-template-columns:28px 1fr auto; gap:8px; align-items:start; }
+  li:last-child { border-bottom:1px solid var(--line); }
+  .tick { width:20px; height:20px; margin-top:2px; border:1.5px solid var(--soft); border-radius:50%; background:none; cursor:pointer; padding:0; color:var(--paper); font-size:12px; line-height:17px; }
+  .done .tick { background:var(--accent); border-color:var(--accent); }
+  .done .title { color:var(--soft); text-decoration:line-through; }
+  .title { font-weight:500; }
+  .sub { color:var(--soft); font-size:14px; }
+  .sub[contenteditable]:empty::before { content:"Add a note"; opacity:.6; }
+  .sub:focus, .due:focus { outline:1px solid var(--accent); outline-offset:2px; border-radius:2px; }
+  .due { font:13px system-ui, sans-serif; color:var(--soft); border:0; background:none; padding:2px 0; text-align:right; }
+  .late .due { color:var(--warn); }
+  .busy { opacity:.55; pointer-events:none; }
+  .empty { color:var(--soft); font-style:italic; padding:10px 0; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Tasks</h1><span class="meta" id="meta">Loading…</span></header>
+  <div id="note" role="status"></div>
+  <h2>Open</h2><ul id="open"><li class="empty">…</li></ul>
+  <h2>Done</h2><ul id="done"></ul>
+</main>
+<script>
+// The connector's display name in the viewer's claude.ai account, and what to show: records of type `task`.
+const SERVER = "Parachute";
+const QUERY = { type: "task", include_body: true, limit: 200 };
+
+const $ = (id) => document.getElementById(id);
+const say = (t) => { $("note").textContent = t || ""; };
+const today = () => new Date().toISOString().slice(0, 10);
+const nameOf = (r) => (r.path || r.id).split("/").pop();
+// query-records answers an array, or {records, next_cursor} when a limit or cursor is given
+const recordsOf = (payload) => Array.isArray(payload) ? payload : (payload && Array.isArray(payload.records) ? payload.records : []);
+
+// what each failure means to the person, in plain words (mcp.d.ts McpErrorCode)
+function plain(e) {
+  const code = e && e.code;
+  if (code === "server_not_connected" || code === "server_not_found") return "Connect Parachute in Settings › Connectors to see your tasks here.";
+  if (code === "needs_reauth") return "Parachute needs you to sign in again (Settings › Connectors).";
+  if (code === "not_granted" || code === "consent_required" || code === "approval_required") return "This page needs your OK to read Parachute.";
+  if (code === "tool_error") return toolText(e) || "Parachute refused that change.";
+  return (e && e.message) || String(e);
+}
+// a tool_error carries the tool's own result; its first text block is Parachute's message
+function toolText(e) {
+  const c = e && e.result && e.result.content;
+  const t = Array.isArray(c) && c.find((b) => b.type === "text");
+  if (!t) return "";
+  try { const j = JSON.parse(t.text); return j.error || j.message || t.text; } catch { return t.text; }
+}
+
+let mcp = null;
+let rows = [];
+let readFailed = false;   // a read error is cleared by the next good read; a write's message stays until the next write
+
+function render() {
+  const open = rows.filter((r) => (r.fields || {}).status !== "done").sort((a, b) => String((a.fields || {}).due || "9").localeCompare(String((b.fields || {}).due || "9")));
+  const done = rows.filter((r) => (r.fields || {}).status === "done");
+  $("open").replaceChildren(...(open.length ? open.map(row) : [empty("Nothing open.")]));
+  $("done").replaceChildren(...done.map(row));
+  $("meta").replaceChildren(document.createTextNode(`${open.length} open · `), refreshButton());
+}
+const empty = (t) => Object.assign(document.createElement("li"), { className: "empty", textContent: t });
+function refreshButton() {
+  const b = Object.assign(document.createElement("button"), { textContent: "refresh" });
+  b.onclick = () => mcp && mcp.invalidate(SERVER, "query-records");
+  return b;
+}
+function row(r) {
+  const f = r.fields || {};
+  const li = document.createElement("li");
+  if (f.status === "done") li.classList.add("done");
+  if (f.status !== "done" && f.due && f.due < today()) li.classList.add("late");
+  const tick = Object.assign(document.createElement("button"), { className: "tick", textContent: f.status === "done" ? "✓" : "", title: f.status === "done" ? "Mark open" : "Mark done" });
+  tick.onclick = () => change(li, r, { fields: { status: f.status === "done" ? "open" : "done" } });
+  const mid = document.createElement("div");
+  const title = Object.assign(document.createElement("div"), { className: "title", textContent: nameOf(r) });
+  const sub = Object.assign(document.createElement("div"), { className: "sub", textContent: (r.body || "").trim() });
+  sub.contentEditable = "plaintext-only";
+  sub.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sub.blur(); } };
+  sub.onblur = () => { const t = sub.textContent.trim(); if (t !== (r.body || "").trim()) change(li, r, { body: t }); };
+  if (f.project) sub.title = f.project;
+  mid.append(title, sub);
+  const due = Object.assign(document.createElement("input"), { type: "date", className: "due", value: f.due || "" });
+  due.onchange = () => change(li, r, { fields: { due: due.value || null } });
+  li.append(tick, mid, due);
+  return li;
+}
+
+// One write, on the person's own gesture: update-record with the updatedAt we read, so a change made elsewhere
+// in the meantime is refused, not overwritten. Then the watched read refetches.
+async function change(li, r, patch) {
+  li.classList.add("busy");
+  say("");
+  try {
+    await mcp.callTool(SERVER, "update-record", { id: r.id, ...patch, if_updated_at: r.updatedAt });
+  } catch (e) {
+    const t = plain(e);
+    say(/conflict|changed since|updated_at/i.test(t) ? `“${nameOf(r)}” changed somewhere else, so I reloaded it. Try again.` : t);
+  } finally {
+    await mcp.invalidate(SERVER, "query-records");
+    li.classList.remove("busy");
+  }
+}
+
+(async () => {
+  mcp = window.claude && typeof window.claude.use === "function" ? await window.claude.use("mcp") : null;
+  if (!mcp) { $("meta").textContent = ""; $("open").replaceChildren(empty("Open this page in Claude, with Parachute connected, to see your tasks.")); return; }
+  mcp.watchTool(SERVER, "query-records", QUERY, (ev) => {
+    if (ev.type === "error") { readFailed = true; say(plain(ev.error)); return; }
+    rows = recordsOf(ev.result.payload);
+    if (readFailed) { readFailed = false; say(""); }
+    render();
+  }, { refetchInterval: 60000 });
+})();
+</script>
+</body>
+</html>

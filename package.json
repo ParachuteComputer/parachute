@@ -31,6 +31,7 @@
     "sucrase": "3.35.1"
   },
   "devDependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.5",
     "@noble/curves": "2.0.1",
     "@playwright/test": "1.65.0",
     "@tauri-apps/cli": "2.11.5",

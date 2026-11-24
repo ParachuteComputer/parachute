@@ -1,0 +1,5 @@
+{
+  "_what": "The capabilities a publish declares for parachute-tasks.html (contract 0.2.96 SKILL.md). `server` is the connector's display name in the viewer's claude.ai account.",
+  "contract": "0.2.96",
+  "capabilities": { "mcp": { "servers": [ { "server": "Parachute", "tools": ["query-records", "update-record"] } ] } }
+}

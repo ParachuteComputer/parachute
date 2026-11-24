@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Artifact harness (contract 0.2.96 mimic)</title>
+<style>
+  body { margin:0; font:14px/1.4 system-ui, sans-serif; background:#eeeae3; color:#222; display:grid; grid-template-columns: 1fr 360px; height:100vh; }
+  #frame { border:0; width:100%; height:100%; background:#fff; }
+  aside { border-left:1px solid #ccc; overflow:auto; padding:10px; background:#f7f5f1; }
+  h3 { margin:4px 0 8px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:#666; }
+  #log div { font:12px/1.35 ui-monospace, monospace; border-bottom:1px solid #e2ded6; padding:4px 0; word-break:break-all; }
+  #consent { position:fixed; inset:0; background:#0006; display:none; align-items:center; justify-content:center; }
+  #consent .box { background:#fff; border-radius:12px; padding:20px; width:380px; box-shadow:0 10px 40px #0004; }
+  #consent button { margin-right:8px; padding:6px 14px; }
+  .stats { font:12px ui-monospace, monospace; color:#555; margin-bottom:8px; }
+</style></head>
+<body>
+<iframe id="frame" sandbox="allow-scripts" src="/artifact"></iframe>
+<aside><h3>Connector calls</h3><div class="stats" id="stats"></div><div id="log"></div></aside>
+<div id="consent"><div class="box"><b>Allow this artifact to use Parachute?</b>
+  <p id="consent-tools"></p><p style="color:#666">Calls run on your own connector account. (Harness mimic of claude.ai's first-call approval.)</p>
+  <button id="allow">Allow</button><button id="deny">Don't allow</button></div></div>
+<script>
+const frame = document.getElementById("frame");
+let manifest, tools = {};          // tools[server][name] = annotations, from the connector's own tools/list
+const granted = {};                // per server, for this page load
+const cache = new Map();           // key -> {result, storedAt}
+const watches = new Map();         // id -> {server, tool, input, timer}
+const stats = { calls: 0, bytes: 0, ms: 0 };
+const key = (s, t, i) => JSON.stringify([s, t, i ?? null]);
+const err = (code, message, extra) => ({ code, message, ...extra });
+const log = (line) => { const d = document.createElement("div"); d.textContent = line; document.getElementById("log").prepend(d); document.getElementById("stats").textContent = `${stats.calls} calls · ${(stats.bytes/1024).toFixed(1)} KB · ${stats.ms} ms total`; };
+const post = (m) => frame.contentWindow.postMessage({ t476: 1, ...m }, "*");
+
+async function boot() {
+  manifest = await (await fetch("/manifest")).json();
+  for (const s of manifest.capabilities.mcp.servers) {
+    const r = await fetch("/api/list?server=" + encodeURIComponent(s.server)).then((r) => r.json());
+    tools[s.server] = Object.fromEntries((r.tools || []).map((t) => [t.name, t]));
+  }
+}
+const ready = boot();
+
+function declared(server, tool) {
+  const s = manifest.capabilities.mcp.servers.find((x) => x.server === server);
+  if (!s) return err("server_not_found", `No connector named ${server} is declared`);
+  if (!tools[server] || !Object.keys(tools[server]).length) return err("server_not_connected", `${server} is not connected`, { server });
+  if (tool && !s.tools.includes(tool)) return err("not_in_manifest", `${tool} is not declared for ${server}`, { server });
+  if (tool && !tools[server][tool]) return err("bad_request", `${server} has no tool ${tool}`, { server });
+  return null;
+}
+function consent(server) {
+  if (granted[server] !== undefined) return Promise.resolve(granted[server]);
+  const s = manifest.capabilities.mcp.servers.find((x) => x.server === server);
+  document.getElementById("consent-tools").textContent = `${server}: ${s.tools.join(", ")}`;
+  document.getElementById("consent").style.display = "flex";
+  return new Promise((res) => {
+    document.getElementById("allow").onclick = () => { granted[server] = true; document.getElementById("consent").style.display = "none"; res(true); };
+    document.getElementById("deny").onclick = () => { granted[server] = false; document.getElementById("consent").style.display = "none"; res(false); };
+  });
+}
+const readOnly = (server, tool) => tools[server]?.[tool]?.annotations?.readOnlyHint === true;
+
+// payload: structuredContent, else the first text block parsed as JSON, else that text (mcp.d.ts CallToolResult)
+function withPayload(r) {
+  let payload = r.structuredContent;
+  if (payload === undefined) { const t = (r.content || []).find((b) => b.type === "text"); if (t) { try { payload = JSON.parse(t.text); } catch { payload = t.text; } } }
+  return { content: r.content, structuredContent: r.structuredContent, payload };
+}
+async function call(server, tool, input) {
+  const bad = declared(server, tool); if (bad) throw bad;
+  if (!(await consent(server))) throw err("not_granted", "The viewer declined", { server });
+  const t0 = performance.now();
+  const resp = await fetch("/api/call", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ server, tool, input }) });
+  const text = await resp.text();
+  const ms = Math.round(performance.now() - t0);
+  stats.calls++; stats.bytes += text.length; stats.ms += ms;
+  log(`${tool} ${JSON.stringify(input)} → ${resp.status} ${text.length} B ${ms} ms`);
+  if (!resp.ok) throw err("upstream_error", "Connector call failed", { server });
+  const r = JSON.parse(text);
+  if (r.error) throw err("upstream_error", r.error.message || "Connector call failed", { server });
+  const out = withPayload(r.result);
+  if (r.result.isError) throw err("tool_error", (out.content.find((b) => b.type === "text") || {}).text || "tool error", { server, result: r.result });
+  return out;
+}
+// readOnlyHint:true tools: staleTime 0 -> serve the cached copy (marked revalidating) and refetch
+async function cachedCall(server, tool, input, emit) {
+  const k = key(server, tool, input);
+  const hit = readOnly(server, tool) && cache.get(k);
+  if (hit && emit) emit({ ...hit.result, cache: { storedAt: hit.storedAt, revalidating: true } });
+  const fresh = await call(server, tool, input);
+  if (readOnly(server, tool)) cache.set(k, { result: fresh, storedAt: Date.now() });
+  return fresh;
+}
+async function runWatch(id) {
+  const w = watches.get(id); if (!w) return;
+  try { const r = await cachedCall(w.server, w.tool, w.input, (c) => post({ watch: id, ev: { type: "data", result: c } })); post({ watch: id, ev: { type: "data", result: r } }); }
+  catch (e) { post({ watch: id, ev: { type: "error", error: e } }); }
+}
+
+addEventListener("message", async (e) => {
+  if (e.source !== frame.contentWindow) return;
+  const m = e.data; if (!m || m.t476 !== 1) return;
+  await ready;
+  const { id, op, args } = m;
+  try {
+    if (op === "watchTool") {
+      const bad = declared(args.server, args.tool);
+      if (bad) return post({ watch: id, ev: { type: "error", error: bad } });
+      if (!readOnly(args.server, args.tool)) return post({ watch: id, ev: { type: "error", error: err("bad_request", "watchTool is for read-only tools", { server: args.server }) } });
+      const every = args.refetchInterval ? Math.max(30000, args.refetchInterval) : 0;
+      watches.set(id, { ...args, timer: every ? setInterval(() => !document.hidden && runWatch(id), every) : null });
+      return runWatch(id);
+    }
+    if (op === "unwatch") { clearInterval(watches.get(id)?.timer); watches.delete(id); return; }
+    if (op === "invalidate") {
+      for (const k of [...cache.keys()]) { const [s, t, i] = JSON.parse(k); if ((!args.server || s === args.server) && (!args.tool || t === args.tool) && (args.input === undefined || JSON.stringify(i) === JSON.stringify(args.input))) cache.delete(k); }
+      const again = [...watches].filter(([, w]) => (!args.server || w.server === args.server) && (!args.tool || w.tool === args.tool)).map(([wid]) => runWatch(wid));
+      await Promise.all(again);
+      return post({ id, result: null });
+    }
+    if (op === "callTool") return post({ id, result: await cachedCall(args.server, args.tool, args.input) });
+    if (op === "listTools") return post({ id, result: { servers: manifest.capabilities.mcp.servers.filter((s) => !args.server || s.server === args.server).map((s) => ({ server: s.server, kind: "connector", authStatus: "connected", tools: Object.values(tools[s.server] || {}).map((t) => ({ name: t.name, description: t.description, annotations: t.annotations })) })) } });
+    if (op === "describeTool") { const t = tools[args.server]?.[args.tool]; if (!t) throw err("bad_request", "no such tool"); return post({ id, result: t }); }
+    throw err("bad_request", `unknown op ${op}`);
+  } catch (x) { post({ id, error: x.code ? x : err("upstream_error", String(x)) }); }
+});
+</script></body></html>
