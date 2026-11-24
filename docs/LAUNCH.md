@@ -46,8 +46,8 @@ works; the app says it couldn't check the file. When the download itself fails, 
 download. On the Mac, Download opens the file in the browser and the person installs it. The feed names files on its own
 origin only, and nothing from a vault or an applet can change where a build looks (src-tauri/src/updates.rs,
 src/shell/updates.ts). `scripts/update-feed.sh` writes the feed with each file's sha256, last, after the files are in
-place. A build's identity is its commit and that commit's time; the time is also the Android version code, so each build
-of next installs over the one before. Mac builds of next get the feed from the repository secret `PARACHUTE_UPDATE_FEED`
+place. A build's identity is its commit and that commit's time; the time is also the APK's Android version code, so each build
+of next installs over the one before (the Play bundle counts commits instead: docs/STORES.md). Mac builds of next get the feed from the repository secret `PARACHUTE_UPDATE_FEED`
 (none: no updates offered). Builds without a feed offer nothing.
 
 **Recommendation for launch:** on the Mac (and later Windows and Linux), Tauri's updater plugin, reading a signed
