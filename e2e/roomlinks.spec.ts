@@ -60,7 +60,7 @@ test("Uni's kitchen:<ULID> in a room is a link: a tap opens the recipe in the Re
   } finally { await made.remove(); }
 });
 
-test("off the tailnet: Uni's link to a note the hub can't be asked for right now is still a link, and a tap opens it (T-476)", async ({ page }) => {
+test("off the tailnet: Uni's link to a note the hub can't be asked for right now is still a link; a tap says so plainly, and Try again opens it (T-476)", async ({ page }) => {
   test.setTimeout(120_000);
   // Aaron's relay is public and his hub is on his tailnet: his rooms come in before his hub answers. A fresh note (never
   // read on this device, so no copy of it is kept) whose read fails as a hub off the network does
@@ -89,10 +89,14 @@ test("off the tailnet: Uni's link to a note the hub can't be asked for right now
     const msg = app.getByRole("log").locator("article", { hasText: stamp });
     await expect(msg).toContainText(`The full checklist is in the vault: ${VAULT}:${note}`);
     await expect(msg.getByRole("link", { name: `${VAULT}:${note}` })).toBeVisible({ timeout: 20_000 });
-    // the hub is back: one tap opens the note
-    await page.unroute(off);
+    // a tap while it still can't be read: the note's screen, in plain words, with a way to try again (never a dead link)
     await msg.getByRole("link", { name: `${VAULT}:${note}` }).click();
-    await expect(page).toHaveURL(new RegExp(`record=${note}|/n/${note}`));
-    await expect(page.frameLocator("iframe.applet-frame:visible").getByText("Book the trailer")).toBeVisible({ timeout: 20_000 });
+    await expect(page).toHaveURL(new RegExp(`/n/${note}`));
+    const screen = page.frameLocator("iframe.app-frame");
+    await expect(screen.getByRole("alert")).toHaveText(/^Can't reach the vault just now\./, { timeout: 20_000 });
+    // the hub is back: Try again opens it
+    await page.unroute(off);
+    await screen.getByRole("button", { name: "Try again" }).click();
+    await expect(screen.getByText("Book the trailer")).toBeVisible({ timeout: 20_000 });
   } finally { await page.unroute(off).catch(() => {}); await made.remove(); await api(hubState(), "DELETE", `notes/${note}`).catch(() => {}); }
 });

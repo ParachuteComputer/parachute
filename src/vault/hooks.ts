@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Note } from "@openparachute/surface-client";
 import { listVaults, subscribeVaults, type VaultRecord } from "./store";
 import { clientFor } from "./client";
+import { failureOf } from "./failure";
 
 export const useVaults = (): VaultRecord[] => useSyncExternalStore(subscribeVaults, () => listVaults(), () => []);
 export function useVault(key: string | undefined): VaultRecord | null {
@@ -30,6 +31,8 @@ export function messageOf(e: unknown): string {
   if (status === 401) return "The vault no longer accepts this app's sign-in. Sign out in Settings and add it again.";
   if (status === 403) return "This sign-in may not read that.";
   if (status === 404) return "There's no such note.";
+  // a request that reached no hub (off the network, off the tailnet): plain words, never "GET … failed: Failed to fetch"
+  if (failureOf(e) === "offline") return "Can't reach the vault just now.";
   return e instanceof Error && e.message ? e.message : "Something went wrong reaching the vault.";
 }
 

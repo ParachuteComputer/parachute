@@ -9,7 +9,8 @@
 //            until then, and when it leads nowhere (a vault name the person doesn't have), it is the plain text. A tap
 //            asks the shell to open it (open-with decides how); a long-press or right-click asks with Open with…
 //   Linked   plain text with every link in it drawn as a Link
-// What a link leads to is asked of the shell (app.links), a batch at a time, once a link a frame.
+// What a link leads to is asked of the shell (app.links), a batch at a time, once a link a frame; one that led nowhere,
+// or couldn't be asked, again when the applet is shown again or the app comes back to the front.
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { findLinks, LINKS_PER_CALL, parseNoteRef } from "../links/note";
 import "./parts.css";
@@ -21,9 +22,13 @@ type KitApp = {
   address?: (note: string) => Promise<string | null>;
   openLink?: (url: string) => Promise<boolean>;
 };
-const app = (): KitApp => ((globalThis as unknown as { parachute?: { app?: KitApp } }).parachute?.app ?? {});
+type Kit = { app?: KitApp; onShown?(cb: (on: boolean) => void): () => void };
+const kit = (): Kit => (globalThis as unknown as { parachute?: Kit }).parachute ?? {};
+const app = (): KitApp => kit().app ?? {};
 
 const answers = new Map<string, Promise<Answer>>();
+/** What each asking came to, once it came (a link asked again lets go only of an answer of nothing). */
+const came = new WeakMap<Promise<Answer>, Answer>();
 let waiting: { link: string; from?: string; res: (a: Answer) => void }[] = [];
 const keyOf = (link: string, from?: string) => (link.startsWith("[[") ? `${from ?? ""}\n${link}` : link);
 function flush() {
@@ -57,21 +62,48 @@ export function answerFor(link: string, from?: string): Promise<Answer> {
   if (!p) {
     p = new Promise<Answer>((res) => { if (!waiting.length) queueMicrotask(flush); waiting.push({ link, from, res }); });
     answers.set(k, p);
-    // nothing, for now: asked again by a draw a minute on (Uni may cite a note a moment before the hub has it)
+    // nothing, for now: asked again by a draw a minute on, or once the person is back (useAnswers)
     const mine = p;
-    void p.then((a) => { if (a === null) setTimeout(() => { if (answers.get(k) === mine) answers.delete(k); }, 60_000); });
+    void p.then((a) => { came.set(mine, a); if (a === null) setTimeout(() => { if (answers.get(k) === mine) answers.delete(k); }, 60_000); });
   }
   return p;
+}
+// the person back (the applet shown again, the app back in front): links that led nowhere ask again. Uni may cite a note
+// a moment before the hub has it, and a busy shell or a lapse leaves a link without an answer; a link drawn stays drawn
+const backs = new Set<() => void>();
+let heard = false;
+function hearBacks() {
+  if (heard) return;
+  heard = true;
+  const back = () => backs.forEach((f) => f());
+  kit().onShown?.((on) => { if (on) back(); });
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") back(); });
 }
 /** The answers for these links (undefined while asked). */
 export function useAnswers(links: readonly string[], from?: string): Map<string, Answer> {
   const [got, setGot] = useState<Map<string, Answer>>(() => new Map());
+  const [round, setRound] = useState(0);
+  const nowhere = useRef<string[]>([]);
+  nowhere.current = links.filter((l) => got.get(l) === null);
+  useEffect(() => {
+    hearBacks();
+    // only while one of its links led nowhere: a page of links already drawn asks nothing
+    const f = () => { if (nowhere.current.length) setRound((n) => n + 1); };
+    backs.add(f);
+    return () => { backs.delete(f); };
+  }, []);
   const key = links.join("\n") + "\n" + (from ?? "");
   useEffect(() => {
     let on = true;
-    for (const l of new Set(links)) void answerFor(l, from).then((a) => { if (on) setGot((m) => (m.get(l) === a ? m : new Map(m).set(l, a))); });
+    for (const l of new Set(links)) {
+      if (round && got.get(l) !== null) continue;
+      // asked again: its last answer (nothing) is let go first (one another link is asking now stays)
+      const k = keyOf(l, from), was = answers.get(k);
+      if (round && was && came.get(was) === null) answers.delete(k);
+      void answerFor(l, from).then((a) => { if (on) setGot((m) => (m.get(l) === a ? m : new Map(m).set(l, a))); });
+    }
     return () => { on = false; };
-  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, round]); // eslint-disable-line react-hooks/exhaustive-deps
   return got;
 }
 

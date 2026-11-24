@@ -24,7 +24,9 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
   const { vault: key, id } = useParams();
   const rec = useVault(key);
   const navigate = useNavigate();
-  const fetched = useVaultQuery<Note | null>(given === undefined ? rec : null, (c) => c.getNote(id ?? ""), [id]);
+  // Try again: read once more (a phone back on the network, a hub that answers again)
+  const [tries, setTries] = useState(0);
+  const fetched = useVaultQuery<Note | null>(given === undefined ? rec : null, (c) => c.getNote(id ?? ""), [id, tries]);
   const load: typeof fetched = given === undefined ? fetched : { state: "ok", data: given };
   // a wikilink names a note by its path; the vault answers a path where an id goes
   const resolve: WikilinkResolver = useMemo(() => (target) => (rec ? unresolvedLink(noteHref(rec.key, target.split("|")[0].split("#")[0])) : null), [rec]);
@@ -37,7 +39,7 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
       <Bar title={note ? titleOf(note) : "Note"} back={true} />
       {above}
       {load.state === "loading" && <p className="quiet" role="status">Loading…</p>}
-      {load.state === "error" && <p className="error" role="alert">{load.error}</p>}
+      {load.state === "error" && <p className="error" role="alert">{load.error} <button type="button" className="link-button" onClick={() => setTries((n) => n + 1)}>Try again</button></p>}
       {load.state === "ok" && !note && <p className="error" role="alert">There's no such note.</p>}
       {note && (
         <article className="note">
