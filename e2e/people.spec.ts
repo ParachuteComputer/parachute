@@ -210,10 +210,9 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
     await expect(f.getByText("Hiked Green Mountain together")).toBeVisible();
     await expect(f.getByText("How we met: At the pottery studio open house")).toBeVisible();
     await expect(f.getByText(/Last in touch .* · 2026 \/ 11-21 \/ 08-30/)).toBeVisible();
-    const timeline = f.getByRole("region", { name: /Timeline · 4/ });
+    const timeline = f.getByRole("region", { name: /Timeline · 3/ });
     await expect(timeline.getByRole("button").first()).toContainText("2026 / 11-21 / 08-30");
     await expect(timeline).toContainText("2026-11-20 Coffee with Maya");
-    await expect(timeline).toContainText("Added to People");
     await expect(timeline.getByRole("listitem").last()).toContainText("At the pottery studio open house");
     await f.locator("body").evaluate(() => window.scrollTo(0, 0));
     await shot(page, "05-person-card-paper");
@@ -227,11 +226,20 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
     await shot(page, "05c-we-talked");
     await talk.getByRole("button", { name: "Save" }).click();
     await expect(f.getByText("Noted: in touch today.")).toBeVisible();
-    await expect(f.getByRole("region", { name: /Timeline · 5/ }).getByRole("listitem").first()).toContainText("Tea at the studio; she'll send the glaze notes");
+    await expect(f.getByRole("region", { name: /Timeline · 4/ }).getByRole("listitem").first()).toContainText("Tea at the studio; she'll send the glaze notes");
     await expect(f.getByText("Last in touch today · Tea at the studio; she'll send the glaze notes")).toBeVisible();
     const talked = (await api(hub, "GET", `notes?id=${encodeURIComponent("People/Maya Lin")}&include_metadata=true`));
     const talkedRow = Array.isArray(talked) ? talked[0] : talked;
     expect(talkedRow.metadata.talked).toEqual([expect.stringMatching(/^\d{4}-\d{2}-\d{2}: Tea at the studio; she'll send the glaze notes$/)]);
+    // put it right: tap the talk on the timeline; the entry is replaced, not added to
+    await f.getByRole("region", { name: /Timeline · 4/ }).getByRole("button", { name: /Tea at the studio/ }).click();
+    const fix = f.getByRole("dialog", { name: "Put this right" });
+    await expect(fix.getByLabel("What about (optional)")).toHaveValue("Tea at the studio; she'll send the glaze notes");
+    await fix.getByLabel("What about (optional)").fill("Tea at the studio; glaze notes coming");
+    await fix.getByRole("button", { name: "Save" }).click();
+    await expect(f.getByRole("region", { name: /Timeline · 4/ }).getByRole("listitem").first()).toContainText("glaze notes coming");
+    const fixed = await api(hub, "GET", `notes?id=${encodeURIComponent("People/Maya Lin")}&include_metadata=true`);
+    expect((Array.isArray(fixed) ? fixed[0] : fixed).metadata.talked).toEqual([expect.stringMatching(/^\d{4}-\d{2}-\d{2}: Tea at the studio; glaze notes coming$/)]);
 
     // 6. Edit details in place & edit notes in place
     await f.getByRole("button", { name: "Edit details" }).click();

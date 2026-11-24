@@ -72,22 +72,24 @@ Standard markdown, starting with `## Memories and moments` when created in the a
 ## In touch: last connection, keep in touch, timeline
 
 People keeps no counter of its own. **The last time you were in touch** is worked out when the list loads, from what the
-vault already holds: the newest of a `talked` entry and a meeting, journal entry or note that links the person. A linked
-note counts on **its own day** (a `date` or `start` field, else a date in its path such as `Journal/2026-11-10` or
-`Meetings/2026/10-02 Kiln`, else the day it was made), never the day it was last edited: tidying an old meeting note isn't
-being in touch. Another person's card that links them isn't contact either; those show as "People linked".
+vault already holds: the newest of a `talked` entry and a note in `Meetings/`, `Journal/` or `Notes/` that links the
+person. A linked note counts on **its own day** (a `date`, `start`, `when` or `day` field, a time read as the day it was
+here; else a date in its path such as `Journal/2026-11-10` or `Meetings/2026/10-02 Kiln`; else the day it was made), never
+the day it was last edited: tidying an old meeting note isn't being in touch. A day after today (next week's meeting)
+isn't contact yet. An organization's card that lists them isn't contact (it shows on the timeline); another person's card
+that links them shows as "People linked".
 
 - **Contacts** sorts A–Z or **Recent** (most recently in touch first, no connection yet at the end), and the filters
   narrow by **Last in touch**: this week, this month, 3 months, longer ago, never.
-- **We talked** on a person's card adds today (or another day) and an optional line to `talked`. A call, a walk, a
-  message: anything that left no note.
+- **We talked** on a person's card adds today (or an earlier day) and an optional line to `talked`. A call, a walk, a
+  message: anything that left no note. Tap a talk on the timeline to put it right or remove it.
 - **Keep in touch** (`keep_in_touch`, set in Edit details) is how often you want to be in touch with someone. The **In
   touch** tab lists who it's time to reach out to (never in touch counts), then who comes up this week, earliest first.
   Below, everyone else you haven't been in touch with for 30 days, 90 days or a year, and those with no connection yet.
   The tab shows no count and nothing turns red: it's a short list to look at, not a backlog
   ([design/PEOPLE-CRM.md](design/PEOPLE-CRM.md) says why).
 - **Timeline**, on each card, newest first: talks, the meetings, journal entries and notes that link them, how you met
-  (`how_we_met`, `met`) and when they were added to People. It replaces the old "Everything that mentions them" list.
+  (`how_we_met`, `met`). It replaces the old "Everything that mentions them" list.
 
 Room messages on a relay don't count yet: People reads the vault only. A room's talk counts once it is kept as a note in
 `Meetings/`, `Journal/` or `Notes/` that links the person.

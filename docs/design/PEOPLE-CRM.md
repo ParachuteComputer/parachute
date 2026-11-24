@@ -50,7 +50,7 @@ Built in T-476 round 2 (docs/PEOPLE.md, "In touch"):
 2. **Sort and filter by it.** Contacts sorts A–Z or Recent; the filter has "Last in touch": this week … never.
 3. **Keep in touch.** A cadence per person in plain words (`every month`). The In touch tab shows who it's time to reach
    out to and who comes up this week. No count on the tab, nothing red, no streak.
-4. **A timeline on each card**: talks, meetings, journal entries, notes, how you met, when they were added.
+4. **A timeline on each card**: talks, meetings, journal entries, notes, how you met.
 5. **How we met** (`how_we_met`, `met`), shown at the top of the card and at the start of the timeline.
 6. **The phone's Contacts show the same people** (services/carddav, its own PR): CardDAV to DAVx5, only card facts, the vault is the
    one copy.

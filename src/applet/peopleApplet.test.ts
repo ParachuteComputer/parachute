@@ -46,7 +46,7 @@ type PersonRecord = {
 };
 
 const api = new Function(
-  `${code}; return { parseVCard, exportVCard, mergeVCardIntoPerson, fieldsForNewVCard, upcomingBirthdays, reconnectList, filterPeople, lastConnection, keepInTouch, timelineOf, talksOf, withTalk, cadenceDays, normalizePhoneKey, initialsOf, letterOf, readPersonFields, peopleIndex, withBodiesForCards, readFolder };`,
+  `${code}; return { parseVCard, exportVCard, mergeVCardIntoPerson, fieldsForNewVCard, upcomingBirthdays, reconnectList, filterPeople, lastConnection, keepInTouch, timelineOf, talksOf, withTalk, withoutTalk, cadenceDays, normalizePhoneKey, initialsOf, letterOf, readPersonFields, peopleIndex, withBodiesForCards, readFolder };`,
 )() as {
   parseVCard: (text: string) => VCardContact[];
   exportVCard: (people: readonly PersonRecord[], photos?: Map<string, VCardPhoto>) => string;
@@ -58,14 +58,15 @@ const api = new Function(
     unlinked: { name: string }[];
   };
   filterPeople: (people: readonly PersonRecord[], opts: { query: string; relation: string; group: string; tag: string; since?: string; sort?: "name" | "recent"; todayYmd?: string }) => PersonRecord[];
-  lastConnection: (person: PersonRecord) => { date: string; title: string; kind: string; id: string | null } | null;
+  lastConnection: (person: PersonRecord, todayYmd?: string) => { date: string; title: string; kind: string; id: string | null } | null;
   keepInTouch: (people: readonly PersonRecord[], todayYmd: string, soonDays?: number) => {
     due: { name: string; cadence: number; dueYmd: string | null; daysLeft: number | null }[];
     soon: { name: string; cadence: number; dueYmd: string | null; daysLeft: number | null }[];
   };
   timelineOf: (person: PersonRecord) => { key: string; date: string | null; title: string; kind: string; id: string | null }[];
   talksOf: (fields?: Record<string, unknown>) => { date: string; what: string }[];
-  withTalk: (fields: Record<string, unknown> | undefined, date: string, what: string) => string[];
+  withTalk: (fields: Record<string, unknown> | undefined, date: string, what: string, replacing?: string) => string[];
+  withoutTalk: (fields: Record<string, unknown> | undefined, entry: string) => string[];
   cadenceDays: (v: unknown) => number | null;
   normalizePhoneKey: (raw: string) => string;
   initialsOf: (name: string) => string;
@@ -702,7 +703,7 @@ describe("People round 2: last connection, keep in touch, timeline (T-476)", () 
     const p = (id: string, fields: Record<string, unknown>): PersonRecord => ({ id, path: `People/${id}`, updatedAt: null, fields, links: [] });
     const people = [
       rosa, // last 2026-10-02 + 30 → due 2026-11-01: 22 days over on 11-23
-      p("Ben", { keep_in_touch: "every week", talked: ["2026-11-20"] }), // due 11-27: in 4 days
+      p("Ben", { keep_in_touch: "every week", talked: ["2026-11-18"] }), // due 11-25: in 2 days
       p("Cleo", { keep_in_touch: "every 2 weeks" }), // never: due
       p("Dara", { keep_in_touch: "every year", talked: ["2026-06-01"] }), // not for months
       p("Eli", { keep_in_touch: "every week", status: "past" }), // past: not listed
@@ -711,7 +712,7 @@ describe("People round 2: last connection, keep in touch, timeline (T-476)", () 
     ];
     const k = api.keepInTouch(people, "2026-11-23");
     expect(k.due.map((x) => [x.name, x.daysLeft])).toEqual([["Cleo", null], ["Rosa Quintero", -22], ["Gus", 0]]);
-    expect(k.soon.map((x) => [x.name, x.daysLeft])).toEqual([["Ben", 4]]);
+    expect(k.soon.map((x) => [x.name, x.daysLeft])).toEqual([["Ben", 2]]);
     // the rest-of-everyone list leaves out those with a cadence: they are above
     const rest = api.reconnectList(people, "2026-11-23", { staleDays: 30 });
     expect([...rest.stale, ...rest.unlinked].map((x) => x.name)).toEqual(["Fay"]);
@@ -729,16 +730,66 @@ describe("People round 2: last connection, keep in touch, timeline (T-476)", () 
     expect(api.filterPeople(people, opts).map((x) => x.id)).toEqual(["Ana", "Bo", "Cy", "Di", "Ed"]);
   });
 
-  it("draws a timeline newest first: talks, meetings and journal entries, how you met, when they were added", () => {
+  it("draws a timeline newest first: talks, meetings, journal entries and notes, how you met; not when the card was made", () => {
     const t = api.timelineOf(rosa);
     expect(t.map((m) => [m.date, m.kind, m.title])).toEqual([
       ["2026-10-02", "Talked", "call about the bylaws"],
       ["2026-09-14", "Journal", "2026-09-14"],
       ["2026-03-01", "Meeting", "Kiln open studio"],
       ["2026-02-01", "Note", "Glaze recipes"],
-      ["2025-01-05", "Added", "Added to People"],
       ["2024-05-18", "Met", "Lyons clay fair"],
     ]);
-    expect(t.some((m) => m.title.includes("Sam Hale"))).toBe(false);
+    expect(t.some((m) => m.title.includes("Sam Hale") || m.kind === "Added")).toBe(false);
+  });
+});
+
+describe("People round 2, review fixes (T-476)", () => {
+  const P = (id: string, fields: Record<string, unknown>, links: PersonRecord["links"] = []): PersonRecord => ({ id, path: `People/${id}`, updatedAt: null, fields, links });
+  const from = (personId: string, id: string, path: string, extra: Record<string, unknown> = {}) =>
+    ({ sourceId: id, targetId: personId, relationship: "mentions", sourceNote: { id, path, ...extra } as never });
+
+  it("a note or talk dated after today isn't contact yet: the last one up to today counts", () => {
+    const rosa = P("Rosa", { keep_in_touch: "every month", talked: ["2026-12-25: planned dinner", "2026-10-01"] }, [
+      from("Rosa", "m9", "Meetings/2026-12-01 Next week's studio day"),
+      from("Rosa", "m1", "Meetings/2026-10-15 Studio day"),
+    ]);
+    expect(api.lastConnection(rosa, "2026-11-23")).toEqual(expect.objectContaining({ date: "2026-10-15", kind: "Meeting" }));
+    expect(api.keepInTouch([rosa], "2026-11-23").due.map((x) => x.daysLeft)).toEqual([-9]);
+  });
+
+  it("only meetings, journal entries, notes and talks are contact: an organization's card that lists them isn't", () => {
+    const ben = P("Ben", {}, [from("Ben", "o1", "Organizations/Kiln Collective", { createdAt: "2026-11-23T10:00:00Z" })]);
+    expect(api.lastConnection(ben, "2026-11-23")).toBeNull();
+    // it still shows on the timeline
+    expect(api.timelineOf(ben).map((m) => m.kind)).toEqual(["Organization"]);
+  });
+
+  it("a date field holding a UTC time is read as the day it was here, through the kit", () => {
+    const cleo = P("Cleo", {}, [from("Cleo", "m2", "Meetings/Evening call", { fields: { start: "2026-11-11T01:00:00Z" } })]);
+    // without the kit the helpers read the time's own (UTC) day
+    expect(api.lastConnection(cleo, "2026-11-23")?.date).toBe("2026-11-11");
+    // with the kit's clock in Denver (UTC-7), 01:00 UTC on the 11th was the evening of the 10th
+    const denver = { stamp: (ms: number) => new Date(ms - 7 * 3_600_000).toISOString().replace("T", " ").slice(0, 16) };
+    const there = new Function("when", `${code}; return { lastConnection };`)(denver) as { lastConnection: typeof api.lastConnection };
+    expect(there.lastConnection(cleo, "2026-11-23")?.date).toBe("2026-11-10");
+    expect(api.lastConnection(P("Dee", {}, [from("Dee", "m3", "Meetings/x", { fields: { date: "2026-11-02" } })]), "2026-11-23")?.date).toBe("2026-11-02");
+  });
+
+  it("past people with a cadence show with Include past instead of vanishing from both lists", () => {
+    const eli = P("Eli", { keep_in_touch: "every week", status: "past" });
+    expect(api.keepInTouch([eli], "2026-11-23").due).toEqual([]);
+    expect(api.reconnectList([eli], "2026-11-23", { includePast: true }).unlinked.map((x) => x.name)).toEqual(["Eli"]);
+  });
+
+  it("someone you keep in touch with weekly isn't 'coming up' the day after you talk", () => {
+    const ben = P("Ben", { keep_in_touch: "every week", talked: ["2026-11-22"] });
+    expect(api.keepInTouch([ben], "2026-11-23").soon).toEqual([]);
+    expect(api.keepInTouch([ben], "2026-11-26").soon.map((x) => x.daysLeft)).toEqual([3]);
+  });
+
+  it("a talk can be corrected or removed: the entry replaced, the rest kept", () => {
+    const held = { talked: ["2026-11-20: tea", "2026-10-02: call, about the bylaws"] };
+    expect(api.withTalk(held, "2026-11-19", "tea at the studio", "2026-11-20: tea")).toEqual(["2026-11-19: tea at the studio", "2026-10-02: call, about the bylaws"]);
+    expect(api.withoutTalk(held, "2026-10-02: call, about the bylaws")).toEqual(["2026-11-20: tea"]);
   });
 });

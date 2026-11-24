@@ -354,14 +354,14 @@ function localYmd(v: string | null | undefined): string | null {
 function noteDay(end: LinkEnd, linkCreated?: string | null): string | null {
   const f = end.fields ?? {};
   for (const k of ["date", "start", "when", "day"]) {
-    const d = ymdOf(f[k]);
+    const v = f[k];
+    // a time (a calendar's start in UTC) is the day it was here; a bare day is that day
+    const d = typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d/.test(v.trim()) ? localYmd(v.trim()) : ymdOf(v);
     if (d) return d;
   }
-  const path = end.path ?? "";
-  const full = /(\d{4})[-/](\d{2})[-/](\d{2})/.exec(path);
-  if (full) { const d = ymdOf(`${full[1]}-${full[2]}-${full[3]}`); if (d) return d; }
-  const yearThenDay = /(\d{4})\/(\d{2})-(\d{2})/.exec(path);
-  if (yearThenDay) { const d = ymdOf(`${yearThenDay[1]}-${yearThenDay[2]}-${yearThenDay[3]}`); if (d) return d; }
+  // `Journal/2026-11-10`, `Meetings/2026/10-02 Kiln`, `Journal/2026/11-21/08-30`
+  const inPath = /(\d{4})[-/](\d{2})[-/](\d{2})/.exec(end.path ?? "");
+  if (inPath) { const d = ymdOf(`${inPath[1]}-${inPath[2]}-${inPath[3]}`); if (d) return d; }
   return localYmd(end.createdAt) ?? localYmd(linkCreated) ?? localYmd(end.updatedAt);
 }
 
@@ -393,12 +393,20 @@ function talksOf(fields?: Record<string, unknown>): Talk[] {
   return out.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-/** A new `talked` log with one more entry, newest first; the same entry twice is kept once. */
-function withTalk(fields: Record<string, unknown> | undefined, date: string, what: string): string[] {
+/** A new `talked` log with one more entry (or one entry put right: `replacing` names it), newest first; the same entry
+ *  twice is kept once. */
+function withTalk(fields: Record<string, unknown> | undefined, date: string, what: string, replacing?: string): string[] {
   const entry = what.trim() ? `${date}: ${what.trim().replace(/\s+/g, " ")}` : date;
-  const held = strList(fields?.talked);
+  const held = withoutTalk(fields, replacing ?? "");
   const all = held.some((e) => e === entry) ? held : [entry, ...held];
   return [...all].sort((a, b) => (ymdOf(b) ?? "").localeCompare(ymdOf(a) ?? ""));
+}
+
+/** The `talked` log without one entry (as written), every other entry kept as it is. */
+function withoutTalk(fields: Record<string, unknown> | undefined, entry: string): string[] {
+  const held = strList(fields?.talked);
+  const at = entry ? held.indexOf(entry) : -1;
+  return at < 0 ? held : [...held.slice(0, at), ...held.slice(at + 1)];
 }
 
 /** How often to be in touch, as a person picks it; stored as the words, so a person or an AI reads it as written. */
@@ -420,17 +428,24 @@ function cadenceDays(v: unknown): number | null {
 
 type Connection = { date: string; title: string; kind: string; id: string | null };
 
-/** The last time you were in touch: the newest of a `talked` entry and a meeting, journal entry or note that links them
- *  (dated by its own day). Another person's card linking them isn't contact. */
-function lastConnection(person: PersonRecord): Connection | null {
+/** The kinds of note that are being in touch: a meeting, a journal entry, a note. An organization's or another person's
+ *  card that lists them isn't. */
+const CONTACT_KINDS = new Set(["Meeting", "Journal", "Note"]);
+/** Each person record (a new object whenever it changes) → its last connection, worked out once a day. */
+const connections = new WeakMap<PersonRecord, { today: string; last: Connection | null }>();
+
+/** The last time you were in touch, up to today: the newest of a `talked` entry and a meeting, journal entry or note
+ *  that links them, dated by its own day. One dated after today (a meeting next week) isn't contact yet. */
+function lastConnection(person: PersonRecord, todayYmd = "9999-12-31"): Connection | null {
+  const kept = connections.get(person);
+  if (kept && kept.today === todayYmd) return kept.last;
   let best: Connection | null = null;
-  const talk = talksOf(person.fields)[0];
+  const talk = talksOf(person.fields).find((t) => t.date <= todayYmd);
   if (talk) best = { date: talk.date, title: talk.what || "Talked", kind: "Talked", id: null };
-  for (const m of mentionsOf(person)) {
-    if (m.isPerson || !m.date) continue;
-    if (!best || m.date > best.date) best = { date: m.date, title: m.title, kind: m.kind, id: m.id };
-    break; // mentions are newest first
-  }
+  // mentions are newest first: the first one up to today is the newest
+  const m = mentionsOf(person).find((x) => CONTACT_KINDS.has(x.kind) && x.date && x.date <= todayYmd);
+  if (m?.date && (!best || m.date > best.date)) best = { date: m.date, title: m.title, kind: m.kind, id: m.id };
+  connections.set(person, { today: todayYmd, last: best });
   return best;
 }
 
@@ -444,24 +459,26 @@ function keepInTouch(people: readonly PersonRecord[], todayYmd: string, soonDays
   for (const person of people) {
     const cadence = cadenceDays(person.fields?.keep_in_touch);
     if (!cadence || readPersonFields(person.fields).status === "past") continue;
-    const last = lastConnection(person);
+    const last = lastConnection(person, todayYmd);
     const dueYmd = last ? addDays(last.date, cadence) : null;
     const daysLeft = dueYmd ? daysBetween(todayYmd, dueYmd) : null;
     const item = { person, name: personName(person), cadence, last, dueYmd, daysLeft };
     if (daysLeft === null || daysLeft <= 0) due.push(item);
-    else if (daysLeft <= soonDays) soon.push(item);
+    // within the week, but never the day after you talked: weekly comes up in its last three days
+    else if (daysLeft <= Math.min(soonDays, Math.floor(cadence / 2))) soon.push(item);
   }
   const order = (a: KeepItem, b: KeepItem) => (a.daysLeft ?? -Infinity) - (b.daysLeft ?? -Infinity) || a.name.localeCompare(b.name);
   return { due: due.sort(order), soon: soon.sort(order) };
 }
 
-type Moment = { key: string; date: string | null; title: string; kind: string; id: string | null; isPerson: boolean; detail: string };
+type Moment = { key: string; date: string | null; title: string; kind: string; id: string | null; isPerson: boolean; detail: string; entry?: string };
 
-/** A person's timeline, newest first: talks, the meetings, journal entries and notes that link them, how you met, and
- *  when they were added. Other people's cards that link them aren't moments: they show as linked people. */
+/** A person's timeline, newest first: talks, the meetings, journal entries and notes that link them, and how you met.
+ *  Not when the card was made (most were made at once, by an import), and not other people's cards that link them:
+ *  those show as linked people. */
 function timelineOf(person: PersonRecord): Moment[] {
   const out: Moment[] = [];
-  talksOf(person.fields).forEach((t, i) => out.push({ key: `talk-${i}`, date: t.date, title: t.what || "Talked", kind: "Talked", id: null, isPerson: false, detail: "" }));
+  talksOf(person.fields).forEach((t, i) => out.push({ key: `talk-${i}`, date: t.date, title: t.what || "Talked", kind: "Talked", id: null, isPerson: false, detail: "", entry: t.entry }));
   for (const m of mentionsOf(person)) {
     if (m.isPerson) continue;
     out.push({ key: m.id, date: m.date, title: m.title, kind: m.kind, id: m.id, isPerson: false, detail: m.relationship && !/^(wiki)?link$/.test(m.relationship) ? m.relationship : "" });
@@ -469,10 +486,8 @@ function timelineOf(person: PersonRecord): Moment[] {
   const met = ymdOf(person.fields?.met) ?? (/^\d{4}(-\d{2})?$/.test(str(person.fields?.met)) ? str(person.fields?.met) : null);
   const how = str(person.fields?.how_we_met);
   if (met || how) out.push({ key: "met", date: met, title: how || "Met", kind: "Met", id: null, isPerson: false, detail: "" });
-  const added = localYmd(person.createdAt);
-  if (added) out.push({ key: "added", date: added, title: "Added to People", kind: "Added", id: null, isPerson: false, detail: "" });
-  // undated moments last; on one day, a talk before a note before how you met before being added
-  const rank = (k: string) => (k === "Talked" ? 0 : k === "Met" ? 2 : k === "Added" ? 3 : 1);
+  // undated moments last; on one day, a talk before a note before how you met
+  const rank = (k: string) => (k === "Talked" ? 0 : k === "Met" ? 2 : 1);
   return out.sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "") || rank(a.kind) - rank(b.kind) || a.title.localeCompare(b.title));
 }
 
@@ -514,8 +529,9 @@ function reconnectList(
   for (const person of people) {
     const pf = readPersonFields(person.fields);
     if (!includePast && pf.status === "past") continue;
-    if (cadenceDays(person.fields?.keep_in_touch)) continue;
-    const last = lastConnection(person);
+    // a cadence puts them in the list above; a past person isn't there, so shows here with Include past
+    if (cadenceDays(person.fields?.keep_in_touch) && pf.status !== "past") continue;
+    const last = lastConnection(person, todayYmd);
     if (!last) {
       unlinked.push({ person, name: personName(person), lastDate: null, lastTitle: null, daysSince: null });
       continue;
@@ -530,7 +546,7 @@ function reconnectList(
 
 /** How long ago you were last in touch, as the list filters it. */
 const SINCE = [
-  { key: "week", label: "This week", test: (d: number | null) => d !== null && d <= 7 },
+  { key: "week", label: "This week", test: (d: number | null) => d !== null && d < 7 },
   { key: "month", label: "This month", test: (d: number | null) => d !== null && d <= 30 },
   { key: "quarter", label: "3 months", test: (d: number | null) => d !== null && d <= 91 },
   { key: "older", label: "Longer ago", test: (d: number | null) => d !== null && d > 91 },
@@ -539,7 +555,7 @@ const SINCE = [
 
 /** Days since the last connection, or null for none. */
 function daysSinceConnection(person: PersonRecord, todayYmd: string): number | null {
-  const last = lastConnection(person);
+  const last = lastConnection(person, todayYmd);
   return last ? Math.max(0, daysBetween(last.date, todayYmd)) : null;
 }
 
@@ -1313,7 +1329,8 @@ export default function People() {
   const [vcfPlan, setVcfPlan] = useState<{ fileName: string; rows: VcfPlanRow[] } | null>(null);
   const [vcfBusy, setVcfBusy] = useState(false);
   const [talkOpen, setTalkOpen] = useState(false);
-  const [talkDraft, setTalkDraft] = useState<{ date: string; what: string }>({ date: "", what: "" });
+  /** The talk being written; `entry` is the one being put right, as the record holds it. */
+  const [talkDraft, setTalkDraft] = useState<{ date: string; what: string; entry?: string }>({ date: "", what: "" });
   const [talkBusy, setTalkBusy] = useState(false);
 
   // Photo object URL cache (keyed by `${id}|${photoPath}`)
@@ -1574,14 +1591,17 @@ export default function People() {
     await patchPersonFields(selected, { [name]: clean }, "Saved");
   };
 
-  const openTalk = () => { setTalkDraft({ date: todayYmd, what: "" }); setTalkOpen(true); };
-  const logTalk = async () => {
+  const openTalk = (t?: { date: string; what: string; entry: string }) => { setTalkDraft(t ?? { date: todayYmd, what: "" }); setTalkOpen(true); };
+  const logTalk = async (remove = false) => {
     if (!selected || talkBusy) return;
     const date = talkDraft.date.trim() || todayYmd;
-    if (!ymdOf(date)) { toast("A day is YYYY-MM-DD.", { error: true }); return; }
+    if (!remove && !ymdOf(date)) { toast("A day is YYYY-MM-DD.", { error: true }); return; }
+    if (!remove && date > todayYmd) { toast("That day hasn't come yet.", { error: true }); return; }
+    const talked = remove ? withoutTalk(selected.fields, talkDraft.entry ?? "") : withTalk(selected.fields, date, talkDraft.what, talkDraft.entry);
     setTalkBusy(true);
     try {
-      await patchPersonFields(selected, { talked: withTalk(selected.fields, date, talkDraft.what) }, date === todayYmd ? "Noted: in touch today." : `Noted: in touch ${when.short(date)}.`);
+      await patchPersonFields(selected, { talked: talked.length ? talked : null },
+        remove ? "Removed." : talkDraft.entry ? "Changed." : date === todayYmd ? "Noted: in touch today." : `Noted: in touch ${when.short(date)}.`);
       setTalkOpen(false);
     } catch { /* patchPersonFields said why */ } finally {
       setTalkBusy(false);
@@ -1887,12 +1907,14 @@ export default function People() {
     const emails = allEmailsOf(pf);
     const timeline = timelineOf(selected);
     const linkedPeople = mentionsOf(selected).filter((m) => m.isPerson);
-    const last = lastConnection(selected);
+    const last = lastConnection(selected, todayYmd);
     const cadence = cadenceDays(selected.fields?.keep_in_touch);
     const howWeMet = str(selected.fields?.how_we_met);
     const met = str(selected.fields?.met);
     const keepText = !cadence ? "" : (() => {
-      const every = CADENCES.includes(str(selected.fields?.keep_in_touch).toLowerCase() as typeof CADENCES[number]) ? str(selected.fields?.keep_in_touch).toLowerCase() : `every ${cadence} days`;
+      // as written ("monthly", "every month"); a bare number as days
+      const written = str(selected.fields?.keep_in_touch).toLowerCase();
+      const every = written && !/^\d/.test(written) ? written : `every ${cadence} days`;
       if (!last) return `In touch ${every}`;
       const left = daysBetween(todayYmd, addDays(last.date, cadence));
       return `In touch ${every} · ${left <= 0 ? "time to reach out" : left === 1 ? "next tomorrow" : `next in ${left} days`}`;
@@ -1984,7 +2006,7 @@ export default function People() {
               </p>
               {pf.source ? <p className="pe-small pe-muted">Came from: {pf.source}</p> : null}
               <div className="pa-actions">
-                <Button small kind="primary" onClick={openTalk}>We talked</Button>
+                <Button small kind="primary" onClick={() => openTalk()}>We talked</Button>
                 {pf.phones[0] && (
                   <Button small onClick={() => void copyText(parsePhoneEntry(pf.phones[0]).number, "phone number")}>
                     Copy phone
@@ -2114,7 +2136,7 @@ export default function People() {
                 title: m.title,
                 meta: [m.kind, m.detail].filter(Boolean).join(" · "),
                 aside: m.date ? (ymdOf(m.date) ? when.short(m.date) : m.date) : undefined,
-                onPress: m.id ? () => void link.open(m.id!) : undefined,
+                onPress: m.id ? () => void link.open(m.id!) : m.entry ? () => openTalk({ date: m.date ?? todayYmd, what: m.kind === "Talked" && m.title !== "Talked" ? m.title : "", entry: m.entry! }) : undefined,
               }))}
             />
           ) : (
@@ -2132,7 +2154,7 @@ export default function People() {
           />
         )}
 
-        <Drawer open={talkOpen} onClose={() => { if (!talkBusy) setTalkOpen(false); }} title={`In touch with ${name}`}>
+        <Drawer open={talkOpen} onClose={() => { if (!talkBusy) setTalkOpen(false); }} title={talkDraft.entry ? "Put this right" : `In touch with ${name}`}>
           <Fields
             label="When"
             onSave={(k, v) => setTalkDraft((d) => ({ ...d, [k]: typeof v === "string" ? v : "" }))}
@@ -2147,6 +2169,7 @@ export default function People() {
           <p className="pe-small pe-muted">Kept on {name}'s card in People, with the day.</p>
           <div className="pa-actions">
             <Button kind="primary" busy={talkBusy} onClick={() => void logTalk()}>Save</Button>
+            {talkDraft.entry && <Button disabled={talkBusy} onClick={() => void logTalk(true)}>Remove</Button>}
             <Button kind="quiet" disabled={talkBusy} onClick={() => setTalkOpen(false)}>Cancel</Button>
           </div>
         </Drawer>
@@ -2265,7 +2288,7 @@ export default function People() {
             <List
               label={`Most recently in touch · ${filtered.length}`}
               rows={filtered.map((p) => {
-                const last = lastConnection(p);
+                const last = lastConnection(p, todayYmd);
                 return personRow(p, {
                   aside: last ? formatDaysSince(Math.max(0, daysBetween(last.date, todayYmd))) : "Not yet",
                   ...(last ? { metaOverride: `${last.kind === "Talked" ? "Talked" : last.kind}: ${last.title}` } : {}),
