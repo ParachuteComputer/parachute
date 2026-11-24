@@ -67,6 +67,9 @@ the mail gateway (as Gmail does) would hide both; that is the gateway's (the Uni
 - Showing a sender's pictures is remembered by the From address, which anyone can forge: a forged mail from a sender
   whose pictures were shown loads its pictures at once. Keying it on the gateway's DMARC result is the fix (the
   gateway's to pass on).
+- In the web build (a browser tab) the browser fetches a shown picture, and can't check where a name points: a public
+  name that points into the local network gets a GET with no credentials (CORS keeps its answer out). The app (Rust)
+  resolves each name and dials only public addresses.
 - A link opens on the first tap; where it goes shows while it is pointed at or held (and after the tap).
 - Dark versions of a sender's HTML (Apple Mail's): a coloured mail is shown on paper instead.
 
