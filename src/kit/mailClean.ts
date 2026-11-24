@@ -83,14 +83,20 @@ function plainCss(css: string): string {
   return css.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, " ").replace(/\\(?:[0-9a-f]{1,6}\s?|[\s\S])/gi, ESCAPED);
 }
 // CSS's own whitespace, not JavaScript's \s (which takes U+00A0, inside an address to CSS)
-const URL_TOKEN = /url\([ \t\n\r\f]*(?:"([^"\n\r\f]*)"|'([^'\n\r\f]*)'|([^)"' \t\n\r\f]*))[ \t\n\r\f]*\)/gi;
+// its whitespace taken whole each side (a lookahead and its backreference: no backtracking through a long run of
+// spaces). A url( that ends a longer name (`xurl(`) is read as one too: whatever it leaves, the last look refuses a
+// url() the cleaning didn't write, so the sheet goes rather than being read two ways.
+const URL_TOKEN = /url\((?=([ \t\n\r\f]*))\1(?:"([^"\n\r\f]*)"|'([^'\n\r\f]*)'|([^)"' \t\n\r\f]*))(?=([ \t\n\r\f]*))\5\)/gi;
 /** A url() the cleaning didn't write: a blob: or data: picture in quotes is the only kind it writes. */
 const FOREIGN_URL = /url\((?!"(?:blob:|data:image\/))/i;
 /** Ways CSS loads or runs something that aren't url(): taken out with their declaration. */
 const CSS_BAD = /expression\s*\(|behavior\s*:|-moz-binding|javascript:|vbscript:|(?:image-set|image|src|cross-fade|element)\s*\(/i;
 /** A position but static, relative or absolute (fixed, sticky, a var() that may be either): out of the flow onto the
  *  screen, a mail's "cover" over its own words or a bar over the app's. */
-const PINNED = /^position\s*:(?!\s*(?:static|relative|absolute)\s*(?:!\s*important)?\s*$)/i;
+const pinned = (d: string) => {
+  const name = /^position\s*:/i.exec(d);
+  return !!name && !["static", "relative", "absolute"].includes(d.slice(name[0].length).replace(/!\s*important\s*$/i, "").trim().toLowerCase());
+};
 const PINNED_ANYWHERE = /(?<![\w-])position[ \t\n\r\f]*:(?![ \t\n\r\f]*(?:static|relative|absolute)\b)/i;
 /** How deep @media and the like may nest, and how much CSS a mail may have: past either, its CSS is left out (a deep
  *  nest would take the cleaning's stack, and the browser's). */
@@ -101,8 +107,8 @@ const COLOURS = /(?:^|[;{\s])(?:background(?:-color)?|color)\s*:\s*(?!\s*(?:tran
 /** One declaration list (a style attribute, a rule's block): each url() asked of `pic` (none if it may not draw), and
  *  each declaration that would load or run something another way dropped. */
 function cleanDeclarations(css: string, pic: (src: string) => string | null): string {
-  const withUrls = css.replace(URL_TOKEN, (_m, a, b, c) => { const got = pic(String(a ?? b ?? c ?? "").trim()); return got ? `url("${got.replace(/["\\\n]/g, "")}")` : "none"; });
-  return splitOutside(withUrls, ";").map((d) => d.trim()).filter((d) => d && !CSS_BAD.test(d) && !PINNED.test(d) && !FOREIGN_URL.test(d) && closed(d)).join("; ");
+  const withUrls = css.replace(URL_TOKEN, (_m, _w, a, b, c) => { const got = pic(String(a ?? b ?? c ?? "").trim()); return got ? `url("${got.replace(/["\\\n]/g, "")}")` : "none"; });
+  return splitOutside(withUrls, ";").map((d) => d.trim()).filter((d) => d && !CSS_BAD.test(d) && !pinned(d) && !FOREIGN_URL.test(d) && closed(d)).join("; ");
 }
 /** Where a string or an unquoted url() that starts at `i` ends, as the browser's CSS tokenizer reads them: a string
  *  ends at its quote or at a line break (which it doesn't take); an unquoted url( at its `)`, whatever quotes are in it.
@@ -114,11 +120,18 @@ function tokenEnd(s: string, i: number): number {
     return s.length;
   }
   if (c === "u" || c === "U") {
-    // url( and its whitespace, then not a quote (no backtracking into the whitespace: `url( "x)")` is a quoted one)
-    const open = /^url\([ \t\n\r\f]*/i.exec(s.slice(i, i + 64));
-    if (open && s[i + open[0].length] !== '"' && s[i + open[0].length] !== "'") { const close = s.indexOf(")", i); return close < 0 ? s.length : close + 1; }
+    // url( and its whitespace, then not a quote (`url( "x)")` is a quoted one, a function with a string)
+    const j = urlOpen(s, i);
+    if (j >= 0 && s[j] !== '"' && s[j] !== "'") { const close = s.indexOf(")", i); return close < 0 ? s.length : close + 1; }
   }
   return -1;
+}
+/** Where a url( that starts at `i` has its first character after its whitespace, or -1. */
+function urlOpen(s: string, i: number): number {
+  if (s.slice(i, i + 4).toLowerCase() !== "url(") return -1;
+  let j = i + 4;
+  while (j < s.length && (s[j] === " " || s[j] === "\t" || s[j] === "\n" || s[j] === "\r" || s[j] === "\f")) j++;
+  return j;
 }
 /** Every string in it closes on its line (one that doesn't would run on over the rules after it). */
 function closed(s: string): boolean {
@@ -158,6 +171,12 @@ function blockEnd(s: string, open: number): number {
   }
   return s.length;
 }
+const plainCondition = (p: string) => {
+  if (!/^@[a-z-]+[\w \t\n\r\f(),.:%/<>=!*+-]*$/i.test(p) || /url\(|:host|::?slotted|::?part\b/i.test(p)) return false;
+  let depth = 0;
+  for (const c of p) { if (c === "(") depth++; else if (c === ")" && --depth < 0) return false; }
+  return depth === 0;
+};
 const KEEP_AT = /^@(?:media|supports|layer|container|document|-moz-document)\b/i;
 const FRAMES_AT = /^@(?:-webkit-|-moz-|-o-)?keyframes\b/i;
 /** A mail's style sheet: its rules kept with their declarations cleaned; @media and the like kept with what is in them;
@@ -185,8 +204,8 @@ function statementEnd(s: string, i: number): number {
 function blank(s: string): string {
   let out = "";
   for (let i = 0; i < s.length; i++) {
-    const quoted = /^url\([ \t\n\r\f]*["']/i.exec(s.slice(i, i + 64));
-    if (quoted) { const end = tokenEnd(s, i + quoted[0].length - 1); out += s.slice(i, end); i = end - 1; continue; }
+    const q = urlOpen(s, i);
+    if (q >= 0 && (s[q] === '"' || s[q] === "'")) { const end = tokenEnd(s, q); out += s.slice(i, end); i = end - 1; continue; }
     const end = tokenEnd(s, i);
     if (end < 0) { out += s[i]; continue; }
     out += s[i] === '"' || s[i] === "'" ? '""' : s.slice(i, end);
@@ -206,8 +225,9 @@ function cleanRules(css: string, pic: (src: string) => string | null, depth: num
     const prelude = s.slice(i, at).trim(), end = blockEnd(s, at), body = s.slice(at + 1, end);
     i = end + 1;
     if (prelude.startsWith("@")) {
-      // a condition with a brace, an escape or the host's name in it is no condition the browser reads as ours: it goes
-      if (/[{}]|:host|::?slotted|::?part\b/i.test(prelude) || prelude.includes(ESCAPED)) continue;
+      // a condition is plain words, numbers and brackets that close: no string, url(, brace, escape or the host's name
+      // (any of them could put our reading out of step with the browser's, and the last look leaves conditions out)
+      if (!plainCondition(prelude)) continue;
       if (KEEP_AT.test(prelude) && depth < NEST_MAX) { const inner = cleanRules(body, pic, depth + 1); out += `${prelude}{${inner.out}}`; seen += `@{${inner.seen}}`; }
       else if (FRAMES_AT.test(prelude)) { const f = frames(body, pic); out += `${prelude}{${f}}`; seen += `@{${blank(f)}}`; }
       continue;

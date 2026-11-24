@@ -225,6 +225,17 @@ describe("cleanSheet", () => {
       const out = cleanSheet(css, pic);
       expect(out, css).not.toMatch(/:host|position:\s*fixed|@import/i);
     }
+    // a function whose name ends in url( isn't a url(: a quote in it opens a string, for us as for the browser
+    expect(cleanSheet(`@media (min-width:1px) and xurl("x) {} .a{color:red} ${host} .b{content:"}`, pic)).not.toMatch(/:host|position:\s*fixed/i);
+    expect(cleanSheet(`.a{background:xurl("x) ${host}")} .b{color:blue}`, pic)).not.toMatch(/:host|position:\s*fixed/i);
+    expect(cleanSheet(`.a{b:xurl(x"y)} ${host} .c{content:"}`, pic)).not.toMatch(/:host|position:\s*fixed/i);
+    expect(cleanSheet(`@media (min-width:1px){.a{b:xurl(x"y)}} ${host} .c{content:"}`, pic)).not.toMatch(/:host|position:\s*fixed/i);
+    // as the browser reads it: after `xurl(x` the quote opens a string to the line's end, so no rule follows
+    expect(cleanSheet('.q:is(xurl(x"y)){} .z{color:red}', none)).toBe("");
+    // a url( with a long run of spaces before its quote is still a quoted one
+    expect(cleanSheet(`.a{background:url(${" ".repeat(80)}"x)") ; color: red} .b{color:blue}`, none)).toBe(".a{background:none; color: red}.b{color:blue}");
+    // a condition is plain: one with a string, a url( or a bracket left open goes, with what is in it
+    expect(cleanSheet('@media "x" {.a{color:red}} @media (a {.b{color:red}} .c{color:blue}', none)).toBe(".c{color:blue}");
     // a { in a selector's string is a string: the rule after it is its own, and stays
     expect(cleanSheet('.z[title="{"]{color:red} .b{color:blue}', none)).toBe('.z[title="{"]{color:red}.b{color:blue}');
   });
@@ -239,6 +250,17 @@ describe("cleanSheet", () => {
   });
   it("a quoted url( with space before its quote is read as quoted", () => {
     expect(cleanSheet('.a{background:url( "x)")} .b{color:blue}', none)).toBe(".a{background:none}.b{color:blue}");
+  });
+  it("a long run of spaces can't make the cleaning slow (no backtracking through it)", () => {
+    const ws = " ".repeat(190_000);
+    for (const css of [`.a{background:url(${ws}`, `.a{color:${ws}red}`, `.a{position:${ws}fixed}`, `.a{b:${"url( ".repeat(45_000)}}`]) {
+      const t0 = performance.now();
+      cleanSheet(css, none);
+      expect(performance.now() - t0, css.slice(0, 30)).toBeLessThan(1500);
+    }
+    const t1 = performance.now();
+    expect(cleanMail(`<p style="background:url(${ws}">x</p>`, HIDDEN).root).toBeTruthy();
+    expect(performance.now() - t1).toBeLessThan(1500);
   });
   it("@media nested past 8 deep, or more CSS than 200,000 characters, is left out; neither takes the stack", () => {
     const deep = `${"@media a{".repeat(20000)}.x{color:red}${"}".repeat(20000)} .ok{color:blue}`;

@@ -27,7 +27,7 @@ invite. Real mail is mostly HTML. This is how Mail draws it now, and why it is s
    the kit's own rules (links only http/https/mailto; a picture only `cid:`, a PNG/JPEG/GIF/WebP `data:`, or a shown web
    picture already fetched into a `blob:`; every CSS `url()` asked the same; no `@import`, `@font-face`, `:host`,
    escapes in selectors, or `position: fixed/sticky`); then a last walk with its own allowlist. Each rule is
-   mutation-proved: `npx vite-node scripts/mutate-mail.ts` breaks each one and a test goes red (60 of 60).
+   mutation-proved: `npx vite-node scripts/mutate-mail.ts` breaks each one and a test goes red (61 of 61).
 2. **Two shadow roots** (`src/kit/parts-mail.tsx`): the mail's CSS is in an inner root, so it reaches only the mail
    (a `:host` rule reaches only the inner box) and the app's reaches only the app. The outer root, whose CSS is the
    kit's alone, holds that box with `contain: paint`: nothing positioned in the mail leaves it, so it can't cover Reply
