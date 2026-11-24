@@ -165,45 +165,67 @@ const FRAMES_AT = /^@(?:-webkit-|-moz-|-o-)?keyframes\b/i;
  *  host (`:host`, `::slotted`, `::part`) dropped, so nothing reaches the app; `html`, `body` and `:root` mean the root. */
 export function cleanSheet(css: string, pic: (src: string) => string | null): string {
   if (css.length > CSS_MAX) return "";
-  const out = cleanRules(css, pic, 0);
-  // a last look at the whole: if a rule for the host, a url() it didn't write or a position out of the flow is in it
-  // anywhere (a parse of ours that differs from the browser's), none of it is kept
-  // read with its strings and its at-rules' conditions blanked: `@supports (position: sticky)` or content: "url(…)"
-  // say nothing that applies (a string runs to its line's end at most, as the browser reads it; a condition stops at
-  // a brace or semicolon, so one can't swallow a rule)
-  const seen = out.replace(/(?<!url\()(?:"[^"\n\r\f]*"|'[^'\n\r\f]*')/g, '""').replace(/@[a-z-]+[^{};]*\{/gi, "@{");
+  const { out, seen } = cleanRules(css, pic, 0);
+  // a last look at the whole, as the browser will read it (`seen`: each string blanked, each kept at-rule's condition
+  // left out): if a rule for the host, a url() it didn't write, or a position out of the flow is in it anywhere (a
+  // reading of ours that differs from the browser's), none of it is kept
   return /:host|::?slotted|::?part\b/i.test(seen) || FOREIGN_URL.test(seen) || PINNED_ANYWHERE.test(seen) ? "" : out;
 }
-function cleanRules(css: string, pic: (src: string) => string | null, depth: number): string {
+/** The first `{` or `;` at or after `i` outside strings and url()s: where a statement's prelude ends (-1: none). */
+function statementEnd(s: string, i: number): number {
+  for (let j = i; j < s.length; j++) {
+    const end = tokenEnd(s, j);
+    if (end >= 0) { j = end - 1; continue; }
+    if (s[j] === "{" || s[j] === ";") return j;
+  }
+  return -1;
+}
+/** CSS for the last look: each string blanked (it says nothing that applies); a url() kept whole, quoted or not (the
+ *  last look checks what it loads). Read with the same tokenizer as the rules. */
+function blank(s: string): string {
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const quoted = /^url\([ \t\n\r\f]*["']/i.exec(s.slice(i, i + 64));
+    if (quoted) { const end = tokenEnd(s, i + quoted[0].length - 1); out += s.slice(i, end); i = end - 1; continue; }
+    const end = tokenEnd(s, i);
+    if (end < 0) { out += s[i]; continue; }
+    out += s[i] === '"' || s[i] === "'" ? '""' : s.slice(i, end);
+    i = end - 1;
+  }
+  return out;
+}
+function cleanRules(css: string, pic: (src: string) => string | null, depth: number): { out: string; seen: string } {
   const s = plainCss(css);
-  let out = "", i = 0, semi = -2, open = -2;
+  let out = "", seen = "", i = 0;
   while (i < s.length) {
-    // the next semicolon and brace, each looked for again only once it is behind (looking each time would read the
-    // sheet once a rule)
-    if (semi !== -1 && semi < i) semi = s.indexOf(";", i);
-    if (open !== -1 && open < i) open = s.indexOf("{", i);
+    const at = statementEnd(s, i);
+    if (at < 0) break;
     // a statement without a block ends at its semicolon, and goes: an @import, an @charset, or anything else before
     // the next rule that isn't one
-    if (semi >= 0 && (open < 0 || semi < open)) { i = semi + 1; continue; }
-    if (open < 0) break;
-    const prelude = s.slice(i, open).trim(), end = blockEnd(s, open), body = s.slice(open + 1, end);
+    if (s[at] === ";") { i = at + 1; continue; }
+    const prelude = s.slice(i, at).trim(), end = blockEnd(s, at), body = s.slice(at + 1, end);
     i = end + 1;
     if (prelude.startsWith("@")) {
-      if (KEEP_AT.test(prelude) && depth < NEST_MAX) out += `${prelude}{${cleanRules(body, pic, depth + 1)}}`;
-      else if (FRAMES_AT.test(prelude)) out += `${prelude}{${frames(body, pic)}}`;
+      // a condition with a brace, an escape or the host's name in it is no condition the browser reads as ours: it goes
+      if (/[{}]|:host|::?slotted|::?part\b/i.test(prelude) || prelude.includes(ESCAPED)) continue;
+      if (KEEP_AT.test(prelude) && depth < NEST_MAX) { const inner = cleanRules(body, pic, depth + 1); out += `${prelude}{${inner.out}}`; seen += `@{${inner.seen}}`; }
+      else if (FRAMES_AT.test(prelude)) { const f = frames(body, pic); out += `${prelude}{${f}}`; seen += `@{${blank(f)}}`; }
       continue;
     }
     if (!prelude || prelude.includes(ESCAPED) || /:host|::?slotted|::?part\b/i.test(prelude)) continue;
     const selector = prelude.replace(/(?<![\w.#:-])(?:html|body)(?![\w-])|:root\b/gi, ".pa-mail-doc");
-    out += `${selector}{${cleanDeclarations(body, pic)}}`;
+    const rule = `${selector}{${cleanDeclarations(body, pic)}}`;
+    out += rule;
+    seen += blank(rule);
   }
-  return out;
+  return { out, seen };
 }
 function frames(body: string, pic: (src: string) => string | null): string {
   let out = "", i = 0;
   while (i < body.length) {
-    const open = body.indexOf("{", i);
+    const open = statementEnd(body, i);
     if (open < 0) break;
+    if (body[open] === ";") { i = open + 1; continue; }
     const end = blockEnd(body, open);
     out += `${body.slice(i, open).trim()}{${cleanDeclarations(body.slice(open + 1, end), pic)}}`;
     i = end + 1;

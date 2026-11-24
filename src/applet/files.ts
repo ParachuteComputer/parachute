@@ -46,7 +46,9 @@ function localAddress(host: string): boolean {
     return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b < 128) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b < 32) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) || (a === 192 && b === 0);
   }
   // unspecified, loopback, unique-local, link- and site-local, IPv4-mapped or -compatible, NAT64, multicast
-  if (h.includes(":")) return h === "::" || h === "::1" || /^f[cd]/.test(h) || /^fe[89a-f]/.test(h) || /^::(?:ffff:)?[0-9a-f.:]*$/.test(h) || /^64:ff9b:/.test(h) || /^ff/.test(h);
+  if (h.includes(":")) return h === "::" || h === "::1" || /^f[cd]/.test(h) || /^fe[89a-f]/.test(h) || /^::(?:ffff:)?[0-9a-f.:]*$/.test(h) || /^64:ff9b:/.test(h) || /^ff/.test(h)
+    // and as Rust (pictures.rs `global`): 6to4, documentation, the IETF's 2001::/23 (Teredo in it), discard-only
+    || /^2002:/.test(h) || /^2001:db8:/.test(h) || /^2001:[01]?[0-9a-f]?[0-9a-f]?:/.test(h) || /^2001::/.test(h) || /^100::/.test(h) || /^100:0:0:0:/.test(h);
   return false;
 }
 /** A web picture's address the shell may fetch for it: http or https, nothing hidden or spaced, no user or password,

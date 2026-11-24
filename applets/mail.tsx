@@ -60,7 +60,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 /** A message's body as the kit's MailBody takes it: its HTML when it has an HTML part (JMAP lists an HTML-only
  *  message's one part in textBody too, so the parts' types decide, not the list), else its text. A plain part among
  *  HTML ones keeps its place, as text. */
-function bodyOf(e: Email): { html?: string; text?: string; cut: boolean } {
+function bodyOf(e: Email): { html?: string; text?: string; cut: boolean; drawn: string[] } {
   const value = (p: Part) => e.bodyValues?.[p.partId]?.value ?? "";
   const cut = Object.values(e.bodyValues ?? {}).some((v) => v.isTruncated);
   const html = e.htmlBody ?? [];
@@ -68,9 +68,14 @@ function bodyOf(e: Email): { html?: string; text?: string; cut: boolean } {
   const text = (e.textBody ?? []).filter((p) => p.type !== "text/html").map(value).join("\n").trim();
   // a picture between the parts (an iPhone's text, photo, text) is drawn where it was, through the same inline path as
   // a cid: one (its own part id stands for its cid)
-  const piece = (p: Part) => p.type === "text/html" ? value(p) : /^image\//i.test(p.type ?? "") && p.blobId ? `<p><${PICTURE} src="cid:${PART}${p.partId}" alt="${esc(p.name ?? "")}"></p>` : /^text\//i.test(p.type ?? "") ? `<pre>${esc(value(p))}</pre>` : "";
-  if (html.some((p) => p.type === "text/html")) return { html: html.map(piece).join("\n"), text, cut };
-  return { text, cut };
+  const drawn: string[] = [];
+  const piece = (p: Part) => {
+    if (p.type === "text/html") return value(p);
+    if (/^image\//i.test(p.type ?? "") && p.blobId) { drawn.push(p.partId); return `<p><${PICTURE} src="cid:${PART}${esc(p.partId)}" alt="${esc(p.name ?? "")}"></p>`; }
+    return /^text\//i.test(p.type ?? "") ? `<pre>${esc(value(p))}</pre>` : "";
+  };
+  if (html.some((p) => p.type === "text/html")) return { html: html.map(piece).join("\n"), text, cut, drawn };
+  return { text, cut, drawn: [] };
 }
 /** The made-up cid that names a picture part by its part id (bodyOf, and Thread's `part`). */
 const PART = "pa-part-";
@@ -338,7 +343,7 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
       </article>;
       const body = bodyOf(e);
       // pictures inline in its HTML are drawn there, not listed again as files
-      const files = (e.attachments ?? []).filter((a) => !(body.html && ((cidOf(a) && a.disposition !== "attachment" && body.html.includes(`cid:${cidOf(a)}`)) || (a.partId && body.html.includes(`cid:${PART}${a.partId}"`)))));
+      const files = (e.attachments ?? []).filter((a) => !(body.html && ((cidOf(a) && a.disposition !== "attachment" && body.html.includes(`cid:${cidOf(a)}`)) || (a.partId && body.drawn.includes(a.partId)))));
       const s = sender(e);
       return <article className="msg" key={e.id} aria-label={e.subject || "a message"}>
         <div className="meta"><b className="who">{from?.name || from?.email || "(nobody)"}</b>{from?.name && <span className="quiet"> {from.email}</span>}<span className="quiet"> · {when.full(e.receivedAt)}</span>

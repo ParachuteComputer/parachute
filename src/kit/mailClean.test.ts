@@ -213,6 +213,21 @@ describe("cleanSheet", () => {
     // and a condition can't carry a rule out of sight
     expect(cleanSheet("@media x } :host{position:fixed} .z{color:red}", none)).not.toMatch(/:host/);
   });
+  it("strings and url()s are read as tokens everywhere: neither a quoted url() nor a { in a selector's string hides a rule (review of #225)", () => {
+    const host = ":host{contain:none;position:fixed;inset:0;z-index:2147483647;background:red}";
+    const pic = (u: string) => (u.startsWith("data:") ? u : null);
+    for (const css of [
+      `.a{background:url(data:image/png;base64,AAAA)} .z[title="{"]{} ${host} .y{content:"}`,
+      `.z[title="{"]{} :is(@a,:host){contain:none;background:red} .y{content:"}`,
+      `.a{background:url(data:image/png;base64,AAAA)} .z[title="{"]{} .b{color:red; div{position:fixed}} .y{content:"}`,
+      '!z"{"{}@import "http://host/evil.css"; .y{content:"}',
+    ]) {
+      const out = cleanSheet(css, pic);
+      expect(out, css).not.toMatch(/:host|position:\s*fixed|@import/i);
+    }
+    // a { in a selector's string is a string: the rule after it is its own, and stays
+    expect(cleanSheet('.z[title="{"]{color:red} .b{color:blue}', none)).toBe('.z[title="{"]{color:red}.b{color:blue}');
+  });
   it("a comment is a space: taking one out can't make a new comment, or :host (second security review)", () => {
     expect(cleanSheet("://**/* c */host{contain:none;margin-top:-180px} .b{color:blue}", none)).not.toMatch(/:\s*host|:\/\*/);
     expect(cleanSheet(".a{position: /**/ fixed; color: red}", none)).toBe(".a{color: red}");
