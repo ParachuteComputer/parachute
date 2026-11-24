@@ -116,10 +116,12 @@ async function inTurn<T>(run: () => Promise<T>): Promise<T> {
   try { return await run(); } finally { gate.running--; gate.waiting.shift()?.(); }
 }
 /** A web picture from the shell; refused for the shell's limit, asked again after a while (for a minute or so). */
-async function webPicture(url: string): Promise<Got> {
+async function webPicture(url: string, wanted: () => boolean): Promise<Got> {
+  // a mail left before its turn came asks nothing more: the next mail's pictures go first
+  const asking = () => { if (!wanted()) throw new Error("the mail was left"); return kitApp().picture!(url); };
   for (let tries = 0; ; tries++) {
-    try { return await inTurn(() => kitApp().picture!(url)); } catch (e) {
-      if ((e as { code?: string } | null)?.code !== "rate_limited" || tries >= 12) throw e;
+    try { return await inTurn(asking); } catch (e) {
+      if ((e as { code?: string } | null)?.code !== "rate_limited" || tries >= 12 || !wanted()) throw e;
       await new Promise((r) => setTimeout(r, 5000));
     }
   }
@@ -198,7 +200,7 @@ function HtmlMail({ html, fallback, pictures, onShowPictures, inline }: { html: 
     for (const u of todo) {
       asked.current.add(u);
       inFlight.current++;
-      void webPicture(u).then((r) => arrived(u, new Blob([r.bytes], { type: r.type })), () => { if (live.current) setFailed((n) => n + 1); settled(); });
+      void webPicture(u, () => live.current).then((r) => arrived(u, new Blob([r.bytes], { type: r.type })), () => { if (live.current) setFailed((n) => n + 1); settled(); });
     }
   }, [pictures, c.web.join("\n")]); // eslint-disable-line react-hooks/exhaustive-deps
 

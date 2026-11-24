@@ -229,6 +229,7 @@ describe("cleanSheet", () => {
     // many rules and no semicolon after them: read in one pass
     const t1 = performance.now();
     expect(cleanSheet("a{}".repeat(66_000), none).length).toBe(3 * 66_000);
+    expect(cleanSheet("a;".repeat(99_000), none)).toBe("");
     expect(performance.now() - t1).toBeLessThan(3000);
   });
   it("a url() the cleaning can't read goes with its declaration; the rules around it stay", () => {

@@ -172,11 +172,12 @@ export function cleanSheet(css: string, pic: (src: string) => string | null): st
 }
 function cleanRules(css: string, pic: (src: string) => string | null, depth: number): string {
   const s = plainCss(css);
-  let out = "", i = 0, semi = -2;
+  let out = "", i = 0, semi = -2, open = -2;
   while (i < s.length) {
-    // the next semicolon, looked for again only once it is behind (looking each time would read the sheet once a rule)
+    // the next semicolon and brace, each looked for again only once it is behind (looking each time would read the
+    // sheet once a rule)
     if (semi !== -1 && semi < i) semi = s.indexOf(";", i);
-    const open = s.indexOf("{", i);
+    if (open !== -1 && open < i) open = s.indexOf("{", i);
     // a statement without a block ends at its semicolon, and goes: an @import, an @charset, or anything else before
     // the next rule that isn't one
     if (semi >= 0 && (open < 0 || semi < open)) { i = semi + 1; continue; }

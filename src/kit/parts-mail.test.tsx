@@ -42,6 +42,18 @@ describe("MailBody", () => {
     expect(queryByText(/couldn't load/)).toBeNull();
   });
 
+  it("a mail left asks for none of its pictures still waiting their turn", async () => {
+    URL.createObjectURL = () => "blob:x";
+    const asked: string[] = [];
+    const release: (() => void)[] = [];
+    g.parachute = { app: { picture: (url: string) => { asked.push(url); return new Promise((res) => release.push(() => res({ type: "image/png", bytes: new ArrayBuffer(8) }))); } } };
+    const { unmount } = render(<MailBody html={html} pictures />);
+    await waitFor(() => expect(asked).toHaveLength(4));
+    unmount();
+    await act(async () => { release.forEach((r) => r()); await new Promise((r) => setTimeout(r, 20)); });
+    expect(asked).toHaveLength(4);
+  });
+
   it("a tap on a link asks the shell to open its own address", async () => {
     const opened: string[] = [];
     g.parachute = { app: { openLink: async (url: string) => { opened.push(url); return true; } } };

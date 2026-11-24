@@ -61,6 +61,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
 
   // notes and applets (open) ride on the web addresses' line when there is one, so a card that has both is no longer for it
   if (g.app.includes("links")) lines.push({ lead: g.app.includes("open") ? "Opens web addresses, notes and applets" : "Opens web addresses", rest: ": what it reads could leave that way.", risky: true });
+  if (g.app.includes("pictures")) lines.push({ lead: "Loads pictures from the web without a tap", rest: ": the sites see when, and from where, and what it reads could leave in a picture's address.", risky: true });
   if (g.app.includes("recent")) lines.push({ lead: "Sees the titles of the newest notes", rest: " in the vaults you give it.", risky: true });
   if (g.app.includes("vaults")) lines.push({ lead: "Sees and changes records in the vaults you give it", rest: ": their words, fields, types, tags, links and history, and puts a record back as it was, which deletes one another app or AI made; the vault keeps it, so it can be put back too (a change where Parachute only reads asks you first, and so does a change to a published record).", risky: true });
   if (g.app.includes("changes")) lines.push({ lead: "Sees how many changes your AIs and other apps made today", rest: " in the vaults you give it, and their names (not what they changed).", risky: false });
