@@ -114,6 +114,9 @@ final class Drive: XCTestCase {
         press("Sign in with your key")
         wait("Which vaults on \(host) are yours?")
         shot("03-pick")
+        for b in app.buttons.allElementsBoundByIndex { print("T520 button \(b.label) \(b.frame)") }
+        for t in app.staticTexts.allElementsBoundByIndex where t.label.contains("Which") || t.label.contains("Parachute reads") { print("T520 text \(t.label.prefix(30)) \(t.frame)") }
+        print("T520 webview \(app.webViews.firstMatch.frame) window \(app.windows.firstMatch.frame)")
         press("Continue")
         sleep(1)
         shot("03b-after-continue")
