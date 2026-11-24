@@ -64,7 +64,7 @@ export function answerFor(link: string, from?: string): Promise<Answer> {
     answers.set(k, p);
     // nothing, for now: asked again by a draw a minute on, or once the person is back (useAnswers)
     const mine = p;
-    void p.then((a) => { came.set(mine, a); lastAt.set(k, Date.now()); if (a === null) setTimeout(() => { if (answers.get(k) === mine) answers.delete(k); }, 60_000); });
+    void p.then((a) => { came.set(mine, a); if (a === null) lastAt.set(k, Date.now()); else lastAt.delete(k); if (a === null) setTimeout(() => { if (answers.get(k) === mine) answers.delete(k); }, 60_000); });
   }
   return p;
 }
@@ -74,7 +74,7 @@ export function answerFor(link: string, from?: string): Promise<Answer> {
 // cite a note a moment before the hub has it, a vault's hub may have been away, and a busy shell or a lapse leaves a link
 // without an answer; a link drawn stays drawn
 export const AGAIN_MS = 60_000;
-/** When each link's last answer came. */
+/** When each link that led nowhere had that answer (only those: a link drawn is never asked again). */
 const lastAt = new Map<string, number>();
 type Asker = { nowhere(): { l: string; k: string }[]; again(ls: Set<string>): void };
 const askers = new Set<Asker>();
@@ -123,6 +123,8 @@ export function useAnswers(links: readonly string[], from?: string): Map<string,
     const picked = again !== handled.current ? again : null;
     handled.current = again;
     for (const l of new Set(links)) {
+      // one a return didn't pick waits for a later return (its cached nothing may be gone, a minute on)
+      if (picked && got.get(l) === null && !picked.has(l)) continue;
       if (picked?.has(l) && got.get(l) === null) {
         const k = keyOf(l, from), was = answers.get(k);
         if (was && came.get(was) === null) answers.delete(k);

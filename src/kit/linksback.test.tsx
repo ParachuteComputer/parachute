@@ -92,4 +92,21 @@ describe("Linked, when the person is back", () => {
     expect(second).toHaveLength(20);
     expect(second).toEqual(expect.arrayContaining(many.slice(20)));
   });
+  it("one part holding many links (a note's) keeps the cap too, and takes turns (round 5)", async () => {
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+    const many = Array.from({ length: 30 }, (_, i) => `nosuch:01KA3Z9V6B2W8XQJ4M7N5Q${String(i).padStart(4, "0")}`);
+    const asked: string[] = [];
+    g.parachute = { app: { links: async (links: string[]) => { asked.push(...links); return links.map(() => null); } } };
+    function Probe() { useAnswers(many); return null; }
+    render(<Probe />);
+    await tick(40);
+    expect(asked).toHaveLength(30);
+    const back = async () => { const n = asked.length; await tick(AGAIN_MS + 1); await act(async () => { document.dispatchEvent(new Event("visibilitychange")); }); await tick(40); return asked.slice(n); };
+    expect(await back()).toHaveLength(20);
+    const second = await back();
+    expect(second).toHaveLength(20);
+    expect(second).toEqual(expect.arrayContaining(many.slice(20)));
+  });
 });
