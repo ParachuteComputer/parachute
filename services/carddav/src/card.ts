@@ -213,7 +213,9 @@ export function readPhoneCard(text: string): PhoneCard {
       }
       case "ADR": {
         if (address) break;
-        const parts = splitEscaped(val, ";").map((x) => unescapeValue(x).trim());
+        // each part may be a list (an unescaped comma between items): Android sends an address's lines as a list in the
+        // street part, so a list's items are its lines
+        const parts = splitEscaped(val, ";").map((x) => splitEscaped(x, ",").map((y) => unescapeValue(y).trim()).filter(Boolean).join("\n"));
         // the applet's reading: po;ext;street on one line, city, region postal on the next, country last
         const street = [parts[0], parts[1], parts[2]].filter(Boolean).join(", ");
         const cityLine = [[parts[3], parts[4]].filter(Boolean).join(", "), parts[5]].filter(Boolean).join(" ").trim();

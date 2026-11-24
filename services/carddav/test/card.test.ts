@@ -213,3 +213,13 @@ test("a name of dots names no note", () => {
   assert.equal(readPhoneCard("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:..\r\nEND:VCARD\r\n").name, "");
   assert.equal(readPhoneCard("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:.\r\nEMAIL:dot@example.test\r\nEND:VCARD\r\n").name, "dot@example.test");
 });
+
+test("an address the phone sends back with its lines as a street list keeps its lines (seen from DAVx5 on Android 15)", () => {
+  // People's "412 Pine St\nBoulder, CO 80302" comes back from Android as a list in the street part: an unescaped comma
+  // between lines, the escaped one inside a line
+  const card = ["BEGIN:VCARD", "VERSION:3.0", "UID:x1", "FN:Maya Lin", "N:Lin;Maya;;;", "ADR;TYPE=home:;;412 Pine St,Boulder\\, CO 80302;;;;", "END:VCARD", ""].join("\r\n");
+  assert.equal(readPhoneCard(card).facts.address, "412 Pine St\nBoulder, CO 80302");
+  // and a street with an escaped newline reads the same
+  const escaped = card.replace("412 Pine St,Boulder", "412 Pine St\\nBoulder");
+  assert.equal(readPhoneCard(escaped).facts.address, "412 Pine St\nBoulder, CO 80302");
+});
