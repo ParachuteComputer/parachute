@@ -78,16 +78,18 @@ describe("Linked, when the person is back", () => {
     vi.useRealTimers();
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+    // a long room: messages oldest first, each with a link that leads nowhere (another person's vault, say)
     const many = Array.from({ length: 30 }, (_, i) => `nosuch:01KA3Z9V6B2W8XQJ4M7N5P${String(i).padStart(4, "0")}`);
     const asked: string[] = [];
     g.parachute = { app: { links: async (links: string[]) => { asked.push(...links); return links.map(() => null); } } };
-    render(<Linked text={many.join(" ")} />);
+    render(<>{many.map((l) => <p key={l}><Linked text={l} /></p>)}</>);
     await tick(40);
     expect(asked).toHaveLength(30);
-    const back = async () => { await tick(AGAIN_MS + 1); await act(async () => { document.dispatchEvent(new Event("visibilitychange")); }); await tick(40); };
-    await back();
-    expect(asked).toHaveLength(30 + 20);
-    await back();
-    expect(asked).toHaveLength(30 + 20 + 20);
+    const back = async () => { const n = asked.length; await tick(AGAIN_MS + 1); await act(async () => { document.dispatchEvent(new Event("visibilitychange")); }); await tick(40); return asked.slice(n); };
+    expect(await back()).toHaveLength(20);
+    // the next return asks the ten left out first: the newest messages are not starved by the oldest (round 4)
+    const second = await back();
+    expect(second).toHaveLength(20);
+    expect(second).toEqual(expect.arrayContaining(many.slice(20)));
   });
 });

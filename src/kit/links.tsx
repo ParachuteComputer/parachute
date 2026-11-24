@@ -64,58 +64,73 @@ export function answerFor(link: string, from?: string): Promise<Answer> {
     answers.set(k, p);
     // nothing, for now: asked again by a draw a minute on, or once the person is back (useAnswers)
     const mine = p;
-    void p.then((a) => { came.set(mine, a); if (a === null) setTimeout(() => { if (answers.get(k) === mine) answers.delete(k); }, 60_000); });
+    void p.then((a) => { came.set(mine, a); lastAt.set(k, Date.now()); if (a === null) setTimeout(() => { if (answers.get(k) === mine) answers.delete(k); }, 60_000); });
   }
   return p;
 }
 // the person back (the applet shown again, the app back in front): links that led nowhere ask again, each at most once a
-// minute after its last answer (the shell keeps a miss that long), and no more than one call's worth a time (each link
-// asked costs the frame's reads; the rest ask at a later return). Uni may cite a note a moment before the hub has it, a
-// vault's hub may have been away, and a busy shell or a lapse leaves a link without an answer; a link drawn stays drawn
+// minute after its last answer (the shell keeps a miss that long), and no more than one call's worth a return (each link
+// asked costs the frame's reads): the links whose answer is oldest first, across the frame, so each has its turn. Uni may
+// cite a note a moment before the hub has it, a vault's hub may have been away, and a busy shell or a lapse leaves a link
+// without an answer; a link drawn stays drawn
 export const AGAIN_MS = 60_000;
-const backs = new Set<() => void>();
-let left = 0;
+/** When each link's last answer came. */
+const lastAt = new Map<string, number>();
+type Asker = { nowhere(): { l: string; k: string }[]; again(ls: Set<string>): void };
+const askers = new Set<Asker>();
 let heard = false;
+function back() {
+  const now = Date.now();
+  const due: { a: Asker; l: string; k: string; at: number }[] = [];
+  for (const a of askers) for (const x of a.nowhere()) {
+    const at = lastAt.get(x.k) ?? 0;
+    if (now - at >= AGAIN_MS) due.push({ a, ...x, at });
+  }
+  due.sort((x, y) => x.at - y.at);
+  const keys = new Set<string>(), picks = new Map<Asker, Set<string>>();
+  for (const d of due) {
+    // the same link in two places is asked once
+    if (!keys.has(d.k)) { if (keys.size >= LINKS_PER_CALL) continue; keys.add(d.k); }
+    picks.set(d.a, (picks.get(d.a) ?? new Set()).add(d.l));
+  }
+  picks.forEach((ls, a) => a.again(ls));
+}
 function hearBacks() {
   if (heard) return;
   heard = true;
-  const back = () => { left = LINKS_PER_CALL; backs.forEach((f) => f()); };
   kit().onShown?.((on) => { if (on) back(); });
   if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") back(); });
 }
 /** The answers for these links (undefined while asked). */
 export function useAnswers(links: readonly string[], from?: string): Map<string, Answer> {
   const [got, setGot] = useState<Map<string, Answer>>(() => new Map());
-  const [round, setRound] = useState(0);
-  const nowhere = useRef(false);
-  const askedAt = useRef(0);
-  useEffect(() => { nowhere.current = links.some((l) => got.get(l) === null); });
+  // the links a return picked to ask again
+  const [again, setAgain] = useState<Set<string>>(() => new Set());
+  const nowhere = useRef<{ l: string; k: string }[]>([]);
+  useEffect(() => { nowhere.current = [...new Set(links)].filter((l) => got.get(l) === null).map((l) => ({ l, k: keyOf(l, from) })); });
   useEffect(() => {
     hearBacks();
-    // only while one of its links led nowhere: a page of links already drawn asks nothing
-    const f = () => { if (nowhere.current && Date.now() - askedAt.current >= AGAIN_MS) setRound((n) => n + 1); };
-    backs.add(f);
-    return () => { backs.delete(f); };
+    const me: Asker = { nowhere: () => nowhere.current, again: (ls) => setAgain(ls) };
+    askers.add(me);
+    return () => { askers.delete(me); };
   }, []);
   const key = links.join("\n") + "\n" + (from ?? "");
-  const handled = useRef(0);
+  const handled = useRef(again);
   useEffect(() => {
     let on = true;
-    // the run a return started (not a later change of links): what led nowhere here asks again, while the round has room
-    const back = round !== handled.current;
-    handled.current = round;
+    // the run a return started (not a later change of links): its picks let go of their last answer of nothing first
+    // (one another link is asking now stays)
+    const picked = again !== handled.current ? again : null;
+    handled.current = again;
     for (const l of new Set(links)) {
-      if (back && got.get(l) === null) {
-        if (left <= 0) continue;
-        left--;
-        // its last answer of nothing is let go (one another link is asking now stays)
+      if (picked?.has(l) && got.get(l) === null) {
         const k = keyOf(l, from), was = answers.get(k);
         if (was && came.get(was) === null) answers.delete(k);
       }
-      void answerFor(l, from).then((a) => { askedAt.current = Date.now(); if (on) setGot((m) => (m.get(l) === a ? m : new Map(m).set(l, a))); });
+      void answerFor(l, from).then((a) => { if (on) setGot((m) => (m.get(l) === a ? m : new Map(m).set(l, a))); });
     }
     return () => { on = false; };
-  }, [key, round]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, again]); // eslint-disable-line react-hooks/exhaustive-deps
   return got;
 }
 
