@@ -14,7 +14,7 @@
 // `launch` event without a new tap: it was started by one, and a launch carries only a room id and a message id. A grant
 // that expires while hidden is seen when shown.
 // While hidden an applet gets no tap (shell/appDeps.ts `tappingIn` and views/ShellSheets.tsx `useTapOnce` need its frame
-// on screen), its recorder or picker is cancelled, and it is told (`shown` event, kit `onShown`) so it can hold what
+// on screen), its picker is closed (a recorder stops and waits, with what was recorded, for the way back: views/DeviceSheets.tsx), and it is told (`shown` event, kit `onShown`) so it can hold what
 // only a person looking may do (a room marks nothing read). Shown again, its record is read again: changed code or a
 // changed grant shows the card, as on any open.
 import { createContext, useContext, useEffect, useRef, useState } from "react";

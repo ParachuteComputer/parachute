@@ -239,7 +239,7 @@ alone are refused. Not room-scoped, said on the card's notes: media on that rela
   one row, the shape of what it hears; nothing pulses. It rests beside the applet, never over it: the frame above gets
   shorter, so the applet still scrolls under a finger while it records (the message being answered can be read) and its
   foot stays in sight. Going to the background (the screen locks, another app comes to the front), reaching
-  `max_s`, or the microphone going stops it and keeps what was recorded, for Send or Cancel. The shell records with MediaRecorder (`audio/webm;codecs=opus`, 32 kbit/s, as the
+  `max_s`, or the microphone going stops it and keeps what was recorded, for Send or Cancel. So does leaving the screen while it records (the top bar's Back, a tab on the bar, the phone's Back): the recorder stops and waits where it was, "Your recording is kept", for Send on coming back, and nothing is sent by leaving. If the screen itself goes (it isn't kept running, or its frame is made again) the recording is held for that applet's screen, with Save a copy and Discard: the frame that asked is gone, so it can't be sent. A second mic or attach tap while one sheet is open changes nothing (no recording, no files). The shell records with MediaRecorder (`audio/webm;codecs=opus`, 32 kbit/s, as the
   Uni app) in its own document, never the frame; Send hands the applet `{bytes, type, duration}`. The applet uploads it
   with `services.upload` (the production relay takes WebM Opus) and posts a kind 9 with an audio `imeta` and an empty
   body, as the Uni app. Rooms aren't transcribed by the app (Uni transcribes on its side, as now). A voice journal entry

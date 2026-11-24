@@ -126,3 +126,41 @@ test.describe("on a phone 390 wide", () => {
     await expect.poll(async () => (await voiced()).length, { timeout: 15_000 }).toBe(1);
   });
 });
+
+// Leaving the screen while recording must never throw the voice note away (T-476: the recorder rests beside the applet now,
+// so the top bar's Back, a tab on the bar and the phone's Back are all open to the person while it records). Each way out
+// stops the recording and keeps it: it is where it was on coming back, with Send, and nothing was sent in between.
+const exits: Record<string, { leave: (page: Page) => Promise<unknown>; back: (page: Page) => Promise<unknown> }> = {
+  "the top bar's Back": { leave: (page) => page.getByRole("button", { name: "Back" }).click(), back: (page) => page.goForward() },
+  "a tab on the bar": { leave: (page) => page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: /Settings/ }).click(), back: (page) => page.goBack() },
+  "the phone's Back (popstate)": { leave: (page) => page.goBack(), back: (page) => page.goForward() },
+};
+for (const [how, exit] of Object.entries(exits)) {
+  for (const state of ["while it records", "after it stopped by itself"] as const) {
+    test(`leaving by ${how} ${state} keeps the recording: it is there on coming back, and Send sends it`, async ({ page }) => {
+      const rec = await journal(page);
+      await rec.click();
+      const sheet = page.getByRole("dialog", { name: "Recording for Journal" });
+      await expect(sheet.getByRole("timer")).toContainText("0:01", { timeout: 6000 });
+      if (state === "after it stopped by itself") {
+        // the app went to the background: it stopped and kept it (above); the person is back and leaves without pressing either
+        await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); document.dispatchEvent(new Event("visibilitychange")); });
+        await expect(sheet.getByRole("timer")).toContainText("Recorded");
+        await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true }); document.dispatchEvent(new Event("visibilitychange")); });
+      }
+      await exit.leave(page);
+      await expect(page.locator("iframe.applet-frame")).toBeHidden();
+      // the microphone is let go at once, and nothing was sent by leaving
+      await expect.poll(() => micOpen(page)).toBe(false);
+      await page.waitForTimeout(1200);
+      expect(await voiced()).toHaveLength(0);
+      await exit.back(page);
+      await expect(sheet).toBeVisible();
+      await expect(sheet.getByRole("timer")).toContainText("Recorded");
+      await expect(sheet).toContainText("Your recording is kept");
+      await sheet.getByRole("button", { name: "Send" }).click();
+      await expect(sheet).toBeHidden();
+      await expect.poll(async () => (await voiced()).length, { timeout: 15_000 }).toBe(1);
+    });
+  }
+}
