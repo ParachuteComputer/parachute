@@ -86,10 +86,12 @@ async function rowsFor(home: VaultRecord, s: Subject, kept = false): Promise<App
  *  the floor. null: this device doesn't check approvals. Read from the copy kept of the approvals at once (the signed
  *  list as last read, vault/readCache.ts), the home vault asked behind it: the applet screen reads again when its
  *  answer differs, so a taking back stops the applet as soon as that read answers (review finding 16). */
-export async function approvalFor(s: Subject, code: string, scope: string, now = Date.now()): Promise<Decision | null> {
+export async function approvalFor(s: Subject, code: string, scope: string, now = Date.now(), kept = true): Promise<Decision | null> {
   const home = homeVault();
   if (!home || !(await approvalsHere())) return null;
-  const events = (await rowsFor(home, s, true).catch(() => [])).map((r) => r.metadata?.approval);
+  // `kept: false`: from the home vault itself, not the copy kept of it (a Techne write, which can't be undone, waits for
+  // a taking back made on another device: docs/design/TECHNE.md)
+  const events = (await rowsFor(home, s, kept).catch(() => [])).map((r) => r.metadata?.approval);
   const d = decide(events, s, code, scope, await trustedNow(true), now, floorOf(s));
   const newest = d.run ? d.content : d.newest;
   if (newest && (d.run || d.why !== "older")) raiseFloor(s, newest.n + (newest.approved ? 0 : 0.5));

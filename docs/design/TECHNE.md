@@ -165,8 +165,12 @@ signs any request on the AppView's `/xrpc/` path that the web side asks for. Tec
 staging host or an alias of the AppView declared as a plain service isn't caught until Rust can probe an origin for an
 AppView. After Allow a write goes without asking (that is the grant); each signed request is in the applet's signing
 log. A device that never saw a taking back takes an older approval put back in its place, as with every approval
-today; deleting one only makes the applet ask again. One key for Parachute and Techne links the two (Aaron's choice,
-11-18).
+today; deleting one only makes the applet ask again. Before each write the capability's approval is read from the home
+vault itself, not the copy kept of it, so a taking back on another device counts at once; offline, no write goes.
+Settings lists what this device has seen held: a capability allowed on another device shows here once the applet
+uses it here. While a device can't read the applet's own approval (its hub unreachable), the applet runs by that
+device's Allow and its capabilities are that device's. A `services` entry on any Techne host is refused, for every
+applet, `fields.techne` or not. One key for Parachute and Techne links the two (Aaron's choice, 11-18).
 
 ## Next (not in the spike)
 

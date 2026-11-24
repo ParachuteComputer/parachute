@@ -38,7 +38,8 @@ async function signedFor(o: TechneShell): Promise<Signed | null> {
   const under = n.under;
   const sub = (cap: TechneCap): Subject => ({ ...n.approval, record: capRecord(n.approval.record, cap) });
   return {
-    holds: async (cap) => (await approvalFor(sub(cap), n.code, capScope(n.asks, cap, under)))?.run === true,
+    // read fresh: it is asked only before a write, which can't be undone
+    holds: async (cap) => (await approvalFor(sub(cap), n.code, capScope(n.asks, cap, under), Date.now(), false))?.run === true,
     sign: async (cap, approved) => {
       if (!approved) return takeBackSigned(n.approval, cap, o.name);
       // this device's level for approving (the unlock, or the passcode first when set), asked on the shell's own sheet
