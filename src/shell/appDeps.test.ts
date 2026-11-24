@@ -1,7 +1,7 @@
 // What an applet's note links cost: the same for every link, whatever it names, so the read budget can't tell an
 // applet which vault names the person holds.
 import { describe, expect, it, vi } from "vitest";
-import { MISS_MS, appDeps, noteFinder } from "./appDeps";
+import { MISS_MS, READ_MS, TAP_READ_MS, appDeps, noteFinder } from "./appDeps";
 
 describe("app.links", () => {
   it("charges each link the same, read or not", async () => {
@@ -63,6 +63,16 @@ describe("app.follow", () => {
       expect(s.went).toEqual([`/v/kitchen/n/${ID}`]);
     } finally { s.done(); }
   });
+  it("a tap while the hub doesn't answer (off the tailnet) still opens the note's screen, before the tap wears off (T-476)", async () => {
+    vi.useFakeTimers();
+    const s = await setup();
+    try {
+      const p = s.d.follow(`kitchen:${"01KA3Z9V6B2W8XQJ4M7N5P0R1V"}`, undefined, false);
+      await vi.advanceTimersByTimeAsync(TAP_READ_MS + 1);
+      expect(await p).toBe(true);
+      expect(s.went).toEqual([`/v/kitchen/n/01KA3Z9V6B2W8XQJ4M7N5P0R1V`]);
+    } finally { s.answer(); s.done(); vi.useRealTimers(); }
+  });
   it("a slow answer moves no one once the tap has worn off", async () => {
     const s = await setup();
     try {
@@ -76,6 +86,20 @@ describe("app.follow", () => {
 });
 
 describe("noteFinder", () => {
+  it("a read the hub leaves hanging counts as not asked after READ_MS, and is asked again next time", async () => {
+    vi.useFakeTimers();
+    try {
+      let reads = 0;
+      const find = noteFinder(() => { reads++; return new Promise(() => {}); });
+      const asked = find({ key: "uni" } as never, "01KA3Z9V6B2W8XQJ4M7N5P0R1S");
+      const failed = expect(asked).rejects.toThrow(/in time/);
+      await vi.advanceTimersByTimeAsync(READ_MS + 1);
+      await failed;
+      void find({ key: "uni" } as never, "01KA3Z9V6B2W8XQJ4M7N5P0R1S").catch(() => {});
+      expect(reads).toBe(2);
+    } finally { vi.useRealTimers(); }
+  });
+
   it("a note the lookup doesn't take is kept no longer than a miss, so a later answer's speed can't say it is there", async () => {
     vi.useFakeTimers();
     try {

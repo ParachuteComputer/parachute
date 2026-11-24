@@ -69,6 +69,22 @@ describe("resolveLink", () => {
     expect(await resolveLink("[[Recipes/Plan]]", undefined, deps())).toEqual({ answer: null });
     expect(await resolveLink("[[Recipes/Box]]", undefined, deps())).toEqual({ answer: null });
   });
+  it("a held vault's note whose hub can't be asked now is a link to it: off the tailnet, a room still shows Uni's links (T-476)", async () => {
+    const away = { ...deps(), find: async () => { throw new TypeError("Load failed"); } };
+    expect(await resolveLink(`kitchen:${ID}`, undefined, away)).toEqual({ answer: "note", href: `/v/kitchen/n/${ID}` });
+    expect(await resolveLink(`https://hub.example/vault/kitchen/view/${ID}`, undefined, away)).toEqual({ answer: "note", href: `/v/kitchen/n/${ID}` });
+    // still no guess: a vault name not held is nothing, and a wikilink (a path, which can be guessed) is nothing too
+    expect(await resolveLink(`uni:${ID}`, undefined, away)).toEqual({ answer: null });
+    expect(await resolveLink("[[Recipes/Tomato toast]]", undefined, away)).toEqual({ answer: null });
+    // the hub's own answer that the note isn't there stays nothing
+    expect(await resolveLink(`kitchen:${OTHER}`, undefined, deps())).toEqual({ answer: null });
+  });
+  it("of two vaults by that name, the one that has it wins over one that can't be asked", async () => {
+    const two = { ...deps(), vaults: () => [rec("kitchen", "https://old.example", { key: "old" }), kitchen],
+      find: async (r: VaultRecord, p: string) => { if (r.key === "old") throw new TypeError("Load failed"); const n = notes[r.vault]?.[p]; return n ? { id: n.id, path: n.path, code: false } : null; } };
+    expect(await resolveLink(`kitchen:${ID}`, undefined, two)).toEqual({ answer: "note", href: `/v/kitchen/n/${ID}` });
+    expect(await resolveLink(`kitchen:${OTHER}`, undefined, two)).toEqual({ answer: "note", href: `/v/old/n/${OTHER}` });
+  });
   it("anything else is nothing", async () => {
     for (const raw of ["https://example.com/", "javascript:alert(1)", "/v/kitchen/n/x", ""]) expect(await resolveLink(raw, undefined, deps())).toEqual({ answer: null });
   });
