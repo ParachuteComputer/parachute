@@ -93,8 +93,10 @@ function RecorderSheet({ name, max, away: left, keep, done }: { name: string; ma
     const r = result.current;
     if (!r || over.current) return;
     over.current = true;
+    const bytes = await r.blob.arrayBuffer();
+    // answered only now: the screen going while the bytes are read still holds the recording
     answered.current = true;
-    done({ bytes: await r.blob.arrayBuffer(), type: r.type, duration: Math.round(r.duration * 10) / 10 });
+    done({ bytes, type: r.type, duration: Math.round(r.duration * 10) / 10 });
   };
   const stop = (reason: Stopped | null) => {
     const r = rec.current;
