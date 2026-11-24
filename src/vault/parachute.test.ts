@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from "vitest";
-import { canList, CLOUD, describe, HOME_RECORDS_BODY, homeFrom, listFrom, oneAddress, parseHub, reachesEvery, rpcAnswer, covers, levelIn, scopeFor, vaultUrlFrom } from "./parachute";
+import { canCreate, canList, CLOUD, createWithToken, describe, HOME_RECORDS_BODY, homeFrom, listFrom, oneAddress, parseHub, reachesEvery, rpcAnswer, covers, levelIn, scopeFor, vaultUrlFrom } from "./parachute";
 import { MAX_VAULTS } from "./address";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -143,5 +143,28 @@ group("homeFrom", () => {
   it("asks in the same words the key signs (src-tauri/src/door.rs)", () => {
     const rust = readFileSync(join(process.cwd(), "src-tauri", "src", "door.rs"), "utf8");
     expect(rust).toContain(`pub const HOME_RECORDS_BODY: &str = r#"${HOME_RECORDS_BODY}"#;`);
+  });
+});
+
+// T-476 journey: a person new to Cloud has no vault; the sign-in's account token makes the first one (create-vault).
+group("the first vault, made with the sign-in's token", () => {
+  const door = "https://my.parachute.computer/account/mcp";
+  it("is allowed only by Cloud's own grant to make vaults", () => {
+    expect(canCreate("account:u1:vaults:*:write account:u1:vault-create")).toBe(true);
+    for (const s of ["account:u1:vaults:*:write", "account:vaults", "vault:notes:write", "account:u1:vault-create-x", undefined]) expect(canCreate(s), String(s)).toBe(false);
+  });
+  it("gives the name the hub made", async () => {
+    const made = { jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify({ name: "practice", vault_id: "v1", url: "https://my.parachute.computer/vault/practice" }, null, 2) }] } };
+    expect(await createWithToken(door, "t", "practice", answering(200, made))).toBe("practice");
+  });
+  it("says the hub's own words when it refuses, as an error the screen shows", async () => {
+    const taken = { jsonrpc: "2.0", id: 1, error: { code: -32602, message: "That vault name is already taken.", data: { error_type: "vault_taken" } } };
+    await expect(createWithToken(door, "t", "practice", answering(200, taken))).rejects.toThrow("That vault name is already taken.");
+    const inBand = { jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "Error: The vault limit is reached." }], isError: true } };
+    await expect(createWithToken(door, "t", "x1", answering(200, inBand))).rejects.toThrow("The vault limit is reached.");
+    await expect(createWithToken(door, "t", "x1", answering(401, "no"))).rejects.toThrow("(401)");
+    // an answer naming something that can't be a vault is never taken as the new home
+    const odd = { jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify({ name: "../evil" }) }] } };
+    await expect(createWithToken(door, "t", "x1", answering(200, odd))).rejects.toThrow(/couldn't be read/);
   });
 });
