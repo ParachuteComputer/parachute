@@ -47,7 +47,8 @@ applet still opens, and reaches no service; its settings page says why):
   building and tests: the card says "on this device"; a hub on this device is caught by the probe below like any other). No user,
   password, query or fragment; no raw `.`/`..` or encoded `.`, `/`, `\`, `%` in the path. Normalised (lower-case host,
   trailing dot dropped, default port dropped, IDN as punycode) before it is shown, keyed or used.
-- **Never a Parachute hub** (see "Hubs are not services" below).
+- **Never a Parachute hub** (see "Hubs are not services" below), and never Techne: its AppView is reached only through
+  `fields.techne`, one capability at a time ([TECHNE.md](TECHNE.md)).
 - `publish`: the kinds the applet may have signed there, at most 16, each once. The manifest is the declaration: the
   shell signs any kind its service lists and no other, and the card names each one. Six have words, and some rules of
   their own:

@@ -111,6 +111,15 @@ and the unlock, by default; docs/design/KEYRING.md "Joining a network"). What an
 unlock, the passcode) is the person's choice in Settings → Security, never the applet's; when it is the passcode, the
 app asks it on its own sheet.
 
+### As you on Techne (`fields.techne`)
+
+`"techne": { "at": "https://techne.computer/", "can": ["read", "post"] }` lets the applet act on Techne as the
+person, with their key, one permission at a time ([design/TECHNE.md](design/TECHNE.md)). `read` is on its card; each
+write (`post`, `follow`) is asked the first time it is used, on the app's own sheet during a tap in the applet, and the
+person's yes is signed for that one thing. Call `techne.me()` for who it acts as, and `techne.call(method, { params,
+input })` for a method in TECHNE.md's table; any other method is refused. Techne's AppView can't be one of its
+`services`. Level 8. A worked one: `applets/techne.tsx`.
+
 ## The code
 
 For `tsx` or `jsx`: one module. Its **default export is a React component** (a function, or what `memo` returns), and
@@ -252,6 +261,7 @@ there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below ar
 | `props()`, `onProps(cb)` | In a component a page embeds: the plain data the page hands it (also its React props), and each change after. Empty in an applet. |
 | `services.fetch(id, path, { method, headers, body, as })` | With `services`: a request to that server, under its url. `as`: `text`, `json` or `bytes`. Resolves `{ status, headers, body }`. |
 | `services.relay(id)` | With `services`: the relay. `.subscribe(filters, onEvents, onEose?)` (returns a function that stops it; one room per subscription on a Buzz relay), `.query(filters)`, `.publish({ kind, content, tags })` (resolves `{ ok, id, message, event }`), `.loadPrivate(prefix)`, `.savePrivate(d, text)`, `.onStatus(cb)`. |
+| `techne.me()`, `techne.call(method, { params, input })` | With `fields.techne` (above): who it acts as on Techne (`{ did, handle }`), and one call there, answered with the method's output. A write it hasn't been given asks the person first. Level 8. |
 | `services.upload(id, bytes, type)`, `services.media(id, sha256, ext)` | With `media`: a file up (the server's descriptor) or down (`{ bytes, type }`, for a `blob:` address an `<img>`, `<audio>` or `<video>` plays). |
 | `services.me()` | Who the app signs as: `{ pubkey }`. |
 | `services.card(id, event)` | With `approvals`: Uni's card in that signed message, as the app checked it: `{ kind, refused, rows: [{ rid, credential, action, class, scope, ttl_s, uses, expires, always_unlock, answer, … }] }`. Never a key. |
