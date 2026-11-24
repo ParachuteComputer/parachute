@@ -1,0 +1,41 @@
+From: Oak Street Co-op <news@oakstreet.example.test>
+To: alice@test.test
+Subject: This week at the co-op
+Date: Fri, 20 Nov 2026 16:00:00 -0700
+Message-ID: <coop-week47@oakstreet.example.test>
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="rel-coop-47"; type="text/html"
+
+--rel-coop-47
+Content-Type: text/html; charset=utf-8
+
+<html><body style="font-family:Helvetica,Arial,sans-serif;">
+<p><img src="cid:logo-coop@oakstreet" alt="Oak Street Co-op" width="48" height="48"></p>
+<h2>This week at the co-op</h2>
+<p>Squash is in. Here is the bin by the door:</p>
+<p><img src="cid:squash-bin@oakstreet" alt="A bin of winter squash" width="120" height="80"></p>
+<p>Members get 10% off through Sunday. <a href="https://oakstreet.example.test/hours">Hours and directions</a>.</p>
+</body></html>
+
+--rel-coop-47
+Content-Type: image/png; name="logo.png"
+Content-ID: <logo-coop@oakstreet>
+Content-Disposition: inline; filename="logo.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAAAQklEQVR4nO3OMQ0AIBAAsVfEgD+8
+44JjaFIBnXX2VyYfCAkJCdUDISEhoXogJCQkVA+EhISE6oGQkJBQPRASEnrsAh/MxWo2iPDkAAAA
+AElFTkSuQmCC
+
+--rel-coop-47
+Content-Type: image/png; name="squash.png"
+Content-ID: <squash-bin@oakstreet>
+Content-Disposition: inline; filename="squash.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAHgAAABQCAIAAABd+SbeAAAAqElEQVR4nO3QAQkAIADAMIMZ0WDG
+soXCHTzA2dhr6kLj+cEngQbdCjToVqBBtwINuhVo0K1Ag24FGnQr0KBbgQbdCjToVqBBtwINuhVo
+0K1Ag24FGnQr0KBbgQbdCjToVqBBtwINuhVo0K1Ag24FGnQr0KBbgQbdCjToVqBBtwINuhVo0K1A
+g24FGnQr0KBbgQbdCjToVqBBtwINuhVo0K1Ag24FGnSrA2csm2cDWnCWAAAAAElFTkSuQmCC
+
+--rel-coop-47--

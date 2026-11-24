@@ -1,0 +1,38 @@
+From: Jordan Lee <jordan@lee.example.test>
+To: alice@test.test
+Subject: Invitation: Compost workday (Sat 5 Dec, 9:00 AM)
+Date: Tue, 24 Nov 2026 07:30:00 -0700
+Message-ID: <cal-req-55@lee.example.test>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="cal-mixed-55"
+
+--cal-mixed-55
+Content-Type: text/plain; charset=utf-8
+
+Jordan Lee has invited you to Compost workday.
+
+When: Saturday 5 December 2026, 9:00 AM to 12:00 PM (Mountain Time)
+Where: Community garden, 30th and Valmont
+
+Bring gloves. Coffee is on me.
+
+--cal-mixed-55
+Content-Type: text/calendar; charset=utf-8; method=REQUEST
+Content-Disposition: attachment; filename="Compost workday.ics"
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Lee//Calendar//EN
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:55-compost@lee.example.test
+DTSTART:20261205T160000Z
+DTEND:20261205T190000Z
+SUMMARY:Compost workday
+LOCATION:Community garden\, 30th and Valmont
+ORGANIZER;CN=Jordan Lee:mailto:jordan@lee.example.test
+ATTENDEE;RSVP=TRUE:mailto:alice@test.test
+END:VEVENT
+END:VCALENDAR
+
+--cal-mixed-55--

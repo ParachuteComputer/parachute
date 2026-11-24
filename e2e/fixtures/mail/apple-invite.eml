@@ -1,0 +1,46 @@
+From: "Apple Invites" <noreply@invites.example-apple.test>
+To: alice@test.test
+Subject: Maya invited you to Garden Supper
+Date: Mon, 23 Nov 2026 18:04:11 -0700
+Message-ID: <invite-7f3a9@invites.example-apple.test>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Garden Supper</title>
+<style type="text/css">
+  body { margin:0; padding:0; background-color:#f5f5f7; font-family:-apple-system, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .card { background:#ffffff; border-radius:18px; }
+  .hero-title { font-size:28px; line-height:34px; font-weight:600; color:#1d1d1f; }
+  .btn a { display:inline-block; padding:12px 28px; border-radius:980px; background:#0071e3; color:#ffffff !important; text-decoration:none; font-weight:600; }
+  @media only screen and (max-width: 480px) { .hero-title { font-size:24px !important; } }
+</style>
+<!--[if mso]><style>.btn a { padding:0 !important; }</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f5f5f7;">
+<div style="display:none;max-height:0;overflow:hidden;">Maya invited you. Saturday, 28 November at 6:00 PM.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f5f5f7">
+  <tr><td align="center" style="padding:24px 12px;">
+    <table role="presentation" class="card" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:18px;">
+      <tr><td align="center" style="padding:32px 24px 8px;">
+        <img src="https://invites.example-apple.test/img/header-garden.jpg" width="512" height="288" alt="A long table set in a garden at dusk" style="display:block;width:100%;max-width:512px;height:auto;border-radius:12px;">
+      </td></tr>
+      <tr><td align="center" class="hero-title" style="padding:16px 24px 4px;font-size:28px;line-height:34px;font-weight:600;color:#1d1d1f;">Garden Supper</td></tr>
+      <tr><td align="center" style="padding:0 24px;font-size:17px;line-height:24px;color:#6e6e73;">Saturday, 28 November · 6:00 PM<br>Maya's place, 14 Elm Court</td></tr>
+      <tr><td align="center" style="padding:20px 24px 8px;font-size:15px;line-height:22px;color:#1d1d1f;">Bring a dish to share if you like. We'll eat outside if the weather holds.</td></tr>
+      <tr><td align="center" class="btn" style="padding:20px 24px 8px;">
+        <a href="https://invites.example-apple.test/rsvp/7f3a9?answer=accept" style="display:inline-block;padding:12px 28px;border-radius:980px;background:#0071e3;color:#ffffff;text-decoration:none;font-weight:600;">Accept Invitation</a>
+      </td></tr>
+      <tr><td align="center" style="padding:4px 24px 28px;font-size:13px;color:#6e6e73;">
+        <a href="https://invites.example-apple.test/rsvp/7f3a9?answer=decline" style="color:#0066cc;">Can't make it</a> &nbsp;·&nbsp; <a href="https://invites.example-apple.test/event/7f3a9" style="color:#0066cc;">View in Apple Invites</a>
+      </td></tr>
+    </table>
+    <p style="font-size:11px;line-height:16px;color:#86868b;padding:16px 24px;">Apple Invites · One Apple Park Way, Cupertino, CA 95014 · <a href="https://invites.example-apple.test/privacy" style="color:#86868b;">Privacy Policy</a></p>
+  </td></tr>
+</table>
+<img src="https://invites.example-apple.test/o/7f3a9.gif" width="1" height="1" alt="" style="display:block;border:0;">
+</body></html>
