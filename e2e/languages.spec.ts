@@ -29,8 +29,13 @@ const day = (d = 0) => { const t = new Date(Date.now() + d * 86_400_000); return
 test("Languages: starter words, today's cards, a review written to the card, a picture and a sound, a word added in IAST", async ({ page }) => {
   const h = hubState();
   const made: string[] = [];
-  // the Languages pack's types, as Add a pack makes them (admin: this core's write can't define a type yet)
-  for (const [name, def] of Object.entries(pack.types)) await api({ ...h, token: mintToken(`vault:${VAULT}:admin`) }, "PUT", `types/${name}`, { kind: "type", fields: def.fields });
+  // the Languages pack's types, as Add a pack makes them (admin: this core's write can't define a type yet). A hub
+  // without types (core 0.8) has no reference fields: the applet works the same, and `from` and `word` aren't links
+  let hasTypes = true;
+  for (const [name, def] of Object.entries(pack.types)) {
+    try { await api({ ...h, token: mintToken(`vault:${VAULT}:admin`) }, "PUT", `types/${name}`, { kind: "type", fields: def.fields }); }
+    catch (e) { if (!/: 404 /.test(String(e))) throw e; hasTypes = false; }
+  }
   // Library's verses, as its import would write them
   for (const v of starter.verses) made.push((await api(h, "POST", "notes", { path: v.path, content: v.body, types: v.types, metadata: v.fields })).id);
   const applet = await record(h, "create", appletRecord("languages"));
@@ -55,8 +60,8 @@ test("Languages: starter words, today's cards, a review written to the card, a p
     const citta = await get("Words/Sanskrit/चित्त");
     expect(citta.metadata).toMatchObject({ language: "sanskrit", translit: "citta", from: "Texts/Yoga Sutras/YS 1.2" });
     expect(citta.metadata).not.toHaveProperty("memory");
-    expect(citta.links?.filter((l) => l.relationship === "from").map((l) => l.targetNote.path)).toEqual(["Texts/Yoga Sutras/YS 1.2"]);
-    expect(citta.links?.filter((l) => l.relationship === "word").map((l) => l.sourceNote.path).sort()).toEqual(["Cards/Sanskrit/चित्त picture-to-word", "Cards/Sanskrit/चित्त script", "Cards/Sanskrit/चित्त word-to-meaning"]);
+    if (hasTypes) expect(citta.links?.filter((l) => l.relationship === "from").map((l) => l.targetNote.path)).toEqual(["Texts/Yoga Sutras/YS 1.2"]);
+    if (hasTypes) expect(citta.links?.filter((l) => l.relationship === "word").map((l) => l.sourceNote.path).sort()).toEqual(["Cards/Sanskrit/चित्त picture-to-word", "Cards/Sanskrit/चित्त script", "Cards/Sanskrit/चित्त word-to-meaning"]);
     await expect(f.getByRole("region", { name: "By language" })).toContainText("Sanskrit");
     await shot(page, "01-today");
 

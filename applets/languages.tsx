@@ -527,16 +527,19 @@ async function readAll(pathPrefix: string, includeBody: boolean): Promise<{ rows
     try {
       page = await vault.queryRecords({ pathPrefix, includeFields: true, includeBody, limit: 50, offset, ...(ordered ? { orderBy: "created_at", sort: "asc" } : {}) });
     } catch (e) {
-      // an older hub can't order by created_at: newest changed first, then
+      // an older hub (core 0.8) can't order by created_at: read as it lists them, and put in order here
       if (offset > 0 || !ordered) throw e;
       ordered = false;
       page = await vault.queryRecords({ pathPrefix, includeFields: true, includeBody, limit: 50, offset });
     }
     all.push(...page);
-    if (page.length < 50) return { rows: all, whole: true };
+    if (page.length < 50) return { rows: ordered ? all : oldestFirst(all), whole: true };
   }
-  return { rows: all, whole: false };
+  return { rows: ordered ? all : oldestFirst(all), whole: false };
 }
+/** Oldest made first (a record with no date last), as the hub's created_at order would give them. */
+const oldestFirst = (rows: AppletRecord[]) => rows.map((r, i) => ({ r, i })).sort((a, b) =>
+  (a.r.createdAt ?? "\uffff").localeCompare(b.r.createdAt ?? "\uffff") || a.i - b.i).map((x) => x.r);
 
 const conflict = (e: unknown) => (e as { status?: number })?.status === 409 || /conflict|already exists/i.test(String((e as Error)?.message ?? e));
 
