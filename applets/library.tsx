@@ -1423,6 +1423,7 @@ export default function Library() {
   // more records than one read reaches (5,000 a folder): said, not hidden
   const [capped, setCapped] = useState(false);
   const summaryAsked = useRef<Set<string>>(new Set());
+  const [summaryFailed, setSummaryFailed] = useState<ReadonlySet<string>>(new Set());
 
   // Cover blob URL cache (keyed by `${bookId}|${coverSrc}`)
   const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
@@ -1521,12 +1522,12 @@ export default function Library() {
             const prev = merged.get(r.id);
             merged.set(r.id, prev ? { ...prev, ...r } : r);
           }
-          // a book not typed `book` (a record at Books/<Title>): its body one at a time, for its cover
+          // a book the read above didn't bring a body for (not typed `book`, or that read failed): a few, for their covers
           const needsCoverBody = [...merged.values()].filter((r) => {
             const clean = stripMd(r.path);
-            if (!clean.startsWith(BOOKS_FOLDER) || hasRecordKind(r, "book")) return false;
+            if (!clean.startsWith(BOOKS_FOLDER)) return false;
             const depth = clean.slice(BOOKS_FOLDER.length).split("/").filter(Boolean).length;
-            return depth === 1 && r.body === undefined && !str(r.fields?.cover);
+            return (depth === 1 || hasRecordKind(r, "book")) && r.body === undefined && !str(r.fields?.cover);
           });
           await Promise.all(needsCoverBody.slice(0, 12).map(async (b) => {
             try {
@@ -1536,6 +1537,7 @@ export default function Library() {
           }));
           setCapped(booksRes.capped || quotesRes.capped);
           summaryAsked.current.clear(); // a refresh reads the summaries again too
+          setSummaryFailed(new Set());
           if (!mounted.current) return;
           setRecords([...merged.values()]);
           setError(null);
@@ -1564,7 +1566,7 @@ export default function Library() {
         const fresh = await vault.getRecord(bookId) as LibraryRecord | null;
         base = fresh?.updatedAt ?? null;
       }
-      if (!base) throw new Error("the hub gave no version of this book to save against");
+      if (!base) throw new Error("this book couldn't be read again to save it; refresh and try again");
       const apply = async (ifUpdatedAt: string) =>
         await vault.updateRecord(bookId, { if_updated_at: ifUpdatedAt, fields: patch }) as LibraryRecord;
 
@@ -1745,8 +1747,8 @@ export default function Library() {
   const bodyById = useMemo(() => new Set((records ?? []).filter((r) => r.body !== undefined).map((r) => r.id)), [records]);
   const bodyByIdRef = useRef(bodyById);
   bodyByIdRef.current = bodyById;
-  const [summaryFailed, setSummaryFailed] = useState<ReadonlySet<string>>(new Set());
-  const ensureSummaryBodies = useCallback(async (ids: readonly string[], folder?: string) => {
+  const ensureSummaryBodies = useCallback(async (ids: readonly string[], folder?: string, again = false) => {
+    if (again) for (const id of ids) summaryAsked.current.delete(id);
     const missing = ids.filter((id) => !summaryAsked.current.has(id) && !bodyByIdRef.current.has(id));
     if (!missing.length) return;
     for (const id of missing) summaryAsked.current.add(id);
@@ -1769,8 +1771,8 @@ export default function Library() {
       }));
     }
     if (!mounted.current) return;
+    // a failed one stays asked: Try again or a refresh asks again, not every change to the library
     const failed = missing.filter((id) => !got.has(id));
-    for (const id of failed) summaryAsked.current.delete(id);
     if (failed.length) setSummaryFailed((prev) => new Set([...prev, ...failed]));
     if (!got.size) return;
     setSummaryBodies((prev) => {
@@ -2196,7 +2198,7 @@ export default function Library() {
                   {rec.body !== undefined
                     ? <Note id={rec.id} body={rec.body} path={rec.path} tags={rec.tags} fields={rec.fields} onLink={handleChapterLink} />
                     : summaryFailed.has(rec.id)
-                      ? <Problem error={null} onRetry={() => void ensureSummaryBodies([rec.id])}>Could not open this summary.</Problem>
+                      ? <Problem error={null} onRetry={() => void ensureSummaryBodies([rec.id], undefined, true)}>Could not open this summary.</Problem>
                       : <Loading>Opening summary…</Loading>}
                 </div>
               );
@@ -2373,7 +2375,7 @@ export default function Library() {
                     {full.body !== undefined
                       ? <Note id={full.id} body={full.body} path={full.path} tags={full.tags} fields={full.fields} onLink={handleChapterLink} />
                       : summaryFailed.has(full.id)
-                        ? <Problem error={null} onRetry={() => void ensureSummaryBodies([full.id])}>Could not open this summary.</Problem>
+                        ? <Problem error={null} onRetry={() => void ensureSummaryBodies([full.id], undefined, true)}>Could not open this summary.</Problem>
                         : <Loading>Opening summary…</Loading>}
                   </div>
                 );
@@ -2441,7 +2443,7 @@ export default function Library() {
                   {rec.body !== undefined
                     ? <Note id={rec.id} body={rec.body} path={rec.path} tags={rec.tags} fields={rec.fields} onLink={handleChapterLink} />
                     : summaryFailed.has(rec.id)
-                      ? <Problem error={null} onRetry={() => void ensureSummaryBodies([rec.id])}>Could not open this summary.</Problem>
+                      ? <Problem error={null} onRetry={() => void ensureSummaryBodies([rec.id], undefined, true)}>Could not open this summary.</Problem>
                       : <Loading>Opening summary…</Loading>}
                 </div>
               );
