@@ -2,38 +2,13 @@
 // app"): one tap on an applet's record button and it records, as the Uni app's microphone does; Send sends. Going to
 // the background stops it and keeps what was recorded; Cancel throws it away and lets the microphone go. Journal's
 // voice entry on the hub alone, with Chromium's fake microphone (docs/design/KEYRING.md "Voice, files, links, storage").
-import { expect, test, type Page } from "@playwright/test";
-import { api, hubState, record, VAULT } from "./hub";
-import { ui } from "./helpers";
+import { expect, test } from "@playwright/test";
+import { api, hubState, record } from "./hub";
 import { appletRecord } from "../applets/record.ts";
 
 test.use({ storageState: "e2e/.signed-in.json", launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] } });
 
-const entries = async () => (await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_metadata=true&limit=100`) as { id: string; metadata?: Record<string, unknown> }[]);
-const voiced = async () => (await entries()).filter((r) => r.metadata?.transcribe_stub === true);
-
-/** Journal, allowed, with the recorder's moments kept: when the recorder started, and every stream the shell opened. */
-async function journal(page: Page) {
-  await page.addInitScript(() => {
-    const w = window as unknown as { __started: number; __streams: MediaStream[] };
-    w.__started = 0; w.__streams = [];
-    if (typeof MediaRecorder !== "undefined") {
-      const start = MediaRecorder.prototype.start;
-      MediaRecorder.prototype.start = function (this: MediaRecorder, ...a: [number?]) { this.addEventListener("start", () => { w.__started = performance.timeOrigin + performance.now(); }, { once: true }); return start.apply(this, a); };
-    }
-    const gum = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
-    if (gum) navigator.mediaDevices.getUserMedia = async (c) => { const s = await gum(c); w.__streams.push(s); return s; };
-  });
-  await page.goto(`/v/${VAULT}?with=vault`);
-  await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
-  await page.getByRole("button", { name: "Allow" }).click();
-  const app = page.frameLocator("iframe.applet-frame");
-  await expect(app.getByRole("heading", { name: "Journal" })).toBeVisible();
-  return app.getByRole("button", { name: "Record a voice entry" });
-}
-const now = (page: Page) => page.evaluate(() => performance.timeOrigin + performance.now());
-const started = (page: Page) => page.evaluate(() => (window as unknown as { __started: number }).__started);
-const micOpen = (page: Page) => page.evaluate(() => (window as unknown as { __streams: MediaStream[] }).__streams.some((s) => s.getTracks().some((t) => t.readyState === "live")));
+import { entries, journal, micOpen, now, started, voiced } from "./voiceHelpers";
 
 let made: string[] = [];
 test.beforeEach(async () => { made = [(await record(hubState(), "create", appletRecord("journal"))).id]; });
@@ -126,41 +101,3 @@ test.describe("on a phone 390 wide", () => {
     await expect.poll(async () => (await voiced()).length, { timeout: 15_000 }).toBe(1);
   });
 });
-
-// Leaving the screen while recording must never throw the voice note away (T-476: the recorder rests beside the applet now,
-// so the top bar's Back, a tab on the bar and the phone's Back are all open to the person while it records). Each way out
-// stops the recording and keeps it: it is where it was on coming back, with Send, and nothing was sent in between.
-const exits: Record<string, { leave: (page: Page) => Promise<unknown>; back: (page: Page) => Promise<unknown> }> = {
-  "the top bar's Back": { leave: (page) => page.getByRole("button", { name: "Back" }).click(), back: (page) => page.goForward() },
-  "a tab on the bar": { leave: (page) => page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: /Settings/ }).click(), back: (page) => page.goBack() },
-  "the phone's Back (popstate)": { leave: (page) => page.goBack(), back: (page) => page.goForward() },
-};
-for (const [how, exit] of Object.entries(exits)) {
-  for (const state of ["while it records", "after it stopped by itself"] as const) {
-    test(`leaving by ${how} ${state} keeps the recording: it is there on coming back, and Send sends it`, async ({ page }) => {
-      const rec = await journal(page);
-      await rec.click();
-      const sheet = page.getByRole("dialog", { name: "Recording for Journal" });
-      await expect(sheet.getByRole("timer")).toContainText("0:01", { timeout: 6000 });
-      if (state === "after it stopped by itself") {
-        // the app went to the background: it stopped and kept it (above); the person is back and leaves without pressing either
-        await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); document.dispatchEvent(new Event("visibilitychange")); });
-        await expect(sheet.getByRole("timer")).toContainText("Recorded");
-        await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true }); document.dispatchEvent(new Event("visibilitychange")); });
-      }
-      await exit.leave(page);
-      await expect(page.locator("iframe.applet-frame")).toBeHidden();
-      // the microphone is let go at once, and nothing was sent by leaving
-      await expect.poll(() => micOpen(page)).toBe(false);
-      await page.waitForTimeout(1200);
-      expect(await voiced()).toHaveLength(0);
-      await exit.back(page);
-      await expect(sheet).toBeVisible();
-      await expect(sheet.getByRole("timer")).toContainText("Recorded");
-      await expect(sheet).toContainText("Your recording is kept");
-      await sheet.getByRole("button", { name: "Send" }).click();
-      await expect(sheet).toBeHidden();
-      await expect.poll(async () => (await voiced()).length, { timeout: 15_000 }).toBe(1);
-    });
-  }
-}
