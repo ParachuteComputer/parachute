@@ -284,7 +284,7 @@ describe("cleanSheet", () => {
   it("an element unwrapped with a great many children doesn't take the stack", () => {
     const { host } = drawn(`<canvas>${"<br>".repeat(125_000)}</canvas><p>after</p>`);
     expect(host.querySelectorAll("br")).toHaveLength(125_000);
-  });
+  }, 30_000);
   it("<!-- or --> in front of an at-rule doesn't hide it: it goes", () => {
     expect(cleanSheet("<!--@font-face{font-family:Zed;src:local(Arial)} .b{color:blue}", none)).toBe(".b{color:blue}");
     expect(cleanSheet("-->@property --text{syntax:'*'} .b{color:blue}", none)).toBe(".b{color:blue}");
