@@ -1,0 +1,83 @@
+From: "Sam Rivera (via Google Calendar)" <calendar-notification@google.example.test>
+Reply-To: sam@rivera.example.test
+To: alice@test.test
+Subject: Invitation: Seed swap planning @ Tue 1 Dec 2026 10am - 11am (MST) (alice@test.test)
+Date: Tue, 24 Nov 2026 08:12:40 -0700
+Message-ID: <calendar-0f9e1c2a@google.example.test>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="000000000000mixedA1"
+
+--000000000000mixedA1
+Content-Type: multipart/alternative; boundary="000000000000altA1"
+
+--000000000000altA1
+Content-Type: text/plain; charset="UTF-8"; format=flowed; delsp=yes
+Content-Transfer-Encoding: 7bit
+
+You have been invited to the following event.
+
+Title: Seed swap planning
+When: Tuesday 1 Dec 2026 10am - 11am (MST)
+Joining info: Join with Google Meet
+https://meet.example.test/abc-defg-hij
+
+Calendar: alice@test.test
+Who:
+     * sam@rivera.example.test - organizer
+     * alice@test.test
+
+Going (alice@test.test)?   Yes - https://calendar.example.test/calendar/event?action=RESPOND&eid=X1&rst=1   No - https://calendar.example.test/calendar/event?action=RESPOND&eid=X1&rst=2   Maybe - https://calendar.example.test/calendar/event?action=RESPOND&eid=X1&rst=3
+
+--000000000000altA1
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<span itemscope itemtype=3D"http://schema.org/InformAction"><span style=3D"d=
+isplay:none" itemprop=3D"about" itemscope itemtype=3D"http://schema.org/Pers=
+on"><meta itemprop=3D"description" content=3D"Invitation from Google Calendar=
+"/></span></span><div style=3D""><table cellspacing=3D"0" cellpadding=3D"8" b=
+order=3D"0" summary=3D"" style=3D"width:100%;font-family:Arial,Sans-serif;bor=
+der:1px Solid #ccc;border-width:1px 2px 2px 1px;background-color:#fff;"><tr>=
+<td><div style=3D"padding:2px"><h2 style=3D"font-size:14px;color:#222;">Seed =
+swap planning</h2><table cellpadding=3D"0" cellspacing=3D"0" border=3D"0" sty=
+le=3D"font-size:13px;"><tr><td style=3D"padding:0 1em 10px 0;color:#888;">When=
+</td><td style=3D"padding-bottom:10px;">Tuesday 1 Dec 2026 10am =E2=80=93 11am=
+ (MST)</td></tr><tr><td style=3D"padding:0 1em 10px 0;color:#888;">Joining in=
+fo</td><td style=3D"padding-bottom:10px;"><a href=3D"https://meet.example.tes=
+t/abc-defg-hij" style=3D"color:#1a73e8;">Join with Google Meet</a></td></tr><=
+tr><td style=3D"padding:0 1em 10px 0;color:#888;">Who</td><td><div>sam@rivera=
+.example.test <span style=3D"font-size:11px;color:#888;">- organizer</span></=
+div><div>alice@test.test</div></td></tr></table><p style=3D"color:#222;font-s=
+ize:13px;margin:12px 0 4px;">Going (alice@test.test)?&nbsp;&nbsp;<a href=3D"h=
+ttps://calendar.example.test/calendar/event?action=3DRESPOND&amp;eid=3DX1&amp=
+;rst=3D1" style=3D"color:#20c;font-weight:bold;">Yes</a> - <a href=3D"https:/=
+/calendar.example.test/calendar/event?action=3DRESPOND&amp;eid=3DX1&amp;rst=
+=3D2" style=3D"color:#20c;font-weight:bold;">No</a> - <a href=3D"https://cale=
+ndar.example.test/calendar/event?action=3DRESPOND&amp;eid=3DX1&amp;rst=3D3" s=
+tyle=3D"color:#20c;font-weight:bold;">Maybe</a>&nbsp;&nbsp;&nbsp;&nbsp;<a hre=
+f=3D"https://calendar.example.test/calendar/event?action=3DVIEW&amp;eid=3DX1"=
+ style=3D"color:#20c;">more options =C2=BB</a></p></div></td></tr></table><p =
+style=3D"color:#888;font-size:11px;">Invitation from Google Calendar</p></div>
+
+--000000000000altA1--
+
+--000000000000mixedA1
+Content-Type: text/calendar; charset="UTF-8"; method=REQUEST; name="invite.ics"
+Content-Disposition: attachment; filename="invite.ics"
+Content-Transfer-Encoding: 7bit
+
+BEGIN:VCALENDAR
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+DTSTART:20261201T170000Z
+DTEND:20261201T180000Z
+UID:X1@google.example.test
+ORGANIZER;CN=Sam Rivera:mailto:sam@rivera.example.test
+ATTENDEE;CN=alice@test.test;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:alice@test.test
+SUMMARY:Seed swap planning
+END:VEVENT
+END:VCALENDAR
+
+--000000000000mixedA1--

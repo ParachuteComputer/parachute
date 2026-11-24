@@ -34,7 +34,7 @@ jobs:
     # a cold relay build (no cached image) takes up to 25 minutes of this
     timeout-minutes: 75
     env:
-      SPECS: e2e/approvals.spec.ts e2e/area.spec.ts e2e/devices.spec.ts e2e/mail.spec.ts e2e/matrix.spec.ts e2e/roomlinks.spec.ts e2e/rooms.spec.ts e2e/today.spec.ts
+      SPECS: e2e/approvals.spec.ts e2e/area.spec.ts e2e/devices.spec.ts e2e/mail.spec.ts e2e/mailread.spec.ts e2e/matrix.spec.ts e2e/roomlinks.spec.ts e2e/rooms.spec.ts e2e/today.spec.ts
       SERVICES_DIR: ${{ github.workspace }}/../services
     steps:
       # the daily run fires from the default branch (main) but tests next, where the work lands

@@ -1,0 +1,69 @@
+From: "Fern & Fig Nursery" <receipts+acct_1Q9@stripe.example.test>
+To: alice@test.test
+Subject: Your receipt from Fern & Fig Nursery #2291-4471
+Date: Sun, 22 Nov 2026 11:40:02 +0000
+Message-ID: <receipt-2291-4471@stripe.example.test>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="--stripe-alt-77"
+
+----stripe-alt-77
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Fern & Fig Nursery
+
+Receipt #2291-4471
+Amount paid: $42.50
+Date paid: November 22, 2026
+Payment method: Visa - 4242
+
+Summary
+Basil seedlings x 6     $18.00
+Terracotta pot (large)  $24.50
+Amount paid             $42.50
+
+Questions? Visit https://fernandfig.example.test/help
+
+----stripe-alt-77
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"><head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<style type="text/css">
+body { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+.st-Wrapper { background-color:#f6f9fc; }
+.Content td { font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif; mso-line-height-rule:exactly; }
+@media (max-width:600px) { .st-Width.st-Width--mobile { min-width:100% !important; width:100% !important; } }
+</style>
+</head>
+<body class="st-Wrapper" style="background-color:#f6f9fc;">
+<table class="st-Wrapper" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color:#f6f9fc;"><tbody><tr><td>
+<table class="st-Width st-Width--mobile" align="center" width="600" border="0" cellpadding="0" cellspacing="0" style="min-width:600px;background-color:#ffffff;">
+<tbody>
+<tr><td align="center" style="padding:32px 0 16px;"><img src="https://files.stripe.example.test/links/logo-fernfig.png" width="64" height="64" alt="Fern &amp; Fig" style="border-radius:100%;" /></td></tr>
+<tr><td class="Content" align="center" style="color:#32325d;font-size:24px;line-height:32px;">Receipt from Fern &amp; Fig Nursery</td></tr>
+<tr><td class="Content" align="center" style="color:#8898aa;font-size:15px;padding:4px 0 24px;">Receipt #2291-4471</td></tr>
+<tr><td style="padding:0 48px;">
+  <table width="100%" border="0" cellpadding="0" cellspacing="0" style="font-size:12px;color:#8898aa;text-transform:uppercase;">
+  <tr><td>Amount paid</td><td>Date paid</td><td>Payment method</td></tr>
+  <tr style="color:#525f7f;font-size:15px;text-transform:none;"><td>$42.50</td><td>November 22, 2026</td><td>Visa – 4242</td></tr>
+  </table>
+</td></tr>
+<tr><td style="padding:24px 48px 0;color:#8898aa;font-size:12px;text-transform:uppercase;">Summary</td></tr>
+<tr><td style="padding:8px 48px;">
+  <table width="100%" border="0" cellpadding="8" cellspacing="0" style="background-color:#f6f9fc;border-radius:8px;color:#525f7f;font-size:15px;">
+  <tr><td>Basil seedlings × 6</td><td align="right">$18.00</td></tr>
+  <tr><td>Terracotta pot (large)</td><td align="right">$24.50</td></tr>
+  <tr style="font-weight:bold;"><td>Amount paid</td><td align="right">$42.50</td></tr>
+  </table>
+</td></tr>
+<tr><td class="Content" style="padding:24px 48px;color:#525f7f;font-size:15px;">If you have any questions, visit <a href="https://fernandfig.example.test/help" style="color:#625afa;text-decoration:none;">our help page</a> or reply to this email.</td></tr>
+<tr><td align="center" style="padding:0 48px 32px;"><a href="https://pay.stripe.example.test/receipts/acct_1Q9/rcpt_2291/pdf" style="display:inline-block;background:#635bff;color:#ffffff;border-radius:6px;padding:10px 18px;text-decoration:none;font-weight:600;">Download receipt</a></td></tr>
+</tbody></table>
+<img src="https://stripe.example.test/email/open?e=rcpt_2291" width="1" height="1" border="0" alt="" />
+</td></tr></tbody></table>
+</body></html>
+
+----stripe-alt-77--

@@ -89,5 +89,35 @@ export async function corsProxy(target: string, port: number) {
     res.writeHead(r.status, { "content-type": r.headers.get("content-type") ?? "application/json" }).end(Buffer.from(await r.arrayBuffer()));
   });
   await new Promise<void>((r) => server.listen(port, "127.0.0.1", () => r()));
-  return { url: `http://127.0.0.1:${port}`, close: () => new Promise<void>((r) => server.close(() => r())) };
+  // closed with the browser's kept-alive connections too: close() alone waits for them, past a test's time
+  return { url: `http://127.0.0.1:${port}`, close: () => new Promise<void>((r) => { server.close(() => r()); server.closeAllConnections(); }) };
+}
+
+/** A whole message (its MIME, as a sender's mail program made it) put straight into someone's Inbox on the stack's
+ *  Stalwart (JMAP upload, then Email/import), as if it had come in: the way to have HTML mail, invites and inline
+ *  pictures arrive, which the gateway's send (plain text) can't make. `STALWART` and `MAIL_SECRETS` come from up.sh. */
+export async function importMail(stalwart: string, user: string, password: string, mime: Buffer, keywords: Record<string, boolean> = {}): Promise<string> {
+  const { request } = await import("node:https");
+  const auth = `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}`;
+  // Stalwart's certificate is its own (self-signed), on loopback: checked nowhere, as the gateway doesn't either
+  const call = (path: string, type: string, body: Buffer | string) => new Promise<any>((res, rej) => {
+    const r = request(`${stalwart}${path}`, { method: "POST", rejectUnauthorized: false, headers: { authorization: auth, "content-type": type } }, (resp) => {
+      let t = ""; resp.on("data", (c) => (t += c));
+      resp.on("end", () => { try { if ((resp.statusCode ?? 500) >= 300) throw new Error(`${path} ${resp.statusCode} ${t}`); res(JSON.parse(t)); } catch (e) { rej(e); } });
+    });
+    r.on("error", rej); r.end(body);
+  });
+  const MAIL = "urn:ietf:params:jmap:mail";
+  const using = ["urn:ietf:params:jmap:core", MAIL];
+  const s = await new Promise<any>((res, rej) => {
+    const r = request(`${stalwart}/jmap/session`, { rejectUnauthorized: false, headers: { authorization: auth } }, (resp) => { let t = ""; resp.on("data", (c) => (t += c)); resp.on("end", () => { try { res(JSON.parse(t)); } catch (e) { rej(e); } }); });
+    r.on("error", rej); r.end();
+  });
+  const account = s.primaryAccounts[MAIL] as string;
+  const up = await call(`/jmap/upload/${account}/`, "message/rfc822", mime);
+  const [[, boxes]] = (await call("/jmap/", "application/json", JSON.stringify({ using, methodCalls: [["Mailbox/query", { accountId: account, filter: { role: "inbox" } }, "m"]] }))).methodResponses;
+  const out = await call("/jmap/", "application/json", JSON.stringify({ using, methodCalls: [["Email/import", { accountId: account, emails: { m: { blobId: up.blobId, mailboxIds: { [boxes.ids[0]]: true }, keywords, receivedAt: new Date().toISOString().replace(/\.\d+Z$/, "Z") } } }, "i"]] }));
+  const made = out.methodResponses[0][1].created?.m;
+  if (!made) throw new Error(`Email/import: ${JSON.stringify(out.methodResponses[0][1])}`);
+  return made.id as string;
 }

@@ -98,6 +98,11 @@ describe("the face keeps every stressed line's facts", () => {
     expect(face.lines.map(faceText)).toContain("Opens web addresses, notes and applets: what it reads could leave that way.");
     expect(faceOf({ ...g, app: ["open"] }, folder, trusted).also).toEqual(["the microphone when you press record", "takes you to notes and applets you tap"]);
   });
+  it("an applet with pictures says on its face that it reaches the web, and what could leave (final review, T-476)", () => {
+    const { g, folder } = grantFor("rooms");
+    const face = faceOf({ ...g, app: ["pictures"], services: [] }, folder, trusted);
+    expect(face.lines.filter((l) => l.risky).map(faceText)).toContain("Loads pictures from the web without a tap: the sites see when, and from where, and what it reads could leave in a picture's address.");
+  });
 });
 
 describe("why it asks again", () => {

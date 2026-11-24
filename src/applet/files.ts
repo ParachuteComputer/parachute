@@ -28,6 +28,47 @@ export function linkOk(url: unknown): url is string {
   } catch { return false; }
 }
 
+/** A web picture it may have the shell fetch (`pictures`): 10 MB at most, and at most this many a minute. */
+export const PICTURE_MAX = 10 * 1024 * 1024;
+export const PICTURES_A_MINUTE = 120;
+/** At most this many asked of the shell at once. */
+export const PICTURES_AT_ONCE = 6;
+/** A name that is this device's, the local network's or the tailnet's (src-tauri/src/pictures.rs `local_name`). */
+const LOCAL_NAME = /(?:^|\.)(?:localhost|local|internal|lan|home\.arpa|intranet|corp|ts\.net)\.?$/i;
+/** An address written out that isn't on the public internet: loopback, private, link-local, shared (100.64/10, the
+ *  tailnet's), multicast, reserved; IPv6 loopback, unique-local, link-local, IPv4-mapped (pictures.rs `global`, which
+ *  also checks each name's addresses when it resolves them). */
+function localAddress(host: string): boolean {
+  const h = host.replace(/^\[|\]$/g, "").toLowerCase();
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b < 128) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b < 32) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) || (a === 192 && b === 0);
+  }
+  // unspecified, loopback, unique-local, link- and site-local, IPv4-mapped or -compatible, NAT64, multicast
+  if (h.includes(":")) return h === "::" || h === "::1" || /^f[cd]/.test(h) || /^fe[89a-f]/.test(h) || /^::(?:ffff:)?[0-9a-f.:]*$/.test(h) || /^64:ff9b:/.test(h) || /^ff/.test(h);
+  return false;
+}
+/** A web picture's address the shell may fetch for it: http or https, nothing hidden or spaced, no user or password,
+ *  a public name (one with a dot, not a local or tailnet one) or a public address written out. */
+export function pictureUrlOk(url: unknown): url is string {
+  if (typeof url !== "string" || !/^https?:\/\//i.test(url) || !linkOk(url)) return false;
+  try {
+    const u = new URL(url);
+    if (u.username || u.password) return false;
+    const host = u.hostname;
+    return !!host && host.includes(".") && !LOCAL_NAME.test(host) && !localAddress(host);
+  } catch { return false; }
+}
+/** What a picture's first bytes say it is: PNG, JPEG, GIF or WebP (never SVG: it is a document), or null. */
+export function pictureType(b: Uint8Array): string | null {
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 && b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a) return "image/png";
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length >= 6 && String.fromCharCode(...b.subarray(0, 6)).match(/^GIF8[79]a$/)) return "image/gif";
+  if (b.length >= 12 && String.fromCharCode(...b.subarray(0, 4)) === "RIFF" && String.fromCharCode(...b.subarray(8, 12)) === "WEBP") return "image/webp";
+  return null;
+}
+
 /** A name reduced to a bare file name: no folder, no separator, no leading dot, nothing a file system refuses, at most
  *  100 characters (the extension kept). Never empty. */
 export function bareName(raw: string): string {

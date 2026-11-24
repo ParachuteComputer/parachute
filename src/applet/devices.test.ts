@@ -108,6 +108,7 @@ const appDeps = (log: string[] = []): AppDeps => ({
   openLink: async (url) => { log.push(`link ${url}`); return true; }, copy: async (text) => { log.push(`copy ${text}`); return true; },
   save: async (name, bytes, type) => { log.push(`save ${name} ${bytes.byteLength} ${type}`); return name; },
   pick: async (accept, multiple) => { log.push(`pick ${accept.join(",")} ${multiple}`); return []; },
+  picture: async (url) => { log.push(`picture ${url}`); return { type: "image/png", bytes: new ArrayBuffer(8) }; },
 });
 
 describe("the calls, refused without their word", () => {
@@ -151,6 +152,33 @@ describe("the calls, refused without their word", () => {
     expect(saves.filter((c) => c === "rate_limited")).toHaveLength(2);
     t += 1100;
     expect(await code(r.call("app", "save", { name: "f4.txt", bytes: new ArrayBuffer(1), type: "text/plain" }, {}))).toBe("ok");
+  });
+  it("app: a web picture is pictures': not_granted without it (links isn't enough); only a public web address; 120 a minute", async () => {
+    expect(await code(createRouter([createAppModule(["links", "open"], appDeps())]).call("app", "picture", { url: "https://cdn.example.org/a.png" }, {}))).toBe("not_granted");
+    let t = 1_000_000;
+    const log: string[] = [];
+    const r = createRouter([createAppModule(["pictures"], appDeps(log), () => t)]);
+    expect(await r.call("app", "picture", { url: "https://cdn.example.org/a.png" }, {})).toMatchObject({ type: "image/png" });
+    for (const url of ["http://127.0.0.1/a.png", "http://localhost/a.png", "http://10.1.2.3/a.png", "http://192.168.0.9/x", "http://172.20.0.1/x", "http://169.254.169.254/latest/meta-data", "http://100.88.1.2/x",
+      "https://uni.tail1234.ts.net/api/x.png", "https://nas.local/x.png", "https://box.internal/x", "http://[::1]/x", "http://[fd12::1]/x", "http://[::ffff:7f00:1]/x", "https://intranet/x.png",
+      "mailto:a@b.org", "javascript:alert(1)", "data:image/png;base64,AAAA", "blob:https://x/1", "https://user:pw@cdn.example.org/a.png", "ftp://cdn.example.org/a.png", "http://[fec0::1]/x", "http://[64:ff9b:1::a00:1]/x", "http://[::7f00:1]/x", "http://2130706433/x", "http://0x7f.1/x"])
+      expect(await code(r.call("app", "picture", { url }, {})), url).toBe("bad_params");
+    expect(await code(r.call("app", "picture", { url: "https://cdn.example.org/a.png", extra: 1 }, {}))).toBe("bad_params");
+    for (let i = 0; i < 119; i++) await r.call("app", "picture", { url: `https://cdn.example.org/${i}.png` }, {});
+    expect(await code(r.call("app", "picture", { url: "https://cdn.example.org/over.png" }, {}))).toBe("rate_limited");
+    t += 60_001;
+    expect(await code(r.call("app", "picture", { url: "https://cdn.example.org/later.png" }, {}))).toBe("ok");
+    expect(log.filter((l) => l.startsWith("picture "))).toHaveLength(121);
+  });
+  it("app: at most 6 web pictures asked at once", async () => {
+    const waits: (() => void)[] = [];
+    const deps = { ...appDeps(), picture: () => new Promise<{ type: string; bytes: ArrayBuffer }>((res) => waits.push(() => res({ type: "image/png", bytes: new ArrayBuffer(8) }))) };
+    const r = createRouter([createAppModule(["pictures"], deps)]);
+    const calls = Array.from({ length: 7 }, (_, i) => code(r.call("app", "picture", { url: `https://cdn.example.org/${i}.png` }, {})));
+    await new Promise((res) => setTimeout(res, 0));
+    expect(await calls[6]).toBe("rate_limited");
+    waits.forEach((w) => w());
+    expect(await Promise.all(calls.slice(0, 6))).toEqual(Array(6).fill("ok"));
   });
   it("app: note links (links, follow, address) are open's: not_granted without it, and read strictly", async () => {
     const none = createRouter([createAppModule(["links"], appDeps())]);

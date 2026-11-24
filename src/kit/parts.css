@@ -305,3 +305,16 @@ select.pa-finput { appearance: auto; }
 /* the hour's sky at the page's head, under its title, fading into the paper */
 :root:has(.pa-page):not([data-sized]) body { background-image: linear-gradient(to bottom, var(--sky-top), var(--sky-mid) 90px, var(--bg) 170px); background-size: 100% 170px; background-repeat: no-repeat; }
 }
+
+@layer parachute.parts {
+/* MailBody (parts-mail.tsx): a message's body. The HTML is in a shadow root with CSS of its own; these are the parts
+   around it, and a plain-text body. */
+.pa-mail-text { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-body)/1.55 var(--serif); }
+.pa-mail-pictures { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; color: var(--muted); font-size: var(--fs-small); }
+.pa-mail-note { color: var(--muted); font-size: var(--fs-small); margin: 0 0 8px; }
+.pa-mail-dest { position: sticky; bottom: 0; margin: 6px 0 0; padding: 4px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-field, 8px); font-size: var(--fs-small); color: var(--text); overflow-wrap: anywhere; }
+.pa-mail-dest span { color: var(--muted); }
+.pa-mail-text details.pa-quote { margin: 10px 0 0; white-space: pre-wrap; color: var(--muted); }
+.pa-mail-text details.pa-quote > summary { display: inline-block; cursor: pointer; list-style: none; font: var(--fs-small)/1.6 var(--sans); border: 1px solid var(--line); border-radius: 999px; padding: 0 10px; white-space: normal; }
+.pa-mail-text details.pa-quote > summary::-webkit-details-marker { display: none; }
+}

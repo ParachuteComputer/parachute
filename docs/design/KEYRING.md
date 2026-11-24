@@ -247,6 +247,9 @@ alone are refused. Not room-scoped, said on the card's notes: media on that rela
   transcribes.
 - **Links** (`links`): `app.openLink(url)`: http, https and mailto only, at most one a second, opened in the browser by
   Rust.
+- **Pictures** (`pictures`): `app.picture(url)`: a web picture the shell fetches (Rust in the app: public addresses only,
+  resolved there; 10 MB; PNG, JPEG, GIF or WebP by its first bytes), 120 a minute; no tap needed, so stressed on the
+  card. Mail's MailBody asks it once the person shows a sender's pictures ([MAIL-READING.md](MAIL-READING.md)).
 - **Save** (`save`): `app.save(name, bytes, type)`: Android MediaStore Downloads; desktop the Downloads folder, a free
   name. At most 25 MB.
 - **Attach** (`attach`): `app.pick({accept, multiple})` shows the shell's own file picker; the applet gets the files the
@@ -321,6 +324,7 @@ denial until Android removed the app). While they are off, Settings → Notifica
 | A notification leaks a message | Pushed: no words reach the gateway's push, the push server or the screen ("A message for you in <room>"). Fallback listener: who and the first words, on the lock screen as Android's settings allow. |
 | A push is forged or sent in someone's name | Sealed to the phone's push keys (RFC 8291): one that doesn't open is dropped; the gateway takes a registration only signed by the key it registers. |
 | An applet exfiltrates through a link or a saved file | `links` is stressed on the card; a saved file goes where the person's own files are. |
+| An applet exfiltrates through a web picture's address, or reaches the local network with one | `pictures` is its own word, stressed on the card, 120 a minute; Rust dials only public addresses (each name resolved there, redirects too), never this device, the LAN or the tailnet. |
 
 ## Testing
 

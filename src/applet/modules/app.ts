@@ -12,6 +12,8 @@
 //   app.follow({link, from?, choose?}) (open) open what a note link leads to, during a tap (`choose`: Open with…)
 //   app.address({note})    (open) a note's address in the applet's own vault: the one form a link to a note is written in
 //   app.openLink({url})    (links) an http, https or mailto address in the browser, during a tap, one a second: whether it went
+//   app.picture({url})     (pictures) a web picture, fetched by the shell (never the frame): {type, bytes}; public
+//                          addresses only, 10 MB at most, PNG, JPEG, GIF or WebP, 120 a minute, 6 at once
 //   app.save({name, bytes, type})   (save) a file into Downloads during a tap, its name made bare: {saved: name}
 //   app.pick({accept?, multiple?})  (attach) the shell's own picker, during a tap: [{name, type, bytes}], [] when none
 import { ContractError, ERROR_CODES, hasOnly, plain } from "../contract.ts";
@@ -19,7 +21,7 @@ import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
 import type { Answer } from "../../links/resolve.ts";
 import { LINKS_PER_CALL, MAX_LINK } from "../../links/note.ts";
-import { bareName, FILE_MAX, LINK_GAP_MS, linkOk, mediaType, parseAccept, SAVE_GAP_MS } from "../files.ts";
+import { bareName, FILE_MAX, LINK_GAP_MS, linkOk, mediaType, parseAccept, PICTURES_A_MINUTE, PICTURES_AT_ONCE, pictureUrlOk, SAVE_GAP_MS } from "../files.ts";
 
 /** A note as `recent` gives it: its title, its vault's name, when it changed, and where it opens. No folder, no content. */
 export type RecentNote = { vaultName: string; title: string; updatedAt: string | null; href: string };
@@ -48,6 +50,8 @@ export type AppDeps = {
   follow(link: string, from: string | undefined, choose: boolean): Promise<boolean>;
   /** A note's address in the applet's own vault (its id only is checked: the address is made, not read). */
   address(note: string): string | null;
+  /** A web picture's bytes and type (src/shell/device.ts `pictureOut`), checked as a picture. */
+  picture(url: string): Promise<{ type: string; bytes: ArrayBuffer }>;
   /** Save it into Downloads (`name` already bare): the name it was saved as. Throws `notTapped()` without a tap. */
   save(name: string, bytes: ArrayBuffer, type: string): Promise<string>;
   /** The shell's own picker over the applet: what the person picked ([] for none). Throws `notTapped()` without a tap. */
@@ -83,6 +87,8 @@ export function appHref(href: string): boolean {
 export function createAppModule(allowed: readonly AppWord[], deps: AppDeps, now: () => number = Date.now): UniModule {
   const need = (w: AppWord) => { if (!allowed.includes(w)) throw new ContractError(ERROR_CODES.notGranted); };
   let lastLink = -Infinity, lastSave = -Infinity;
+  const pictured: number[] = [];
+  let picturing = 0;
   return {
     namespace: "app",
     methods: {
@@ -151,6 +157,20 @@ export function createAppModule(allowed: readonly AppWord[], deps: AppDeps, now:
           const went = await deps.openLink(url).catch((e: unknown) => { back(); throw e; });
           if (!went) back();
           return went;
+        },
+      },
+      picture: {
+        cap: null,
+        validate: (p) => { need("pictures"); return plain(p) && hasOnly(p, ["url"]) && pictureUrlOk(p.url) ? { ok: true, value: p.url } : { ok: false }; },
+        run: async (url: string) => {
+          // a mail's pictures come in a burst; this many a minute, so an applet can't use it as a pipe out
+          const t = now();
+          while (pictured.length && t - pictured[0] >= 60_000) pictured.shift();
+          if (pictured.length >= PICTURES_A_MINUTE) throw new ContractError(ERROR_CODES.rateLimited, "pictures: too many a minute");
+          if (picturing >= PICTURES_AT_ONCE) throw new ContractError(ERROR_CODES.rateLimited, "pictures: too many at once");
+          pictured.push(t);
+          picturing++;
+          try { return await deps.picture(url); } finally { picturing--; }
         },
       },
       save: {

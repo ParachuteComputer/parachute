@@ -26,6 +26,7 @@
 //   uni.app.follow(link, {from, choose}) → (open) open what a note link leads to, during a tap: whether it went
 //   uni.app.address(noteId)          → (open) the note's address in the applet's own vault: how a link to it is written
 //   uni.app.openLink(url)            → (links) an http/https/mailto address in the browser, during a tap: whether it went
+//   uni.app.picture(url)             → (pictures) a web picture the shell fetched: {type, bytes} (the kit's MailBody)
 //   uni.app.save(name, bytes, type)  → (save) a file into Downloads, during a tap: {saved: name}
 //   uni.app.pick({accept, multiple}) → (attach) the shell's own picker, during a tap: [{name, type, bytes}], [] for none
 //                                      or when the shell makes the session again
@@ -487,6 +488,7 @@ export const FRAME_KIT = String.raw`(function () {
       },
       address: function (note) { return call("app", "address", { note: note }); },
       openLink: function (url) { return call("app", "openLink", { url: url }); },
+      picture: function (url) { return call("app", "picture", { url: url }); },
       save: function (name, bytes, type) {
         var b = buf(bytes);
         if (!b) return Promise.reject(new TypeError("save takes bytes (an ArrayBuffer)"));
