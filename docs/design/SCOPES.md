@@ -57,7 +57,8 @@ The hub's own pages, as they read on core 0.9 (`spike/`, the throwaway hubs):
   holds the person's settings (lean rows, no content), then revokes it. With a names-only scope that second call is
   refused, and the pick offers the first by name.
 
-Parachute Cloud's pages, as they read on 2026-11-18 (the test account, `walk/cloud-web` in the worktree):
+Parachute Cloud's pages, as they read on 2026-11-18 (the test account, `walk/cloud-web` in the worktree; since
+2026-11-23 the app's name there says its device, "Vault app on Android" and so on, oauth.ts `cloudClientName`):
 
 - Home: *Vault app wants to read notes in uni-test-simple. · Read the whole vault uni-test-simple: every note, tag and
   attachment, and its settings*, Deny / Allow, the raw scope behind *Technical details*. Plain and specific: this is

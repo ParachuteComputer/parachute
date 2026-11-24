@@ -6,7 +6,7 @@
 //   open    one vault at one level (read, or read and write): the home at sign-in (read), a vault the person opens
 //           (read), what an applet they allow needs (its vault, read or write), or a change they make (write). Each
 //           vault keeps one token, at the most any of those needs; asking again for more replaces it.
-// The app registers itself on each hub as "Parachute" (on Parachute Cloud, which keeps that name, CLOUD_CLIENT_NAME); the hub keeps a new registration pending until its owner
+// The app registers itself on each hub as "Parachute" (on Parachute Cloud, which keeps that name, cloudClientName()); the hub keeps a new registration pending until its owner
 // approves it once (the hub's own approve step). In a browser the redirect comes back to the page's own origin,
 // /oauth/callback; in the shell, to a loopback address the shell catches (SHELL_RETURN below).
 
@@ -21,6 +21,17 @@ export const CLIENT_NAME = "Parachute";
 /** Parachute Cloud refuses a name like "Parachute" from an app whose return address isn't one of Cloud's own (its guard
  *  against look-alikes, 2026-11-18): there the app registers under this, which its consent page shows. */
 export const CLOUD_CLIENT_NAME = "Vault app";
+/** The name the app registers under on Parachute Cloud, with the kind of device it runs on. Cloud takes a sign-in from an
+ *  app with the same name and return address as that app reconnecting, and by default disconnects its earlier sign-in
+ *  (made for claude.ai, which registers anew each time). On a device every copy of the app returns to the same loopback
+ *  address (SHELL_RETURN), so under one name a sign-in on the Mac signed the phone out (T-476 journey walk). The device's
+ *  kind tells them apart, and reads plainly on Cloud's pages; signing in again on the same device still replaces its
+ *  own earlier sign-in. */
+export function cloudClientName(ua: string = typeof navigator === "undefined" ? "" : navigator.userAgent): string {
+  const on = /Android/i.test(ua) ? "Android" : /iPad/i.test(ua) ? "iPad" : /iPhone/i.test(ua) ? "iPhone" : /Macintosh|Mac OS X/i.test(ua) ? "a Mac"
+    : /Windows/i.test(ua) ? "Windows" : /Linux|X11/i.test(ua) ? "Linux" : null;
+  return on ? `${CLOUD_CLIENT_NAME} on ${on}` : CLOUD_CLIENT_NAME;
+}
 const PENDING_KEY = "parachute.oauth.pending.v1";
 const CLIENTS_KEY = "parachute.oauth.clients.v1";
 /** A flow older than this is stale: its code verifier is dropped. */
@@ -85,7 +96,7 @@ function refuseReserved(issuer: string) {
 }
 
 /** In the shell, the loopback address the shell catches (src-tauri/src/lib.rs SIGNIN_RETURN): a core hub keeps the
- *  name "Parachute" for redirects only this device can receive (Parachute Cloud doesn't: CLOUD_CLIENT_NAME). In a
+ *  name "Parachute" for redirects only this device can receive (Parachute Cloud doesn't: cloudClientName()). In a
  *  browser, this page's own origin. */
 export const SHELL_RETURN = "http://127.0.0.1:47219/oauth/callback";
 export const inShell = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -106,14 +117,24 @@ function readJson<T>(key: string): T | null {
   try { return JSON.parse(localStorage.getItem(key) ?? "null") as T | null; } catch { return null; }
 }
 
-function cachedClient(issuer: string, redirect: string): string | null {
+/** A registration is kept per hub and return address, and on Parachute Cloud per name too (`as`): a device that
+ *  registered there as plain "Vault app" registers once more under its device's name (cloudClientName). */
+const clientKey = (issuer: string, redirect: string, as?: string) => (as ? `${issuer} ${redirect} ${as}` : `${issuer} ${redirect}`);
+function cachedClient(issuer: string, redirect: string, as?: string): string | null {
   const all = readJson<Record<string, string>>(CLIENTS_KEY) ?? {};
-  return typeof all[`${issuer} ${redirect}`] === "string" ? all[`${issuer} ${redirect}`] : null;
+  const k = clientKey(issuer, redirect, as);
+  return typeof all[k] === "string" ? all[k] : null;
 }
-function cacheClient(issuer: string, redirect: string, clientId: string) {
+function cacheClient(issuer: string, redirect: string, clientId: string, as?: string) {
   const all = readJson<Record<string, string>>(CLIENTS_KEY) ?? {};
-  all[`${issuer} ${redirect}`] = clientId;
+  all[clientKey(issuer, redirect, as)] = clientId;
   try { localStorage.setItem(CLIENTS_KEY, JSON.stringify(all)); } catch { /* registers again next time */ }
+}
+function dropClient(issuer: string, redirect: string) {
+  const all = readJson<Record<string, string>>(CLIENTS_KEY) ?? {};
+  if (!(clientKey(issuer, redirect) in all)) return;
+  delete all[clientKey(issuer, redirect)];
+  try { localStorage.setItem(CLIENTS_KEY, JSON.stringify(all)); } catch { /* nothing to do */ }
 }
 /** Forget this app's registration on a hub (the hub refused it as unknown). */
 export function forgetClient(issuer: string) {
@@ -151,10 +172,13 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   // told apart (an authorization server mix-up); and not where the hub refused it before
   const iss = (meta as { authorization_response_iss_parameter_supported?: unknown }).authorization_response_iss_parameter_supported === true;
   const reserved = !!parachute.appClientId && redirect === SHELL_RETURN && iss && !reservedRefused(parachute.issuer);
-  let clientId = reserved ? parachute.appClientId! : cachedClient(parachute.issuer, redirect);
+  const as = parachute.door === "cloud" ? cloudClientName() : undefined;
+  let clientId = reserved ? parachute.appClientId! : cachedClient(parachute.issuer, redirect, as);
   if (!clientId) {
-    clientId = (await registerClient(meta.registration_endpoint, { clientName: parachute.door === "cloud" ? CLOUD_CLIENT_NAME : CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
-    cacheClient(parachute.issuer, redirect, clientId);
+    clientId = (await registerClient(meta.registration_endpoint, { clientName: as ?? CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
+    cacheClient(parachute.issuer, redirect, clientId, as);
+    // the registration an earlier build kept under the plain name goes: it is never used again
+    if (as) dropClient(parachute.issuer, redirect);
   }
   const codeVerifier = generateCodeVerifier();
   const state = generateState();

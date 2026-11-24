@@ -35,7 +35,7 @@ export function parseHub(input: string): HubParse {
  *  account on another host of its own domain (cloud.parachute.computer → my.parachute.computer). */
 export type Parachute = { hub: string; issuer: string; accountMcp: string; vaultTemplate: string;
   /** "cloud": the hub says it is Parachute Cloud (its descriptor's `door`), which keeps the name "Parachute" for its own
-   *  pages: the app registers there under another (oauth.ts CLOUD_CLIENT_NAME) */
+   *  pages: the app registers there under another (oauth.ts cloudClientName: "Vault app on Android", "on a Mac"…) */
   door?: "cloud";
   /** The id the hub reserves for the Parachute app (its descriptor's `app_client_id`, Parachute Cloud's `parachute-app`):
    *  the app on a device signs in under it, named Parachute, instead of registering itself (oauth.ts). */
