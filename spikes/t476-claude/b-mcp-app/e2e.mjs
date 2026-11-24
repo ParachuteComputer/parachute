@@ -20,6 +20,7 @@ if (strict) {
   // a probe the view's own page runs first (test only): can it eval? (Playwright's evaluate is exempt from CSP, so ask the page)
   const PROBE = `<script>try{(0,eval)("1");window.__evalProbe="allowed"}catch(e){window.__evalProbe="refused"}</script>`;
   await page.route(/\/mcp$/, async (route) => {
+    if (route.request().method() !== "POST") return route.continue();   // the host's SSE stream: leave it alone
     const r = await route.fetch(); const t = await r.text();
     if (!t.includes('"ui://parachute/applet-host"') || !t.includes("mcp-app")) return route.fulfill({ response: r, body: t });
     const j = JSON.parse(t); for (const c of j.result?.contents ?? []) if (c.text) c.text = c.text.replace("<head>", `<head>${PROBE}`);
@@ -69,4 +70,5 @@ await page.screenshot({ path: `${shots}/b4-library.png` });
 console.log("view calls through the host:", calls.length, JSON.stringify(calls.reduce((a, c) => ((a[c] = (a[c] ?? 0) + 1), a), {})));
 // put Maya back for the next run
 await rpc("tools/call", { name: "update-record", arguments: { id: "People/Maya Ortiz", fields: { favorite: null }, force: true } });
+await page.unrouteAll({ behavior: "ignoreErrors" });
 await browser.close();
