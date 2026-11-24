@@ -45,6 +45,7 @@ Content-Type: text/html; charset=utf-8
 <a href="tel:+15555550100">Call us</a> <a href="/account">Your account</a> <a href="cid:part1">A part</a>
 <span href="https://hostile.example.test/span">a span with an href</span>
 <span src="https://hostile.example.test/spansrc">a span with a src</span>
+<div popover id="pop">A popover</div><div popovertarget="pop" commandfor="pop">opens it</div>
 <style>@import url(https://hostile.example.test/body.css); .trap { color: #c00 }</style>
 <style>.a{content:"x
 }

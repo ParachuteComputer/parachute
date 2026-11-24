@@ -44,9 +44,9 @@ export type Clean = {
 
 /** What DOMPurify allows by default and a mail mustn't have. */
 export const FORBID_TAGS = ["style", "form", "input", "button", "select", "option", "optgroup", "textarea", "datalist", "output", "video", "audio", "source", "track", "template", "dialog", "map", "area"];
-export const FORBID_ATTR = ["srcset"];
+export const FORBID_ATTR = ["srcset", "popover", "popovertarget", "popovertargetaction", "commandfor"];
 /** What the last walk never lets stay (DOMPurify drops the others itself; this checks it did). */
-const NEVER_ATTR = ["srcset", "target", "ping", "formaction", "action", "poster"];
+const NEVER_ATTR = ["srcset", "target", "ping", "formaction", "action", "poster", "popover", "popovertarget", "popovertargetaction", "commandfor", "command"];
 
 /** A link a tap may open: http, https or mailto, nothing hidden or spaced in it, as the shell's open-link checks. */
 export function webHref(raw: string | null): string | null {
@@ -78,7 +78,8 @@ function kindOf(src: string): { kind: "cid"; id: string } | { kind: "data" } | {
 const ESCAPED = "\uffff";
 /** CSS with its comments out, and each escape marked. */
 function plainCss(css: string): string {
-  return css.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, "").replace(/\\(?:[0-9a-f]{1,6}\s?|[\s\S])/gi, ESCAPED);
+  // a comment becomes a space, never nothing: taken out, `://**/* c */host` would join into a new comment and `:host`
+  return css.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, " ").replace(/\\(?:[0-9a-f]{1,6}\s?|[\s\S])/gi, ESCAPED);
 }
 // CSS's own whitespace, not JavaScript's \s (which takes U+00A0, inside an address to CSS)
 const URL_TOKEN = /url\([ \t\n\r\f]*(?:"([^"\n\r\f]*)"|'([^'\n\r\f]*)'|([^)"' \t\n\r\f]*))[ \t\n\r\f]*\)/gi;
@@ -86,8 +87,14 @@ const URL_TOKEN = /url\([ \t\n\r\f]*(?:"([^"\n\r\f]*)"|'([^'\n\r\f]*)'|([^)"' \t
 const FOREIGN_URL = /url\((?!"(?:blob:|data:image\/))/i;
 /** Ways CSS loads or runs something that aren't url(): taken out with their declaration. */
 const CSS_BAD = /expression\s*\(|behavior\s*:|-moz-binding|javascript:|vbscript:|(?:image-set|image|src|cross-fade|element)\s*\(/i;
-/** Out of the flow onto the screen: a mail's "cover" over its own words, or a bar that sits over the app's. */
-const PINNED = /^position\s*:\s*(?:fixed|sticky)\b/i;
+/** A position but static, relative or absolute (fixed, sticky, a var() that may be either): out of the flow onto the
+ *  screen, a mail's "cover" over its own words or a bar over the app's. */
+const PINNED = /^position\s*:(?!\s*(?:static|relative|absolute)\s*(?:!\s*important)?\s*$)/i;
+const PINNED_ANYWHERE = /(?<![\w-])position[ \t\n\r\f]*:(?![ \t\n\r\f]*(?:static|relative|absolute)\b)/i;
+/** How deep @media and the like may nest, and how much CSS a mail may have: past either, its CSS is left out (a deep
+ *  nest would take the cleaning's stack, and the browser's). */
+const NEST_MAX = 8;
+export const CSS_MAX = 200_000;
 const COLOURS = /(?:^|[;{\s])(?:background(?:-color)?|color)\s*:\s*(?!\s*(?:transparent|inherit|initial|unset|none|currentcolor)\s*(?:!important)?\s*(?:;|$))/i;
 
 /** One declaration list (a style attribute, a rule's block): each url() asked of `pic` (none if it may not draw), and
@@ -105,7 +112,11 @@ function tokenEnd(s: string, i: number): number {
     for (let j = i + 1; j < s.length; j++) { if (s[j] === c) return j + 1; if (s[j] === "\n" || s[j] === "\r" || s[j] === "\f") return j; }
     return s.length;
   }
-  if ((c === "u" || c === "U") && /^url\([ \t\n\r\f]*(?!["'])/i.test(s.slice(i, i + 40))) { const close = s.indexOf(")", i); return close < 0 ? s.length : close + 1; }
+  if (c === "u" || c === "U") {
+    // url( and its whitespace, then not a quote (no backtracking into the whitespace: `url( "x)")` is a quoted one)
+    const open = /^url\([ \t\n\r\f]*/i.exec(s.slice(i, i + 64));
+    if (open && s[i + open[0].length] !== '"' && s[i + open[0].length] !== "'") { const close = s.indexOf(")", i); return close < 0 ? s.length : close + 1; }
+  }
   return -1;
 }
 /** Every string in it closes on its line (one that doesn't would run on over the rules after it). */
@@ -152,12 +163,13 @@ const FRAMES_AT = /^@(?:-webkit-|-moz-|-o-)?keyframes\b/i;
  *  @import, @font-face, @charset, @namespace, @page and any other at-rule dropped; a rule that names the shadow root's
  *  host (`:host`, `::slotted`, `::part`) dropped, so nothing reaches the app; `html`, `body` and `:root` mean the root. */
 export function cleanSheet(css: string, pic: (src: string) => string | null): string {
-  const out = cleanRules(css, pic);
-  // a last look at the whole: if a rule for the host, a url() it didn't write or a pinned position is in it anywhere
-  // (a parse of ours that differs from the browser's), none of it is kept
-  return /:host|::?slotted|::?part\b/i.test(out) || FOREIGN_URL.test(out) || /position[ \t\n\r\f]*:[ \t\n\r\f]*(?:fixed|sticky)/i.test(out) ? "" : out;
+  if (css.length > CSS_MAX) return "";
+  const out = cleanRules(css, pic, 0);
+  // a last look at the whole: if a rule for the host, a url() it didn't write or a position out of the flow is in it
+  // anywhere (a parse of ours that differs from the browser's), none of it is kept
+  return /:host|::?slotted|::?part\b/i.test(out) || FOREIGN_URL.test(out) || PINNED_ANYWHERE.test(out) ? "" : out;
 }
-function cleanRules(css: string, pic: (src: string) => string | null): string {
+function cleanRules(css: string, pic: (src: string) => string | null, depth: number): string {
   const s = plainCss(css);
   let out = "", i = 0;
   while (i < s.length) {
@@ -169,7 +181,7 @@ function cleanRules(css: string, pic: (src: string) => string | null): string {
     const prelude = s.slice(i, open).trim(), end = blockEnd(s, open), body = s.slice(open + 1, end);
     i = end + 1;
     if (prelude.startsWith("@")) {
-      if (KEEP_AT.test(prelude)) out += `${prelude}{${cleanRules(body, pic)}}`;
+      if (KEEP_AT.test(prelude) && depth < NEST_MAX) out += `${prelude}{${cleanRules(body, pic, depth + 1)}}`;
       else if (FRAMES_AT.test(prelude)) out += `${prelude}{${frames(body, pic)}}`;
       continue;
     }

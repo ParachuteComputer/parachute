@@ -33,6 +33,7 @@ details.pa-quote > summary { display: inline-block; cursor: pointer; list-style:
 details.pa-quote > summary::-webkit-details-marker { display: none; }
 :host(.pa-mail-paper) details.pa-quote > summary { color: #555555; border-color: #cccccc; }
 `;
+const NOTHING = { root: null as unknown as DocumentFragment, css: "", web: [] as string[], cids: [] as string[], hidden: 0, colored: false };
 const style = (css: string) => { const s = document.createElement("style"); s.textContent = css; return s; };
 /** Two shadow roots, one inside the other: the mail's CSS is in the inner one, so a rule for its host (`:host`) can
  *  reach only the inner box, which the outer root holds in place (contain: paint: nothing positioned in it leaves it,
@@ -53,10 +54,12 @@ function innerRoot(el: HTMLElement): ShadowRoot {
 /** Where a link goes, as it is shown: its site (in its punycode form, so a look-alike shows as what it is) and the
  *  whole address; a mail address for mailto. */
 function destination(href: string): { site: string; whole: string } {
-  try { const u = new URL(href); return u.protocol === "mailto:" ? { site: decodeURIComponent(u.pathname), whole: href } : { site: u.host, whole: href }; } catch { return { site: href, whole: href }; }
+  // nothing invisible or turning the text around (a right-to-left override would make the address read backwards)
+  const plain = (s: string) => s.replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g, "");
+  try { const u = new URL(href); return u.protocol === "mailto:" ? { site: plain(decodeURIComponent(u.pathname)), whole: plain(href) } : { site: u.host, whole: plain(href) }; } catch { return { site: plain(href), whole: plain(href) }; }
 }
 
-/** A message's body: `html` when it has one, else `text`. */
+/** A message's body: `html` when it has one, else `text` (also what shows if `html` can't be drawn). */
 export function MailBody({ html, text, pictures = false, onShowPictures, inline }: {
   html?: string | null;
   text?: string | null;
@@ -67,7 +70,7 @@ export function MailBody({ html, text, pictures = false, onShowPictures, inline 
   /** One of the message's own parts by its Content-ID, as a Blob (Mail: the gateway's raw blob), or null. */
   inline?: (cid: string) => Promise<Blob | null>;
 }) {
-  if (html) return <HtmlMail html={html} pictures={pictures} onShowPictures={onShowPictures} inline={inline} />;
+  if (html) return <HtmlMail html={html} fallback={text} pictures={pictures} onShowPictures={onShowPictures} inline={inline} />;
   return <TextMail text={text ?? ""} />;
 }
 
@@ -106,7 +109,7 @@ function TextMail({ text }: { text: string }) {
 /** At most this many web pictures asked of the shell at once. */
 const AT_ONCE = 4;
 
-function HtmlMail({ html, pictures, onShowPictures, inline }: { html: string; pictures: boolean; onShowPictures?: () => void; inline?: (cid: string) => Promise<Blob | null> }) {
+function HtmlMail({ html, fallback, pictures, onShowPictures, inline }: { html: string; fallback?: string | null; pictures: boolean; onShowPictures?: () => void; inline?: (cid: string) => Promise<Blob | null> }) {
   const host = useRef<HTMLDivElement>(null);
   // what has come: a picture's address (web or cid) → its blob: URL; what was asked, so nothing is asked twice
   const [got, setGot] = useState<ReadonlyMap<string, string>>(() => new Map());
@@ -114,7 +117,11 @@ function HtmlMail({ html, pictures, onShowPictures, inline }: { html: string; pi
   const made = useRef<string[]>([]);
   const [failed, setFailed] = useState(0);
   const [dest, setDest] = useState<string | null>(null);
-  const clean = useMemo(() => cleanMail(html, { show: pictures, web: (u) => got.get(u) ?? null, cid: (c) => got.get(`cid:${c}`) ?? null }), [html, pictures, got]);
+  const clean = useMemo(() => {
+    try { return cleanMail(html, { show: pictures, web: (u) => got.get(u) ?? null, cid: (c) => got.get(`cid:${c}`) ?? null }); } catch { return null; }
+  }, [html, pictures, got]);
+  // a mail its cleaning can't take (too deep, a bug) shows its text part instead
+  const c = clean ?? NOTHING;
 
   // the blobs made here go when it does
   useEffect(() => () => { for (const u of made.current) URL.revokeObjectURL(u); }, []);
@@ -132,18 +139,18 @@ function HtmlMail({ html, pictures, onShowPictures, inline }: { html: string; pi
   // the message's own pictures, at once
   useEffect(() => {
     if (!inline) return;
-    for (const c of clean.cids) {
-      const key = `cid:${c}`;
+    for (const id of c.cids) {
+      const key = `cid:${id}`;
       if (asked.current.has(key)) continue;
       asked.current.add(key);
-      void inline(c).then((b) => { if (b) arrived(key, b); }, () => {});
+      void inline(id).then((b) => { if (b) arrived(key, b); }, () => {});
     }
-  }, [clean.cids.join("\n")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [c.cids.join("\n")]); // eslint-disable-line react-hooks/exhaustive-deps
   // web pictures, once shown: a few at a time, through the shell
   useEffect(() => {
     if (!pictures) return;
     const fetch = kitApp().picture;
-    const todo = clean.web.filter((u) => !asked.current.has(u));
+    const todo = c.web.filter((u) => !asked.current.has(u));
     if (!todo.length) return;
     if (typeof fetch !== "function") { setFailed((n) => n + todo.length); for (const u of todo) asked.current.add(u); return; }
     for (const u of todo) asked.current.add(u);
@@ -156,18 +163,18 @@ function HtmlMail({ html, pictures, onShowPictures, inline }: { html: string; pi
     };
     for (let i = 0; i < Math.min(AT_ONCE, todo.length); i++) void one();
     return () => { gone = true; };
-  }, [pictures, clean.web.join("\n")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pictures, c.web.join("\n")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // drawn into its own shadow root, and narrowed to fit when wider than the screen
   useLayoutEffect(() => {
     const el = host.current;
-    if (!el) return;
+    if (!el || !clean) return;
     const root = innerRoot(el);
-    (root.host as HTMLElement).className = clean.colored ? "pa-mail-box pa-mail-paper" : "pa-mail-box";
+    (root.host as HTMLElement).className = c.colored ? "pa-mail-box pa-mail-paper" : "pa-mail-box";
     const fit = document.createElement("div");
     fit.className = "pa-mail-fit";
-    fit.append(clean.root.cloneNode(true));
-    root.replaceChildren(style(BASE), style(clean.css), fit);
+    fit.append(c.root.cloneNode(true));
+    root.replaceChildren(style(BASE), style(c.css), fit);
     const size = () => {
       fit.style.removeProperty("zoom");
       const wide = fit.scrollWidth, room = fit.clientWidth;
@@ -204,8 +211,9 @@ function HtmlMail({ html, pictures, onShowPictures, inline }: { html: string; pi
     return () => { root.removeEventListener("click", click); root.removeEventListener("pointerover", over); root.removeEventListener("focusin", over); root.removeEventListener("pointerleave", out); root.removeEventListener("contextmenu", hold); };
   }, []);
 
+  if (!clean) return <><p className="pa-mail-note">This message can't be drawn as its sender made it; here are its words.</p><TextMail text={fallback ?? ""} /></>;
   return <div className="pa-mail">
-    {!pictures && clean.hidden > 0 && onShowPictures && <div className="pa-mail-pictures">
+    {!pictures && c.hidden > 0 && onShowPictures && <div className="pa-mail-pictures">
       <span title="So the sender can't tell when you read it">Pictures from the web are hidden.</span>
       <Button small onClick={onShowPictures}>Show pictures</Button>
     </div>}

@@ -151,7 +151,7 @@ describe("a hostile mail", () => {
     expect(host.querySelector("script, iframe, frame, object, embed, form, input, button, textarea, select, video, audio, source, svg, math, template, noscript, link, meta, base, style, map, area")).toBeNull();
   });
   it("keeps no handler, target, srcset, ping or poster, and only its real web links", () => {
-    for (const el of host.querySelectorAll("*")) for (const a of Array.from(el.attributes)) expect(a.name).not.toMatch(/^on|^target$|^srcset$|^ping$|^poster$|^formaction$/i);
+    for (const el of host.querySelectorAll("*")) for (const a of Array.from(el.attributes)) expect(a.name).not.toMatch(/^on|^target$|^srcset$|^ping$|^poster$|^formaction$|^popover|^commandfor$/i);
     expect(links(host)).toEqual(["https://hostile.example.test/confirm", "https://hostile.example.test/ping"]);
     // the words of a link it can't open stay, as words: a script's, a phone number's, a path's, a part's
     for (const w of ["Confirm with JavaScript", "Confirm with data", "Call us", "Your account", "A part", "a span with an href"]) expect(text).toContain(w);
@@ -206,6 +206,26 @@ describe("cleanSheet", () => {
     expect(cleanSheet(`:host{color:red} .b{color:blue}`, none)).toBe(".b{color:blue}");
     // and when our reading and the browser's could still differ (a rule nested in a declaration list), none of it
     expect(cleanSheet(".a{color:red; & .b{position:fixed}}", none)).toBe("");
+  });
+  it("a comment is a space: taking one out can't make a new comment, or :host (second security review)", () => {
+    expect(cleanSheet("://**/* c */host{contain:none;margin-top:-180px} .b{color:blue}", none)).not.toMatch(/:\s*host|:\/\*/);
+    expect(cleanSheet(".a{position: /**/ fixed; color: red}", none)).toBe(".a{color: red}");
+  });
+  it("a position is static, relative or absolute, or it goes; a var() could be fixed", () => {
+    expect(cleanSheet(".a{--p:fixed;position:var(--p);color:red} .b{position:absolute}", none)).toBe(".a{--p:fixed; color:red}.b{position:absolute}");
+    expect(cleanSheet("@media (min-width:1px){.a{--p:fixed} .b{position:var(--p)}}", none)).toBe("@media (min-width:1px){.a{--p:fixed}.b{}}");
+    expect(cleanSheet(".a{background-position: center; color: red}", none)).toBe(".a{background-position: center; color: red}");
+  });
+  it("a quoted url( with space before its quote is read as quoted", () => {
+    expect(cleanSheet('.a{background:url( "x)")} .b{color:blue}', none)).toBe(".a{background:none}.b{color:blue}");
+  });
+  it("@media nested past 8 deep, or more CSS than 200,000 characters, is left out; neither takes the stack", () => {
+    const deep = `${"@media a{".repeat(20000)}.x{color:red}${"}".repeat(20000)} .ok{color:blue}`;
+    const t0 = performance.now();
+    expect(() => cleanMail(`<style>${deep}</style><p>hi</p>`, HIDDEN)).not.toThrow();
+    expect(performance.now() - t0).toBeLessThan(3000);
+    expect(cleanSheet(`${"@media a{".repeat(9)}.x{color:red}${"}".repeat(9)}.ok{color:blue}`, none)).toBe(`${"@media a{".repeat(8)}${"}".repeat(8)}.ok{color:blue}`);
+    expect(cleanSheet(`.a{color:red}${" ".repeat(200_001)}`, none)).toBe("");
   });
   it("a url() the cleaning can't read goes with its declaration; the rules around it stay", () => {
     expect(cleanSheet('.a { background: url( "https://x/1.png" y); color: red } .b { color: blue }', none)).toBe(".a{color: red}.b{color: blue}");

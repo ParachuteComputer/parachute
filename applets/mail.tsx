@@ -64,8 +64,10 @@ function bodyOf(e: Email): { html?: string; text?: string; cut: boolean } {
   const value = (p: Part) => e.bodyValues?.[p.partId]?.value ?? "";
   const cut = Object.values(e.bodyValues ?? {}).some((v) => v.isTruncated);
   const html = e.htmlBody ?? [];
-  if (html.some((p) => p.type === "text/html")) return { html: html.map((p) => (p.type === "text/html" ? value(p) : `<pre>${esc(value(p))}</pre>`)).join("\n"), cut };
-  return { text: (e.textBody ?? []).filter((p) => p.type !== "text/html").map(value).join("\n").trim(), cut };
+  // the text part is also what shows if the HTML can't be drawn
+  const text = (e.textBody ?? []).filter((p) => p.type !== "text/html").map(value).join("\n").trim();
+  if (html.some((p) => p.type === "text/html")) return { html: html.map((p) => (p.type === "text/html" ? value(p) : `<pre>${esc(value(p))}</pre>`)).join("\n"), text, cut };
+  return { text, cut };
 }
 const sender = (e: Email) => (e.from?.[0]?.email ?? "").toLowerCase();
 /** The Content-ID a part's HTML names it by, without its angle brackets. */
