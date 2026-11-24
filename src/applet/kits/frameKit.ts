@@ -276,16 +276,16 @@ export const FRAME_KIT = String.raw`(function () {
     }
     if (m.uni !== 1) return;
     if (m.event === "ready") {
-      // a session made again under this page: what the old one held out is never answered (the shell drops an ended
-      // session's replies), so it is settled now, not at its own timeout (a recording's is an hour); what is still in
-      // line goes to the new one
+      // a session made again under this page: the shell closed the old one's recorder or picker with it and drops its
+      // replies, so a recording or a pick it held is settled now as "none" (a Cancel), not at its own timeout (an hour,
+      // with Record held pressed meanwhile). Nothing else is touched: a write or a subscription may have reached the
+      // shell, and keeps its own timeout and retry
       if (readied) {
-        [pending, fetches].forEach(function (table) {
-          Object.keys(table).forEach(function (id) {
-            var j = table[id]; if (!j.out) return;
-            delete table[id]; free(j); j.out = false; out--;
-            var er = new Error("the app opened this applet's session again; ask again"); er.code = "failed"; j.rej(er);
-          });
+        Object.keys(pending).forEach(function (id) {
+          var j = pending[id], what = j.msg.ns + "." + j.msg.method;
+          if (!j.out || (what !== "voice.record" && what !== "app.pick")) return;
+          delete pending[id]; free(j); j.out = false; out--;
+          j.res(what === "app.pick" ? [] : null);
         });
         pump();
       }
