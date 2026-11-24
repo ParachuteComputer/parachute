@@ -50,14 +50,15 @@ export type VaultPickNow = {
 };
 
 /** What this device does with approvals: checks them (a key or an anchor), and signs them (a key). */
-function useApprovalsHere(again: number): { checks: boolean; signs: boolean } | null {
+function useApprovalsHere(): { checks: boolean; signs: boolean } | null {
   const [here, setHere] = useState<{ checks: boolean; signs: boolean } | null>(null);
-  // asked again with each read of the approvals: a home or an anchor that comes after the screen opened counts
+  // asked once per screen (asked again on each recheck, the extra async work tipped a race in kept screens, so a tapped
+  // applet showed stopped: e2e/signed.spec.ts). A home or an anchor that comes later counts from the next screen
   useEffect(() => {
     let on = true;
     void Promise.all([approvalsHere(), signsHere()]).then(([checks, signs]) => { if (on) setHere({ checks, signs }); }, () => { if (on) setHere({ checks: true, signs: false }); });
     return () => { on = false; };
-  }, [again]);
+  }, []);
   return here;
 }
 
@@ -74,7 +75,7 @@ export function useVaultPick(o: { rec: VaultRecord | null; entry: AppletEntry | 
   // the vaults held change (one opened, one signed out of): what it reaches is read again
   const [held, setHeld] = useState(0);
   useEffect(() => subscribeVaults(() => setHeld((x) => x + 1)), []);
-  const here = useApprovalsHere(o.recheck);
+  const here = useApprovalsHere();
   const d = o.subject ? dOf(o.subject) : null;
   // Parachute's own: the pick alone, in an approval of its own (approvalStore.ts signedPick)
   const [official, setOfficial] = useState<{ for: string; read: PickRead; signed: boolean } | null>(null);
