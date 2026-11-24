@@ -301,7 +301,7 @@ function shownIndices(r: Raw): number[] {
 export async function copyBundle(): Promise<void> {
   const app = openBundleNow();
   if (!app.live) return;
-  if (!app.hubOf) throw new Error(`${app.name} can't be read here yet, so there's nothing to copy: sign in to the Parachute that offers it first.`);
+  if (!app.hubOf) throw new Error(`${app.name} can't be read here now, so there's nothing to copy.`);
   const hub = app.hubOf;
   const at = <T extends { hub?: string }>(p: T): T => (p.hub ? p : { ...p, hub });
   const own: Bundle = { ...app, live: undefined, hubOf: undefined, sources: app.sources.map((x) => (x.hub === ANY_HUB ? x : at(x))), hide: app.hide.map(at),

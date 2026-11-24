@@ -66,12 +66,22 @@ test("a bundle someone else offers: its bar is theirs until the person makes a c
   } finally { await api(hubState(), "DELETE", `notes/${theirs.id}`).catch(() => {}); }
 });
 
-test("a bundle someone else offers that can't be read here yet: no copy of nothing is offered", async ({ page }) => {
+test("a bundle someone else offers that can't be read here: no copy of nothing is offered", async ({ page }) => {
   await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/desk", content: "mine", tags: ["parachute-bundle"], metadata: { bundle: {
     contract: 1, id: "desk", name: "Desk", live: { hub: "https://elsewhere.example", vault: "studio", path: "Parachute/Bundles/desk" } } } });
   await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "desk" } } });
   await page.goto("/settings");
   const onBar = page.getByRole("group", { name: "On the bar" });
-  await expect(onBar).toContainText("it can't be read here yet");
+  await expect(onBar).toContainText("it can't be read here now");
   await expect(onBar.getByRole("button", { name: "Make a copy of your own" })).toHaveCount(0);
+});
+
+test("on Parachute Simplified, the bar's own places are listed and not offered again", async ({ page }) => {
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "simple" } } });
+  await page.goto("/settings");
+  const onBar = page.getByRole("group", { name: "On the bar" });
+  await expect(onBar.getByRole("list", { name: "On the bar now" }).getByRole("listitem")).toHaveText([/Notes/, /Journal/, /Capture/, /Vault/, /Connect/]);
+  await onBar.getByText("Pin another applet").click();
+  for (const name of ["Notes", "Journal", "Capture", "Vault", "Connect"]) await expect(onBar.getByRole("button", { name: `Pin ${name}` })).toHaveCount(0);
+  await expect(onBar.getByRole("button", { name: "Pin Home" })).toBeVisible();
 });

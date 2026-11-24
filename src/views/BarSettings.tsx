@@ -32,7 +32,11 @@ export default function BarSettings() {
   const theirs = vaults.flatMap((v) => { const e = appletsNow(v.key); return e?.state === "ok" ? e.found.entries
     .filter((a) => offered(bundle, { hub: originOf(v.issuer), vault: v.vault }, a, originOf(home.issuer)))
     .map((a) => ({ vault: v.key, noteId: a.noteId, name: a.manifest.name, glyph: a.manifest.glyph, where: v.vault })) : []; });
-  const more = [...own, ...theirs].filter((a) => !pinned.has(`${a.vault} ${a.noteId}`) && !bar.entries.some((e) => !("href" in e) && "shipped" in e && officialId(e.shipped) === a.noteId));
+  // one of Parachute's own the bar already has as a place of the bundle's: shipped there, Connect, or the home screen (Notes
+  // or Home, by the bundle's look)
+  const onBarAlready = new Set(bar.entries.flatMap((e) => ("href" in e ? [] : "shipped" in e ? [officialId(e.shipped)]
+    : e.screen === "connect" ? [officialId("connect")] : [officialId(bundle.look === "notes" ? "notes" : "home")])));
+  const more = [...own, ...theirs].filter((a) => !pinned.has(`${a.vault} ${a.noteId}`) && !onBarAlready.has(a.noteId));
   const many = new Set(theirs.map((a) => a.vault)).size > 1;
   const appName = (e: (typeof bar.entries)[number]) => ("href" in e ? null : "shipped" in e ? officialFace(e.shipped).name : e.screen === "connect" ? officialFace("connect").name : bundle.look === "notes" ? "Notes" : "Applets");
   return (
@@ -40,7 +44,7 @@ export default function BarSettings() {
       <legend className="settings-sub">On the bar</legend>
       {bundle.live && (bundle.hubOf
         ? <p className="small">This bar is the one the bundle's owner offers. <button type="button" className="quiet-button" onClick={() => act(copyBundle)}>Make a copy of your own</button> to change it; their later changes then no longer reach it.</p>
-        : <p className="small">This bar is the one the bundle's owner offers, and it can't be read here yet: sign in to the Parachute that offers it to see it, or to make a copy of your own.</p>)}
+        : <p className="small">This bar is the one the bundle's owner offers, and it can't be read here now, so it can't be copied yet.</p>)}
       {bar.entries.length ? <ol className="plain bar-pins" aria-label="On the bar now">
         {bar.entries.map((e, i) => "href" in e ? (
           <li key={e.href} className="line">
