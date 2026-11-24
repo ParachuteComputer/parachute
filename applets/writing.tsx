@@ -306,7 +306,7 @@ export function refWhy(ref: Pick<VaultRec, "fields">): string {
   return str(f.why) || str(f.why_it_fits) || str(f.reason) || str(f.note);
 }
 
-const VAULT_URL = /\/vault\/[^/?#]+\/|\/(?:view|n)\/[A-Za-z0-9_-]{8,64}(?:[/?#]|$)/;
+const VAULT_URL = /\/vault\/[^/?#]+\/|\/(?:view|n)\/[0-9][0-9A-Za-z]{11,63}(?:[/?#]|$)/;
 const WEB = /^(https?:|mailto:)/i;
 /** A host only a device or a private network reaches: loopback, private and tailnet ranges, .local/.internal/.ts.net. */
 function privateHost(host: string): boolean {
@@ -324,7 +324,12 @@ function privateHost(host: string): boolean {
 export function vaultAddress(raw: string): boolean {
   const u = raw.trim();
   if (!u) return false;
-  if (/^[a-z][a-z0-9+.-]*:(\/\/|\S+$)/i.test(u) && !WEB.test(u)) return true;
+  // vault://, obsidian://, file://; and `<vault>:<id>` with a record's id (a digit first, letters in it), not a
+  // citation's own scheme (doi:, isbn:) or words (Thoreau:Walden)
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(u) && !WEB.test(u)) return true;
+  if (/^(file|vault|obsidian|parachute):/i.test(u)) return true;
+  const short = /^([a-z0-9][a-z0-9_-]{0,39}):([0-9][0-9A-Za-z_-]{7,63})$/i.exec(u);
+  if (short && !/^(doi|isbn|issn|arxiv|pmid|oclc|lccn|urn|tel)$/i.test(short[1]) && /[a-z]/i.test(short[2])) return true;
   if (!WEB.test(u)) return false;
   if (VAULT_URL.test(u)) return true;
   try {
@@ -713,7 +718,10 @@ const PieceEditor = memo(function PieceEditor({
       if (!base) throw new Error("This piece has no version to change. Reload it first.");
       const run = vault.updateRecord(pieceId, { if_updated_at: base, fields }).then((updated: VaultRec) => {
         baseRef.current = updated.updatedAt ?? base;
-        if (updated.updatedAt) ownVersion.set(pieceId, updated.updatedAt);
+        if (updated.updatedAt) {
+          ownVersion.set(pieceId, updated.updatedAt);
+          landedSave.set(pieceId, { from: base, version: updated.updatedAt, body: savedBodyRef.current });
+        }
         return updated;
       });
       // a save that comes due meanwhile waits for this, then saves on the new version
@@ -724,6 +732,11 @@ const PieceEditor = memo(function PieceEditor({
         if (inflightRef.current === turn) inflightRef.current = null;
       });
       inflightRef.current = turn;
+      // an editor made again meanwhile waits for it too (persistNow)
+      pendingSave.set(pieceId, turn);
+      void turn.finally(() => {
+        if (pendingSave.get(pieceId) === turn) pendingSave.delete(pieceId);
+      });
       return run;
     },
     [pieceId, persistNow],

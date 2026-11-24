@@ -440,6 +440,11 @@ describe("insert-as-quote formatting & cursor splicing", () => {
     // a [[link]] in the author or source gives its words, an alias first; no folder path
     expect(formatQuoteMarkdown({ ...bare, fields: { quote: "Q.", author: "[[People/Jane Doe]]", source: "[[Books/X|The Book]]" } })).toBe("> Q.\n> — Jane Doe, The Book");
     expect(formatQuoteMarkdown({ ...bare, fields: { quote: "Q.", source: "Fieldcraft", source_url: "https://example.org/a" } })).toBe("> Q.\n> — [Fieldcraft](https://example.org/a)");
+    // and a citation's own forms stay cited
+    for (const source of ["doi:10.1000/182", "ISBN:9780140449136", "Thoreau:Walden", "Note: chapter 3", "Interview:20261122"])
+      expect(formatQuoteMarkdown({ ...bare, fields: { quote: "Q.", source } }), source).toBe(`> Q.\n> — ${source}`);
+    expect(formatQuoteMarkdown({ ...bare, fields: { quote: "Q.", source: "Site", source_url: "https://example.com/view/abcdefgh12" } }))
+      .toBe("> Q.\n> — [Site](https://example.com/view/abcdefgh12)");
     // nor from the quote's own words
     const linked = { ...bare, fields: { quote: "As [[Notes/Ivan Illich|Illich]] put it, [[Tools for Conviviality]] matter." } };
     expect(formatQuoteMarkdown(linked)).toBe("> As Illich put it, Tools for Conviviality matter.");
@@ -717,6 +722,34 @@ describe("Writing applet UI flows", { timeout: 20_000 }, () => {
     expect(hubPiece.body!.startsWith("First words.")).toBe(true);
     expect(screen.queryByText(/Changed elsewhere/)).toBeNull();
     expect(mockState.toastCalls.some((t) => t.opts?.error)).toBe(false);
+  });
+
+  it("a stage change answered slowly, then the editor made again: its next save builds on it, no false conflict", async () => {
+    const { pieces } = setupMockVault();
+    render(<Writing />);
+    fireEvent.click(await screen.findByRole("button", { name: /Tools that stay quiet/ }));
+    await screen.findByLabelText("Piece");
+    await screen.findByText(/A room that lets you hear yourself think/);
+    let land!: () => void;
+    const slow = new Promise<void>((r) => { land = r; });
+    const plain = mockState.updateRecord.getMockImplementation()!;
+    mockState.updateRecord.mockImplementationOnce(async (id: string, change: Record<string, unknown>) => {
+      const done = await plain(id, change);
+      await slow;
+      return done;
+    });
+    const stage = screen.getByLabelText("Piece details").querySelector("select")!;
+    fireEvent.change(stage, { target: { value: "seed" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Details" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Insert as quote" }));
+    await waitFor(() => expect((screen.getByLabelText("Piece") as HTMLTextAreaElement).value).toContain("> A room"));
+    await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+    await act(async () => { land(); await slow; });
+
+    const hubPiece = pieces.find((p) => p.id === PIECE_DRAFT.id)!;
+    await waitFor(() => expect(hubPiece.body).toContain("> A room that lets you hear yourself think"), { timeout: 8000 });
+    expect(hubPiece.fields?.stage).toBe("seed");
+    expect(screen.queryByText(/Changed elsewhere/)).toBeNull();
   });
 
   it("an ask that lands after another piece is opened leaves that piece's Beside it its own", async () => {
