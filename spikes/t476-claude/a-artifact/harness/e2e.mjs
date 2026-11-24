@@ -37,6 +37,21 @@ await page.waitForTimeout(800);
 ok((await byPath("Tasks/Draft the brand rules")).body === "Voice, colours, character sheets. Ask Tala for the sheet.", "note edit wrote the body");
 await page.screenshot({ path: `${shots}/a3-after-edits.png` });
 
+// a refresh while the person is typing a note doesn't throw the typing away
+const typing = f.locator("#open li", { hasText: "Send Jonah the shop mockups" }).locator(".sub");
+await typing.click(); await typing.press("End"); await typing.type(" Mention the kiln.");
+await f.locator(".meta button").evaluate((b) => b.click());   // refresh, without taking the focus
+await page.waitForTimeout(800);
+await page.keyboard.type(" Soon.");                            // keeps typing where the caret was
+await page.keyboard.press("Enter"); await page.waitForTimeout(800);
+ok((await byPath("Tasks/Send Jonah the shop mockups")).body.endsWith("Mention the kiln. Soon."), "a refresh mid-edit keeps the note and the caret; the whole edit is written when done");
+
+// the shell's call route holds the manifest itself: an undeclared tool, or a page's own no-cors post, gets nothing
+const raw = (ct, tool) => page.evaluate(async ([ct, tool]) => { const r = await fetch("/api/call", { method: "POST", headers: { "content-type": ct }, body: JSON.stringify({ server: "Parachute", tool, input: { id: "Tasks/Order seed packets" } }) }); return [r.status, await r.text()]; }, [ct, tool]);
+ok((await raw("text/plain", "query-records"))[0] === 415, "the call route refuses a non-JSON post (what a sandboxed page could send)");
+ok((await raw("application/json", "delete-record"))[1].includes("not_in_manifest"), "the call route refuses a tool the manifest doesn't declare");
+ok((await byPath("Tasks/Order seed packets")).error_type === undefined, "and the record is still there");
+
 // a change made elsewhere (another AI, the app) after the page read: the page's write is refused, not lost
 const before = await byPath("Tasks/Send Jonah the shop mockups");
 await tool("update-record", { id: before.id, fields: { due: "2026-11-26" }, if_updated_at: before.updatedAt });

@@ -2,7 +2,7 @@
 // (ui://parachute/applet-host); the host (Claude, ChatGPT, basic-host) shows it and hands it the tool's result: the
 // vault's applets, and which one to open. The view reads that applet's record through the host's tools/call, turns its
 // TSX into JavaScript as the app does (code.ts transpile, sucrase), and runs it on the web kit (web.ts), whose vault is
-// the connector (client.ts). One view for every applet: a new applet in the vault needs no build.
+// the connector (src/mcpClient.ts). One view for every applet: a new applet in the vault needs no build.
 import { App } from "@modelcontextprotocol/ext-apps";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
@@ -11,7 +11,7 @@ import * as JsxRuntime from "react/jsx-runtime";
 import * as Parachute from "../src/parachute.ts";
 import { installWebKit, linkClient } from "../src/web.ts";
 import { transpile, codeKindOf } from "../../../src/applet/code.ts";
-import { mcpVaultClient, vaultError } from "./client.ts";
+import { mcpVaultClient, replyOf, vaultError } from "../src/mcpClient.ts";
 
 type Applet = { id: string; name: string; path: string; glyph?: string; note?: string };
 type Opened = { applets?: Applet[]; open?: string | null; vault?: string };
@@ -19,15 +19,12 @@ type Opened = { applets?: Applet[]; open?: string | null; vault?: string };
 const root = document.getElementById("root")!;
 const app = new App({ name: "Parachute", version: "0.1.0" }, { availableDisplayModes: ["inline", "fullscreen"] });
 
-// one tool call through the host; the vault's refusals (JSON-RPC errors, or isError replies) come back as vaultError
+// one tool call through the host; the vault's refusals come back as vaultError (src/mcpClient.ts replyOf)
 async function call(name: string, args: Record<string, unknown>): Promise<unknown> {
   let r;
   try { r = await app.callServerTool({ name, arguments: args }); }
   catch (e) { const x = e as { message?: string; data?: Record<string, unknown> }; throw vaultError(x.message ?? String(e), x.data); }
-  const text = (r.content ?? []).find((b) => b.type === "text") as { text?: string } | undefined;
-  if (r.isError) throw vaultError(text?.text ?? "the vault refused", r.structuredContent as Record<string, unknown> | undefined);
-  if (r.structuredContent !== undefined) return r.structuredContent;
-  try { return JSON.parse(text?.text ?? "null"); } catch { return text?.text; }
+  return replyOf(r);
 }
 
 const MODULES: Record<string, unknown> = { react: React, "react-dom": ReactDOM, "react-dom/client": ReactDOMClient, "react/jsx-runtime": JsxRuntime, parachute: Parachute };
@@ -47,7 +44,10 @@ async function run(a: Applet) {
   linkClient(mcpVaultClient(call), "claude");
   // the module runs as an inline script (the view's CSP allows inline scripts, not eval), CommonJS as the frame's loader runs it
   const w = window as unknown as { __parachuteModule?: (require: (n: string) => unknown, module: { exports: Record<string, unknown> }, exports: Record<string, unknown>) => void };
+  // one module script at a time: opening another applet replaces it
+  document.getElementById("parachute-applet-module")?.remove();
   const s = document.createElement("script");
+  s.id = "parachute-applet-module";
   s.textContent = `window.__parachuteModule = function (require, module, exports) {\n${out.js}\n};`;
   document.head.appendChild(s);
   const mod = { exports: {} as Record<string, unknown> };

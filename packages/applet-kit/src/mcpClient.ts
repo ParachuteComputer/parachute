@@ -17,11 +17,25 @@ const rename = (o: Rec, map: Record<string, string>): Rec => Object.fromEntries(
 // a list answers an array, or {records, next_cursor} when the vault pages it
 const rows = (r: unknown): Rec[] => (Array.isArray(r) ? r : Array.isArray((r as Rec)?.records) ? ((r as Rec).records as Rec[]) : []);
 
-/** An error the kit and applets read as the REST door's: a status (404, 409) and the vault's error_type. */
+/** An error the kit and applets read as the REST door's: a status (404, 409) from the vault's own error_type, never from
+ *  the words of a message (an unknown tag's refusal says "not found" too). */
 export function vaultError(message: string, data?: Rec): Error {
-  const type = String(data?.error_type ?? (/\[(\w+)\]/.exec(message)?.[1] ?? ""));
-  const status = type === "conflict" ? 409 : type === "not_found" || /not found/i.test(message) ? 404 : type === "forbidden" ? 403 : 400;
+  const type = String(data?.error_type ?? (/^(?:MCP error -?\d+:\s*)?\[(\w+)\]/.exec(message)?.[1] ?? ""));
+  const status = type === "conflict" ? 409 : type === "not_found" ? 404 : type === "forbidden" ? 403 : 400;
   return Object.assign(new Error(message.replace(/^MCP error -?\d+:\s*/, "")), { status, error_type: type || undefined, data });
+}
+
+/** A tools/call result as the tool's JSON, or a vaultError: the vault refuses three ways, as an isError result, as a
+ *  JSON-RPC error (the caller's catch), or as a plain reply `{error, error_type}` (query-records on a missing id). */
+export function replyOf(r: { content?: { type: string; text?: string }[]; structuredContent?: unknown; isError?: boolean }): unknown {
+  const text = (r.content ?? []).find((b) => b.type === "text")?.text;
+  let out: unknown;
+  if (r.structuredContent !== undefined) out = r.structuredContent;
+  else { try { out = JSON.parse(text ?? "null"); } catch { out = text; } }
+  const o = out as Rec | null;
+  const refusal = !!o && typeof o === "object" && !Array.isArray(o) && typeof o.error === "string" && typeof o.error_type === "string";
+  if (r.isError || refusal) throw vaultError(refusal ? String(o!.error) : (text ?? "the vault refused"), refusal ? o! : undefined);
+  return out;
 }
 
 export function mcpVaultClient(call: CallTool): VaultClient {

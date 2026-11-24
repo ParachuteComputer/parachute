@@ -30,7 +30,12 @@ const srv = createServer(async (req, res) => {
   }
   if (u.pathname === "/api/list") { const r = await mcp(u.searchParams.get("server"), "tools/list", {}); return send(200, "application/json", JSON.stringify(r.result ?? { tools: [] })); }
   if (u.pathname === "/api/call" && req.method === "POST") {
+    // the shell's own call, never the artifact's: JSON only (a sandboxed page's no-cors POST can't send it), and only a
+    // tool the manifest declares, checked here as well as in host.html
+    if (!String(req.headers["content-type"]).startsWith("application/json")) return send(415, "text/plain", "json only");
     const { server, tool, input } = JSON.parse(await body(req));
+    const declared = JSON.parse(readFileSync(manifestPath, "utf8")).capabilities.mcp.servers.find((s) => s.server === server)?.tools ?? [];
+    if (!declared.includes(tool)) return send(200, "application/json", JSON.stringify({ error: { message: `not_in_manifest: ${tool}` } }));
     return send(200, "application/json", JSON.stringify(await mcp(server, "tools/call", { name: tool, arguments: input ?? {} })));
   }
   send(404, "text/plain", "not found");

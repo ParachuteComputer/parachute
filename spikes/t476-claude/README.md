@@ -26,11 +26,11 @@ CORE=/path/to/parachute-core APPLET_HOST_HTML=$PWD/../../dist-mcp/applet-host.ht
 node tools/seed.mjs                                                     # made-up people, tasks, books + People and Library
 # 2. Spike A
 node a-artifact/harness/server.mjs a-artifact/parachute-tasks.html a-artifact/manifest.json   # prints the harness URL
-node tools/reset-tasks.mjs && PW=../../node_modules/playwright node a-artifact/harness/e2e.mjs <harness url> <shots dir>
+node tools/reset-tasks.mjs && node a-artifact/harness/e2e.mjs <harness url> <shots dir>
 # 3. Spike B: basic-host from github.com/modelcontextprotocol/ext-apps (examples/basic-host), pointed at the proxy
 node tools/authproxy.mjs 47391 &
 #    in ext-apps/examples/basic-host (bind it to 127.0.0.1; its sandbox URL is fixed to localhost:8081 unless changed):
 #    HOST_PORT=47392 SANDBOX_PORT=47393 SERVERS='["http://127.0.0.1:47391/mcp"]' npm start
-PW=../../node_modules/playwright node b-mcp-app/e2e.mjs http://127.0.0.1:47392/ <shots dir> [strict]
+node b-mcp-app/e2e.mjs http://127.0.0.1:47392/ <shots dir> [strict]
 tools/vault.sh stop
 ```

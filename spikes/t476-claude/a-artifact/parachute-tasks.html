@@ -78,7 +78,13 @@ let mcp = null;
 let rows = [];
 let readFailed = false;   // a read error is cleared by the next good read; a write's message stays until the next write
 
+// A refetch never redraws under the person's hands: while a note or a date is being edited, the redraw waits for blur.
+let waiting = false;
+const editing = () => { const a = document.activeElement; return !!(a && a.closest && a.closest("li") && (a.isContentEditable || a.tagName === "INPUT")); };
+document.addEventListener("focusout", () => setTimeout(() => { if (waiting && !editing()) { waiting = false; render(); } }, 0));
+
 function render() {
+  if (editing()) { waiting = true; return; }
   const open = rows.filter((r) => (r.fields || {}).status !== "done").sort((a, b) => String((a.fields || {}).due || "9").localeCompare(String((b.fields || {}).due || "9")));
   const done = rows.filter((r) => (r.fields || {}).status === "done");
   $("open").replaceChildren(...(open.length ? open.map(row) : [empty("Nothing open.")]));
