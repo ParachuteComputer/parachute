@@ -28,6 +28,7 @@
 //   uni.app.openLink(url)            → (links) an http/https/mailto address in the browser, during a tap: whether it went
 //   uni.app.save(name, bytes, type)  → (save) a file into Downloads, during a tap: {saved: name}
 //   uni.app.pick({accept, multiple}) → (attach) the shell's own picker, during a tap: [{name, type, bytes}], [] for none
+//                                      or when the shell makes the session again
 //   uni.voice.record({max_s})        → (reach: [voice]) the shell's recorder, during a tap: {bytes, type, duration}
 //                                      on Send, null on Cancel or when the shell makes the session again
 //                                      (docs/design/KEYRING.md "Voice, files, links, storage")

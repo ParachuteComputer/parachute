@@ -9,7 +9,7 @@
 //   Tabs      places to switch between in one screen, the one shown marked
 //   Search    a search box: Enter (or typing, with `live`) searches; emptying it ends the search
 //   Write     a box to write in, and its action: Save, Send (Ctrl or ⌘ Enter; Enter alone in a chat)
-//   Record    the microphone button: the app's own recorder sheet, never the applet's
+//   Record    the microphone button: the app's own recorder, never the applet's
 //   toast     a short word after an action ("Saved"), gone by itself
 //   voiceNote a recording made a note whose words the hub writes in; useTranscripts waits for them
 //   still     whether nothing should move now (reduce-motion, an e-paper screen, Daylight, a still theme)
