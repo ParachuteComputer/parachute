@@ -102,6 +102,6 @@ more. Until then, a `publishers` entry other than Parachute's is read as nothing
 ## What a newcomer on Parachute Cloud sees
 
 Until Cloud runs its PR (the Parachute app's reserved client, ParachuteComputer/parachute-cloud): its two pages, *see
-your vaults* and *read and write your home*, say "Connect Vault app" under "Unverified app", because the app registers
-itself there. With it, they say "Connect Parachute" and nothing about unverified (the app reads Cloud's
+your vaults* and *read and write your home*, say "Connect Vault app on Android" (or "on a Mac", and so on) under "Unverified app", because the
+app registers itself there. With it, they say "Connect Parachute" and nothing about unverified (the app reads Cloud's
 `app_client_id`). No card and no third page after that: Capture, Journal and Notes save at once.

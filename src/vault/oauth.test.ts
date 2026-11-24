@@ -197,6 +197,19 @@ describe("beginSignIn", () => {
     // never the name Cloud keeps for itself
     for (const n of [phone, mac, cloudClientName("")]) expect(n).not.toMatch(/Parachute/);
   });
+  it("a device that registered on Cloud as plain \"Vault app\" registers once more under its device's name, then keeps it", async () => {
+    const names: string[] = [];
+    const cloud = { ...P, hub: "https://cloud.example", issuer: "https://cloud.example", door: "cloud" as const };
+    const meta = { ...META, issuer: "https://cloud.example", authorization_endpoint: "https://cloud.example/oauth/authorize", token_endpoint: "https://cloud.example/oauth/token", registration_endpoint: "https://cloud.example/oauth/register" };
+    // what an earlier build kept: the registration under the hub and return address only
+    localStorage.setItem("parachute.oauth.clients.v1", JSON.stringify({ "https://cloud.example http://localhost:3000/oauth/callback": "old-vault-app" }));
+    const first = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(meta, names)));
+    expect(first.searchParams.get("client_id")).toBe("client-1");
+    expect(names).toEqual([cloudClientName()]);
+    const again = new URL(await beginSignIn({ parachute: cloud, step: "open", vault: "recipes", how: "page" }, cloudLike(meta, names)));
+    expect(again.searchParams.get("client_id")).toBe("client-1");
+    expect(names).toHaveLength(1);
+  });
   it("a hub that refused the reserved id gets a registration on the next sign-in", async () => {
     const cloud = { ...P, hub: "https://cloud.example", issuer: "https://cloud.example", door: "cloud" as const, appClientId: "parachute-app" };
     const meta = { ...META, issuer: "https://cloud.example", authorization_endpoint: "https://cloud.example/oauth/authorize", token_endpoint: "https://cloud.example/oauth/token", registration_endpoint: "https://cloud.example/oauth/register", authorization_response_iss_parameter_supported: true } as unknown as Record<string, string>;

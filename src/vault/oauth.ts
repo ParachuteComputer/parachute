@@ -117,13 +117,17 @@ function readJson<T>(key: string): T | null {
   try { return JSON.parse(localStorage.getItem(key) ?? "null") as T | null; } catch { return null; }
 }
 
-function cachedClient(issuer: string, redirect: string): string | null {
+/** A registration is kept per hub and return address, and on Parachute Cloud per name too (`as`): a device that
+ *  registered there as plain "Vault app" registers once more under its device's name (cloudClientName). */
+const clientKey = (issuer: string, redirect: string, as?: string) => (as ? `${issuer} ${redirect} ${as}` : `${issuer} ${redirect}`);
+function cachedClient(issuer: string, redirect: string, as?: string): string | null {
   const all = readJson<Record<string, string>>(CLIENTS_KEY) ?? {};
-  return typeof all[`${issuer} ${redirect}`] === "string" ? all[`${issuer} ${redirect}`] : null;
+  const k = clientKey(issuer, redirect, as);
+  return typeof all[k] === "string" ? all[k] : null;
 }
-function cacheClient(issuer: string, redirect: string, clientId: string) {
+function cacheClient(issuer: string, redirect: string, clientId: string, as?: string) {
   const all = readJson<Record<string, string>>(CLIENTS_KEY) ?? {};
-  all[`${issuer} ${redirect}`] = clientId;
+  all[clientKey(issuer, redirect, as)] = clientId;
   try { localStorage.setItem(CLIENTS_KEY, JSON.stringify(all)); } catch { /* registers again next time */ }
 }
 /** Forget this app's registration on a hub (the hub refused it as unknown). */
@@ -162,10 +166,11 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   // told apart (an authorization server mix-up); and not where the hub refused it before
   const iss = (meta as { authorization_response_iss_parameter_supported?: unknown }).authorization_response_iss_parameter_supported === true;
   const reserved = !!parachute.appClientId && redirect === SHELL_RETURN && iss && !reservedRefused(parachute.issuer);
-  let clientId = reserved ? parachute.appClientId! : cachedClient(parachute.issuer, redirect);
+  const as = parachute.door === "cloud" ? cloudClientName() : undefined;
+  let clientId = reserved ? parachute.appClientId! : cachedClient(parachute.issuer, redirect, as);
   if (!clientId) {
-    clientId = (await registerClient(meta.registration_endpoint, { clientName: parachute.door === "cloud" ? cloudClientName() : CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
-    cacheClient(parachute.issuer, redirect, clientId);
+    clientId = (await registerClient(meta.registration_endpoint, { clientName: as ?? CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
+    cacheClient(parachute.issuer, redirect, clientId, as);
   }
   const codeVerifier = generateCodeVerifier();
   const state = generateState();
