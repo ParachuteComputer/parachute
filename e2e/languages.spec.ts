@@ -89,6 +89,18 @@ test("Languages: starter words, today's cards, a review written to the card, a p
 
     // a word: its picture from the shell's picker, its sound from the app's recorder, both back through vault.file
     await f.getByRole("button", { name: /^Words · / }).click();
+    // forty words scroll down in one column, as any phone list does: no page line, nothing sideways, a finger reaches the end
+    await expect(f.getByRole("searchbox", { name: "Search words" })).toBeVisible();
+    const inner = (await (await page.locator("iframe.applet-frame").elementHandle())!.contentFrame())!;
+    const geo = () => inner.evaluate(() => ({ y: scrollY, h: document.documentElement.scrollHeight, vh: innerHeight, wide: document.documentElement.scrollWidth - innerWidth }));
+    expect((await geo()).h).toBeGreaterThan((await geo()).vh * 1.5);
+    expect((await geo()).wide).toBeLessThanOrEqual(0);
+    await expect(f.locator(".pa-pageline, .pa-at, .pa-book")).toHaveCount(0);
+    await expect(f.getByRole("navigation", { name: "Pages" })).toHaveCount(0);
+    await page.mouse.move(200, 400);
+    for (let i = 0; i < 20 && (await geo().then((g) => g.y + g.vh < g.h - 2)); i++) { await page.mouse.wheel(0, 800); await page.waitForTimeout(100); }
+    expect(await geo().then((g) => g.y > 0 && g.y + g.vh >= g.h - 2)).toBe(true);
+    await inner.evaluate(() => scrollTo(0, 0));
     await f.getByRole("searchbox", { name: "Search words" }).fill("citta");
     await f.getByRole("button", { name: /चित्त/ }).click();
     await expect(f.getByText("Picture idea: A mountain lake reflecting the pines")).toBeVisible();
@@ -133,7 +145,12 @@ test("Languages: starter words, today's cards, a review written to the card, a p
     await drawer.getByRole("textbox", { name: "The word, in IAST or Devanagari" }).fill("śānti");
     await expect(drawer.locator("p.lang-deva")).toHaveText("शान्ति");
     await drawer.getByRole("textbox", { name: "Meaning" }).fill("peace, calm");
-    await drawer.getByRole("textbox", { name: "My memory" }).fill("The quiet after the last chant");
+    // typed key by key, as a person types: every letter lands, in order (a box that lags drops or reorders them)
+    const typed = "The quiet after the last chant";
+    const t0 = Date.now();
+    await drawer.getByRole("textbox", { name: "My memory" }).pressSequentially(typed);
+    console.log(`My memory: ${typed.length} keys in ${Date.now() - t0} ms`);
+    await expect(drawer.getByRole("textbox", { name: "My memory" })).toHaveValue(typed, { timeout: 1_000 });
     await shot(page, "06-add-word");
     await drawer.getByRole("button", { name: "Save the word" }).click();
     await expect(f.getByRole("heading", { name: "शान्ति" })).toBeVisible({ timeout: 90_000 });
