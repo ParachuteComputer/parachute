@@ -286,8 +286,8 @@ export function refSource(ref: Pick<VaultRec, "path" | "fields">): { label: stri
   const url = rawUrl || urlFromSource;
   let label = rawSource && rawSource !== urlFromSource ? rawSource : "";
   if (!label && url) {
-    const wiki = /^\[\[([^\]|#]+)/.exec(url);
-    if (wiki) label = wiki[1].split("/").pop() ?? wiki[1];
+    const wiki = /^\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/.exec(url);
+    if (wiki) label = wiki[2]?.trim() || (wiki[1].split("/").pop() ?? wiki[1]);
     else {
       try {
         label = new URL(url).hostname.replace(/^www\./, "") || url;
@@ -307,6 +307,32 @@ export function refWhy(ref: Pick<VaultRec, "fields">): string {
 }
 
 const VAULT_URL = /\/vault\/[^/?#]+\/|\/(?:view|n)\/[A-Za-z0-9_-]{8,64}(?:[/?#]|$)/;
+const WEB = /^(https?:|mailto:)/i;
+/** A host only a device or a private network reaches: loopback, private and tailnet ranges, .local/.internal/.ts.net. */
+function privateHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
+  if (h === "localhost" || /\.(localhost|local|internal|lan|home\.arpa|ts\.net)$/.test(h) || !h.includes(".") && !h.includes(":")) return true;
+  const ip = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(h);
+  if (ip) {
+    const [a, b] = [Number(ip[1]), Number(ip[2])];
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  }
+  return h === "::1" || /^f[cd][0-9a-f]{2}:/.test(h) || /^fe80:/.test(h);
+}
+/** An address of a vault or a private machine, never to be cited in a piece: a hub's /vault/<name>/ or /view/<id>,
+ *  `<vault>:<id>`, any scheme but the web's (vault://, obsidian://, file:), or a web address on a private host. */
+export function vaultAddress(raw: string): boolean {
+  const u = raw.trim();
+  if (!u) return false;
+  if (/^[a-z][a-z0-9+.-]*:(\/\/|\S+$)/i.test(u) && !WEB.test(u)) return true;
+  if (!WEB.test(u)) return false;
+  if (VAULT_URL.test(u)) return true;
+  try {
+    return /^https?:/i.test(u) && privateHost(new URL(u).hostname);
+  } catch {
+    return true;
+  }
+}
 
 /** `[[Notes/Ivan Illich|Illich]]` → `Illich`, `[[Ivan Illich]]` → `Ivan Illich`: the words a wikilink shows. */
 export function unwiki(text: string): string {
@@ -321,18 +347,21 @@ export function unwiki(text: string): string {
 export function formatQuoteMarkdown(ref: Pick<VaultRec, "id" | "path" | "fields" | "body">): string {
   const quote = refQuote(ref);
   const found = refSource(ref);
-  // a vault's address (a hub's /vault/<name>/ or a record's /view/<id>) is no source to cite in public
-  const words = [ref.fields?.source, ref.fields?.source_title, ref.fields?.from].map(str).find((w) => w && !/^(https?:|mailto:)/i.test(w)) ?? "";
-  const src = VAULT_URL.test(found.url) ? { ...found, url: "", label: words.replace(/^\[\[([^\]|#]+).*$/, (_m, t: string) => t.split("/").pop() ?? t) } : found;
-  const bodyLines = unwiki(quote || recordTitle(ref))
+  // a vault's address is no source to cite in public: the source in words, or nothing
+  const words = [ref.fields?.source, ref.fields?.source_title, ref.fields?.from].map(str).find((w) => w && !WEB.test(w) && !vaultAddress(w)) ?? "";
+  const src = vaultAddress(found.url) ? { ...found, url: "", label: unwiki(words) } : found;
+  // nor a link to one inside the quote's words: the link's words stay
+  const said = (quote || recordTitle(ref)).replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (m, text: string, href: string) => (vaultAddress(href) ? text : m))
+    .replace(/<([^>\s]+)>/g, (m, href: string) => (vaultAddress(href) ? "" : m));
+  const bodyLines = unwiki(said)
     .replace(/\r\n/g, "\n")
     .split("\n")
     .map((line) => (line.trim() ? `> ${line}` : ">"));
 
   // with no source named, the label is the reference's own note name: that stays in the vault
   const named = !!(src.label && (words || src.url));
-  const label = named && !/^(https?:|mailto:)/i.test(src.label) ? src.label.replace(/[\[\]]/g, "") : "";
-  const author = src.author.replace(/[\[\]]/g, "");
+  const label = named && !WEB.test(src.label) && !vaultAddress(src.label) ? unwiki(src.label).replace(/[\[\]]/g, "") : "";
+  const author = unwiki(src.author).replace(/[\[\]]/g, "");
   const href = /^(https?:|mailto:)/i.test(src.url) ? src.url.replace(/\s/g, "%20").replace(/\(/g, "%28").replace(/\)/g, "%29") : "";
   const cited = href ? `[${label || href}](${href})` : label;
   const citation = [author, cited].filter(Boolean).join(", ");
@@ -498,6 +527,11 @@ const caretOf = new Map<string, [number, number]>();
 /** The last version of each piece this applet saved. A save can land after its editor is gone (Details, Back): the
  *  next editor on the piece knows that version as its own, not as someone else's change. */
 const ownVersion = new Map<string, string>();
+/** Each piece's save still out, from whichever editor made it, and what the last one made (the version it was built
+ *  on, the version it made, its words). An editor made again while a save is out (Details, then back) waits for it
+ *  and builds on it, rather than saving on the older version and meeting a false conflict. */
+const pendingSave = new Map<string, Promise<void>>();
+const landedSave = new Map<string, { from: string; version: string; body: string }>();
 const readSavedDraft = (id: string): SavedDraft | null => {
   try {
     const raw = saved?.get?.(draftKey(id)) as SavedDraft | null | undefined;
@@ -602,6 +636,17 @@ const PieceEditor = memo(function PieceEditor({
       timerRef.current = null;
     }
     if (statusRef.current === "conflict") return baseRef.current;
+    const out = pendingSave.get(pieceId);
+    if (out && !inflightRef.current) {
+      // an earlier editor's save on this piece: once it lands, it is the version this editor's words build on
+      await out;
+      const landed = landedSave.get(pieceId);
+      if (landed && landed.from === baseRef.current) {
+        baseRef.current = landed.version;
+        savedBodyRef.current = landed.body;
+      }
+      return persistNow();
+    }
     const text = bodyRef.current;
     if (text === savedBodyRef.current) {
       writeSavedDraft(pieceId, null);
@@ -623,7 +668,10 @@ const PieceEditor = memo(function PieceEditor({
       try {
         const updated: VaultRec = await vault.updateRecord(pieceId, { body: text, if_updated_at: base });
         baseRef.current = updated.updatedAt ?? base;
-        if (updated.updatedAt) ownVersion.set(pieceId, updated.updatedAt);
+        if (updated.updatedAt) {
+          ownVersion.set(pieceId, updated.updatedAt);
+          landedSave.set(pieceId, { from: base, version: updated.updatedAt, body: text });
+        }
         savedBodyRef.current = text;
         if (bodyRef.current === text) {
           writeSavedDraft(pieceId, null);
@@ -649,6 +697,10 @@ const PieceEditor = memo(function PieceEditor({
       }
     })();
     inflightRef.current = run;
+    pendingSave.set(pieceId, run);
+    void run.finally(() => {
+      if (pendingSave.get(pieceId) === run) pendingSave.delete(pieceId);
+    });
     await run;
     return baseRef.current;
   }, [pieceId]);
@@ -1296,7 +1348,9 @@ export default function Writing() {
           }
         }
         toast("Asked Uni.");
-        await loadBeside(piece);
+        // only if it is still the piece open: else its references would show under another
+        const now = selectedPieceRef.current;
+        if (now?.id === piece.id) await loadBeside(now);
       } catch (e) {
         toast(`Could not ask Uni: ${e instanceof Error ? e.message : String(e)}`, { error: true });
         throw e;
