@@ -88,7 +88,9 @@ describe("real-world HTML mail, cleaned", () => {
 
   it("web pictures wait until shown; tracking pixels never come, shown or not", () => {
     for (const [name, pixels] of [["apple-invite", 1], ["stripe-receipt", 1], ["substack-newsletter", 1]] as const) {
-      const hidden = drawn(htmlOf(name));
+      const hiddenAsked: string[] = [];
+      const hidden = drawn(htmlOf(name), { show: false, web: (u) => { hiddenAsked.push(u); return "blob:x"; } });
+      expect(hiddenAsked).toEqual([]);
       expect(hidden.c.trackers).toBe(pixels);
       expect(hidden.c.hidden).toBeGreaterThan(0);
       expect(hidden.host.querySelector("img[src]")).toBeNull();
@@ -127,6 +129,9 @@ describe("real-world HTML mail, cleaned", () => {
     expect(cleanMail('<div dir="ltr">Thanks!<br>Sam</div>', HIDDEN).colored).toBe(false);
     expect(cleanMail('<body bgcolor="#000000"><p>dark</p></body>', HIDDEN).colored).toBe(true);
     expect(cleanMail('<p><font color="#333">grey</font></p>', HIDDEN).colored).toBe(true);
+    // white words with no background of their own: on the app's paper they'd vanish, so they get the sender's
+    expect(cleanMail('<p style="color:#ffffff">white</p>', HIDDEN).colored).toBe(true);
+    expect(cleanMail('<p style="color: inherit">plain</p>', HIDDEN).colored).toBe(false);
   });
 
   it("its <body>'s background and rules for body/html apply to the root, not the app", () => {
@@ -140,13 +145,21 @@ describe("real-world HTML mail, cleaned", () => {
 describe("a hostile mail", () => {
   const html = htmlOf("hostile");
   const { c, host, text } = drawn(html, { show: true, web: (u) => `blob:${u.length}` });
-  it("keeps no script, frame, form, field, media, svg, math, template, link, meta or base", () => {
+  it("keeps no script, frame, form, field, media, svg, math, template, link, meta or base; its <style> in the body is read as CSS, not kept", () => {
+    expect(c.css).toMatch(/\.trap\{color: #c00\}/);
+    expect(c.css).not.toMatch(/body\.css/);
     expect(host.querySelector("script, iframe, frame, object, embed, form, input, button, textarea, select, video, audio, source, svg, math, template, noscript, link, meta, base, style, map, area")).toBeNull();
   });
-  it("keeps no handler, target, srcset or poster, and only its one real link", () => {
-    for (const el of host.querySelectorAll("*")) for (const a of Array.from(el.attributes)) expect(a.name).not.toMatch(/^on|^target$|^srcset$|^poster$|^formaction$/i);
-    expect(links(host)).toEqual(["https://hostile.example.test/confirm"]);
-    expect(text).toContain("Confirm with JavaScript");
+  it("keeps no handler, target, srcset, ping or poster, and only its real web links", () => {
+    for (const el of host.querySelectorAll("*")) for (const a of Array.from(el.attributes)) expect(a.name).not.toMatch(/^on|^target$|^srcset$|^ping$|^poster$|^formaction$/i);
+    expect(links(host)).toEqual(["https://hostile.example.test/confirm", "https://hostile.example.test/ping"]);
+    // the words of a link it can't open stay, as words: a script's, a phone number's, a path's, a part's
+    for (const w of ["Confirm with JavaScript", "Confirm with data", "Call us", "Your account", "A part", "a span with an href"]) expect(text).toContain(w);
+    expect(host.querySelector("[href]:not(a), [src]:not(img)")).toBeNull();
+  });
+  it("draws no data: picture but PNG, JPEG, GIF or WebP, and takes its hidden pixel out", () => {
+    expect(host.querySelector('img[alt="svg as data"]')).toBeNull();
+    expect(c.trackers).toBe(1);
   });
   it("loads nothing but its pictures, each through `web`: no stylesheet, @import, font or frame", () => {
     expect(c.web.sort()).toEqual(["https://hostile.example.test/bg.png?who=alice", "https://hostile.example.test/inline.png", "https://hostile.example.test/pic.png", "https://hostile.example.test/tablebg.png", "https://hostile.example.test/tdbg.png"]);
@@ -164,6 +177,9 @@ describe("a hostile mail", () => {
 
 describe("cleanSheet", () => {
   const none = () => null;
+  it("an at-rule with no block ends at its semicolon: the rule after it stays", () => {
+    expect(cleanSheet("@import url(x.css); .a { color: red }", none)).toBe(".a{color: red}");
+  });
   it("drops @import, @font-face, @charset, @namespace and @page, keeps @media with what is in it", () => {
     const out = cleanSheet('@charset "utf-8"; @import url(x.css); @namespace svg url(http://www.w3.org/2000/svg); @font-face { font-family: X; src: url(https://f/x.woff) } @page { margin: 0 } @media (max-width: 600px) { .a { color: red } } .b { color: blue }', none);
     expect(out).toBe("@media (max-width: 600px){.a{color: red}}.b{color: blue}");
@@ -190,11 +206,12 @@ describe("cleanSheet", () => {
 describe("the last walk takes out what the steps before it should have", () => {
   it("an element it doesn't allow, a handler, a bad href, src or style, a javascript: value", () => {
     const root = document.createElement("div");
-    root.innerHTML = '<p onclick="x()">a</p><a href="javascript:x()">b</a><span href="https://x">c</span><img src="https://x/y.png"><img src="data:text/html,x"><div style="background:url(https://x)">d</div><div title="javascript:x">e</div><table background="https://x/t.png"></table>';
-    root.append(document.createElementNS("http://www.w3.org/2000/svg", "svg"));
+    root.innerHTML = '<p onclick="x()">a</p><a href="javascript:x()">b</a><span href="https://x">c</span><img src="https://x/y.png"><img src="data:text/html,x"><div style="background:url(https://x)">d</div><div title="javascript:x">e</div><table background="https://x/t.png"></table><img srcset="https://x/2x.png 2x"><a target="_top" ping="https://x/p">f</a>';
+    // an SVG <a> has an allowed name in another namespace
+    root.append(document.createElementNS("http://www.w3.org/2000/svg", "a"));
     const script = document.createElement("script"); root.append(script);
-    expect(lastWalk(root)).toBe(10);
-    expect(root.innerHTML).toBe("<p>a</p><a>b</a><span>c</span><img><img><div>d</div><div>e</div><table></table>");
+    expect(lastWalk(root)).toBe(13);
+    expect(root.innerHTML).toBe("<p>a</p><a>b</a><span>c</span><img><img><div>d</div><div>e</div><table></table><img><a>f</a>");
   });
   it("leaves what is allowed as it was", () => {
     const root = document.createElement("div");
@@ -205,11 +222,19 @@ describe("the last walk takes out what the steps before it should have", () => {
   });
 });
 
+describe("cleanMail's last walk runs", () => {
+  it("an element DOMPurify keeps but a mail has no use for goes, counted", () => {
+    const { c, host } = drawn('<p>words</p><canvas width="9"></canvas><spacer type="block"></spacer>');
+    expect(host.querySelector("canvas, spacer")).toBeNull();
+    expect(c.refused).toBe(2);
+  });
+});
+
 describe("webHref", () => {
   it("keeps http, https and mailto; nothing else, nothing hidden or spaced", () => {
     expect(webHref(" https://x.test/a?b=1 ")).toBe("https://x.test/a?b=1");
     expect(webHref("mailto:a@b.test")).toBe("mailto:a@b.test");
-    for (const bad of ["javascript:alert(1)", "data:text/html,x", "vbscript:x", "/relative", "x.test", "tel:+1555", "https://x.test/a b", "https://x​.test", "https://", "ftp://x.test", "cid:abc"]) expect(webHref(bad), bad).toBeNull();
+    for (const bad of ["javascript:alert(1)", "data:text/html,x", "vbscript:x", "/relative", "x.test", "tel:+1555", "https://x.test/a b", "https://x\u200b.test", "https://", "ftp://x.test", "cid:abc"]) expect(webHref(bad), bad).toBeNull();
   });
 });
 

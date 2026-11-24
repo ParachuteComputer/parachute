@@ -8,8 +8,9 @@
 //               from the message itself (cid:), a data: picture, or the web once the person shows pictures, and a
 //               tracking pixel never; every CSS url() is asked the same; the mail's CSS can't reach outside its root
 //               (no :host, no @import or @font-face, no escapes to hide them); a quoted reply folds.
-//   3. check    a last walk over what is left that removes anything a rule above should have caught: a belt for the
-//               braces, counted in `refused` (a test fails if it is ever more than 0 on a fixture).
+//   3. check    a last walk over what is left, with its own allowlist: an element outside it goes (DOMPurify keeps a few
+//               a mail has no use for: <canvas>, <spacer>), and anything a rule above should have caught (a belt for
+//               the braces), counted in `refused` (a test fails if a fixture ever needs it).
 // Pure and synchronous: the pictures it may draw are given (`Pictures`); MailBody fetches them and cleans again.
 import purify from "./vendor/purify.es.mjs";
 
@@ -36,18 +37,21 @@ export type Clean = {
   trackers: number;
   /** It sets colours of its own: draw it on paper, as its sender saw it, not in the app's dark look. */
   colored: boolean;
-  /** What the last walk took out (0 unless a rule above failed). */
+  /** What the last walk took out: an element outside its own list (a <canvas>, a <spacer>), or anything a rule before
+   *  it missed (never, on the fixtures). */
   refused: number;
 };
 
 /** What DOMPurify allows by default and a mail mustn't have. */
 export const FORBID_TAGS = ["style", "form", "input", "button", "select", "option", "optgroup", "textarea", "datalist", "output", "video", "audio", "source", "track", "template", "dialog", "map", "area"];
-export const FORBID_ATTR = ["srcset", "target", "ping"];
+export const FORBID_ATTR = ["srcset"];
+/** What the last walk never lets stay (DOMPurify drops the others itself; this checks it did). */
+const NEVER_ATTR = ["srcset", "target", "ping", "formaction", "action", "poster"];
 
 /** A link a tap may open: http, https or mailto, nothing hidden or spaced in it, as the shell's open-link checks. */
 export function webHref(raw: string | null): string | null {
   const v = (raw ?? "").trim();
-  if (!/^(?:https?:\/\/[^/?#\s]|mailto:)/i.test(v) || /[\u0000- \u007f-\u009f­​-‏‪-‮⁠-⁯﻿]/.test(v) || v.length > 2000) return null;
+  if (!/^(?:https?:\/\/[^/?#\s]|mailto:)/i.test(v) || /[\u0000-\u0020\u007f-\u009f\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/.test(v) || v.length > 2000) return null;
   try { new URL(v); return v; } catch { return null; }
 }
 
@@ -60,8 +64,8 @@ function kindOf(src: string): { kind: "cid"; id: string } | { kind: "data" } | {
   return null;
 }
 
-/** Where an escape was: an escape can spell `url(` or `:host` so no rule sees it, so the declaration or rule it is in
- *  goes (real mail hardly uses them). */
+/** Where an escape was: an escape can spell `url(` or `:host` so no rule sees it. The mark breaks the word it is in (no
+ *  `url(` or `expression(` is made of one), and a rule whose selector has one goes (real mail hardly uses them). */
 const ESCAPED = "\uffff";
 /** CSS with its comments out, and each escape marked. */
 function plainCss(css: string): string {
@@ -78,7 +82,7 @@ const COLOURS = /(?:^|[;{\s])(?:background(?:-color)?|color)\s*:\s*(?!\s*(?:tran
  *  each declaration that would load or run something another way dropped. */
 function cleanDeclarations(css: string, pic: (src: string) => string | null): string {
   const withUrls = css.replace(URL_TOKEN, (_m, a, b, c) => { const got = pic(String(a ?? b ?? c ?? "").trim()); return got ? `url("${got.replace(/["\\\n]/g, "")}")` : "none"; });
-  return splitOutside(withUrls, ";").map((d) => d.trim()).filter((d) => d && !CSS_BAD.test(d) && !PINNED.test(d) && !d.includes(ESCAPED)).join("; ");
+  return splitOutside(withUrls, ";").map((d) => d.trim()).filter((d) => d && !CSS_BAD.test(d) && !PINNED.test(d)).join("; ");
 }
 /** Split on `sep` outside quotes and brackets. */
 function splitOutside(s: string, sep: string): string[] {
@@ -117,8 +121,9 @@ export function cleanSheet(css: string, pic: (src: string) => string | null): st
   let out = "", i = 0;
   while (i < s.length) {
     const open = s.indexOf("{", i), semi = s.indexOf(";", i);
-    // an at-rule without a block (@import …;, @charset …;) ends at its semicolon: dropped
-    if (semi >= 0 && (open < 0 || semi < open) && /^\s*@/.test(s.slice(i, semi))) { i = semi + 1; continue; }
+    // a statement without a block ends at its semicolon, and goes: an @import, an @charset, or anything else before
+    // the next rule that isn't one
+    if (semi >= 0 && (open < 0 || semi < open)) { i = semi + 1; continue; }
     if (open < 0) break;
     const prelude = s.slice(i, open).trim(), end = blockEnd(s, open), body = s.slice(open + 1, end);
     i = end + 1;
@@ -182,7 +187,7 @@ export function cleanMail(html: string, pictures: Pictures): Clean {
   const body = doc.body;
 
   // 1. purify
-  const frag = purify.sanitize(html, { USE_PROFILES: { html: true }, FORBID_TAGS, FORBID_ATTR, ALLOW_DATA_ATTR: false, RETURN_DOM_FRAGMENT: true });
+  const frag = purify.sanitize(html, { USE_PROFILES: { html: true }, FORBID_TAGS, FORBID_ATTR, RETURN_DOM_FRAGMENT: true });
 
   // 2. finish
   for (const el of Array.from(frag.querySelectorAll("*"))) {
@@ -235,7 +240,7 @@ export function lastWalk(root: Element): number {
     if (!ALLOWED.has(el.localName) || el.namespaceURI !== "http://www.w3.org/1999/xhtml") { el.remove(); refused++; continue; }
     for (const a of Array.from(el.attributes)) {
       const v = a.value.trim();
-      const bad = /^on/i.test(a.name) || FORBID_ATTR.includes(a.name)
+      const bad = /^on/i.test(a.name) || NEVER_ATTR.includes(a.name)
         || (a.name === "href" && (el.localName !== "a" || !webHref(v)))
         || (a.name === "src" && (el.localName !== "img" || !/^(?:blob:|data:image\/(?:png|jpeg|gif|webp);)/i.test(v)))
         || (a.name === "background" && !/^(?:blob:|data:image\/)/i.test(v))

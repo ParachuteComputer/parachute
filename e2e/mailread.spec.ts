@@ -242,7 +242,7 @@ test("a hostile mail runs nothing, loads nothing, can't cover the app, and only 
     expect(found.mailNodes).toBeGreaterThan(5);
     expect(found.bad).toEqual([]);
     expect(found.handlers).toEqual([]);
-    expect(found.hrefs).toEqual(["https://hostile.example.test/confirm"]);
+    expect(found.hrefs).toEqual(["https://hostile.example.test/confirm", "https://hostile.example.test/ping"]);
     for (const name of ["Confirm with JavaScript", "Confirm with data", "Confirm with vbscript"]) await expect(h.getByRole("link", { name })).toHaveCount(0);
     await opens(page, h, "Confirm here", "https://hostile.example.test/confirm");
     // its full-screen "cover" stays inside the message: the app's own Reply is still the thing under a tap
