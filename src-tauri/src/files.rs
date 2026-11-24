@@ -101,7 +101,7 @@ pub fn bare_name(raw: &str) -> String {
 }
 
 /// The k-th name tried for `name`: the name itself, then "name (2).ext", "name (3).ext"…
-#[cfg(any(desktop, test))]
+#[cfg(any(desktop, target_os = "ios", test))]
 fn numbered(name: &str, k: u32) -> String {
     if k <= 1 {
         return name.to_string();
