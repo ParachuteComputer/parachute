@@ -358,6 +358,17 @@ a.quiet-button { color: var(--text); text-decoration: none; display: inline-bloc
 .choice { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 12px; }
 .choice legend { width: 100%; }
 
+/* the bar in Settings (views/BarSettings.tsx): a pin a line, its moves at the end */
+.bar-pins .line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bar-pin-acts { display: flex; gap: 4px; flex: none; }
+.bar-pin-acts .quiet-button { min-width: 36px; min-height: 36px; }
+@media (pointer: coarse) { .bar-pin-acts .quiet-button, .bar-more .quiet-button { min-width: 44px; min-height: 44px; } }
+.bar-more summary { cursor: pointer; color: var(--muted); font-size: var(--fs-small); padding: 4px 0; }
+.bar-more li { padding: 2px 0; }
+
+/* the person's other vaults, one tap each to make one home (views/HomeChoice.tsx) */
+.home-choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+
 /* the shell's own words over a running applet (views/ShellSheets.tsx): a secret's sheet, and a passing line */
 .secret-field { display: grid; gap: 4px; margin: 10px 0; }
 .secret-field input { font: max(16px, var(--fs-body))/1.4 var(--mono, ui-monospace, monospace); padding: 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: inherit; }

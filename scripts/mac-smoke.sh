@@ -25,13 +25,23 @@ cp -R "$mnt/Parachute.app" /Applications/
 xattr -w com.apple.quarantine "0081;$(printf %x "$(date +%s)");Safari;" "$app"
 
 say "signature"
-codesign -dv "$app" 2>&1 | tee "$out/codesign.txt"
-grep -q "Signature=adhoc" "$out/codesign.txt" || fail "not ad-hoc signed"
+codesign -dvv "$app" 2>&1 | tee "$out/codesign.txt"  # -vv: the Authority lines too
 codesign --verify --deep --strict "$app" || fail "signature doesn't verify"
-say "Gatekeeper (expected to refuse: not notarised)"
-spctl -a -vv "$app" 2>&1 | tee "$out/gatekeeper.txt" || true
-
-say "past Gatekeeper, as docs/INSTALL-MAC.md says"
+if [ -n "${PARACHUTE_MAC_SIGNED:-}" ]; then
+  # signed and notarised (mac.yml): Gatekeeper takes the downloaded app as it is
+  grep -q "Authority=Developer ID Application" "$out/codesign.txt" || fail "not signed with a Developer ID certificate"
+  say "Gatekeeper (must accept: notarised)"
+  spctl -a -vv "$app" > "$out/gatekeeper.txt" 2>&1 || { cat "$out/gatekeeper.txt"; fail "Gatekeeper refuses the downloaded app"; }
+  cat "$out/gatekeeper.txt"
+  grep -q "source=Notarized Developer ID" "$out/gatekeeper.txt" || fail "Gatekeeper accepts it, but not as notarised"
+  # macOS still asks once whether to open an app from the internet; the person's Open clears this flag
+  say "Open, as the person answers macOS's one question"
+else
+  grep -q "Signature=adhoc" "$out/codesign.txt" || fail "not ad-hoc signed"
+  say "Gatekeeper (expected to refuse: not notarised)"
+  spctl -a -vv "$app" 2>&1 | tee "$out/gatekeeper.txt" || true
+  say "past Gatekeeper, as docs/INSTALL-MAC.md says"
+fi
 xattr -dr com.apple.quarantine "$app"
 if xattr -p com.apple.quarantine "$app" >/dev/null 2>&1; then fail "quarantine flag still set"; fi
 
@@ -55,4 +65,4 @@ up || fail "the app quit on a parachute:// link"
 screencapture -x "$out/02-link.png" || true
 
 pkill -x "$exe" || true
-say "ok: installed from the dmg, past Gatekeeper, started, stayed up, took a link"
+say "ok: installed from the dmg, past Gatekeeper${PARACHUTE_MAC_SIGNED:+ (notarised)}, started, stayed up, took a link"

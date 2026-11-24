@@ -86,7 +86,7 @@ export default function AddParachute({ first = false }: { first?: boolean }) {
         </>}
         {/* Parachute Cloud signs in by an emailed link, on its own page */}
         {/* (a Cloud account is the person's own unless they said otherwise: it asks nothing more) */}
-        <button className="quiet-button" type="button" disabled={busy} onClick={() => { setInput(CLOUD); void go(CLOUD, false, whose ?? "mine"); }}>Use {CLOUD_NAME} instead</button>
+        <button className="quiet-button" type="button" disabled={busy} onClick={() => { setInput(CLOUD); void go(CLOUD, false, whose ?? "mine"); }}>{first ? <>New here? Start with {CLOUD_NAME}</> : <>Use {CLOUD_NAME} instead</>}</button>
       </form>
     </main>
   );

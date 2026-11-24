@@ -22,8 +22,15 @@ val playtestKey = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// PARACHUTE_STORE=play (scripts/android-build.sh --play): the build for Google Play, an app bundle with no in-app update.
+// Play updates the app, so its manifest drops the right to install apps (src/play/AndroidManifest.xml), and its Rust has
+// no update feed (src-tauri/build.rs refuses one). Unset: the APK people install themselves. docs/STORES.md
+val store = System.getenv("PARACHUTE_STORE").orEmpty()
+if (store != "" && store != "play") throw GradleException("PARACHUTE_STORE is \"$store\": only play, or unset")
+
 android {
     compileSdk = 36
+    if (store == "play") sourceSets.getByName("release").manifest.srcFile("src/play/AndroidManifest.xml")
     namespace = "computer.parachute.app"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"

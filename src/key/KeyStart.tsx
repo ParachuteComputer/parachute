@@ -51,9 +51,9 @@ export default function KeyStart({ first = false }: { first?: boolean }) {
     <main className="screen">
       <Bar title={first ? "Parachute" : "Your key"} back={first ? undefined : "/settings"} />
       {first && <section className="card stack">
-        <p className="lead">Your notes on {CLOUD_NAME}?</p>
-        <button type="button" className="primary" onClick={() => void cloud()} disabled={busy}>Sign in with {CLOUD_NAME}</button>
-        <p className="quiet small">With your email. No key needed.</p>
+        <p className="lead">New to Parachute, or your notes are on {CLOUD_NAME}?</p>
+        <button type="button" className="primary" onClick={() => void cloud()} disabled={busy}>Start with {CLOUD_NAME}</button>
+        <p className="quiet small">Your email is all it takes: it makes your account if you're new. No key, no password.</p>
       </section>}
       {/* another Parachute (the person's own hub, an org's, a friend's): its address, then the hub's own sign-in */}
       {first && <section className="card stack">
