@@ -10,6 +10,7 @@
 // When the hub has a resumable route (UPLOADS.md §6.1) it goes there instead, and the answer keeps this shape.
 
 import type { ChosenFile } from "./modules/app.ts";
+import { mediaType } from "./files.ts";
 
 /** A piece: 8 MiB, far under every hub's limit (core's 100 MiB, Cloudflare's 100 MB a request). */
 export const PART = 8 * 1024 * 1024;
@@ -102,12 +103,14 @@ export async function uploadInParts(file: Blob, name: string, type: string, io: 
   // the same file is its name and size (the pieces' hashes check the rest); its type as the record has it, as a
   // picker on another device may name it otherwise
   if (was && was.parts.length && (was.name !== name || was.size !== size)) throw new UploadError(`this record holds another file's upload (${was.name.slice(0, 100)})`);
-  const m: Manifest = { name, type: was && was.parts.length ? was.type : type, size, parts: [] };
+  const m: Manifest = { name, type, size, parts: [] };
   for (const p of was?.parts.slice(0, n) ?? []) {
     const b = piece(m.parts.length);
     if (p.size !== b.size || p.sha256 !== await io.hash(await b.arrayBuffer())) break;
     m.parts.push(p);
   }
+  // going on with what is there: its type as the record has it (a picker elsewhere may name it otherwise)
+  if (m.parts.length) m.type = mediaType(was!.type) ?? type;
   let done = m.parts.reduce((s, p) => s + p.size, 0), last = 0;
   const say = (sent: number, force = false) => { const t = Date.now(); if (force || t - last >= 250) { last = t; progress({ sent, size }); } };
   say(done, true);
@@ -132,7 +135,8 @@ export async function uploadInParts(file: Blob, name: string, type: string, io: 
         const now = await io.read();
         // another upload of this file onto the record (another device) is further on: its list stays
         const there = asManifest(now.upload);
-        if (there && there.name === name && there.size === size && there.parts.length > m.parts.length) return;
+        if (there && there.name === name && there.size === size && there.parts.length > m.parts.length
+          && m.parts.every((p, k) => there.parts[k].sha256 === p.sha256)) return;
         try { await io.write({ ...m, parts: [...m.parts] }, now.updatedAt); return; } catch (e) { if (!conflict(e) || k >= 3) throw e; }
       }
     });

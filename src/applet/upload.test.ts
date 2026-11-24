@@ -144,6 +144,17 @@ describe("uploadInParts", () => {
     expect(asManifest(h.upload)!.parts).toHaveLength(3);
   });
 
+  it("a different file of the same name and size replaces the list as it goes, never hiding behind the old one", async () => {
+    const h = hub();
+    await uploadInParts(blob(bytes(3 * PART, 1)), "Big.pdf", "application/pdf", h.io);
+    const other = bytes(3 * PART, 2);
+    h.fail("put", 5, Object.assign(new Error("bad request"), { status: 400 }));  // its second piece is refused
+    await expect(uploadInParts(blob(other), "Big.pdf", "application/pdf", h.io)).rejects.toThrow(UploadError);
+    const now = asManifest(h.upload)!;
+    expect(now.parts).toHaveLength(1);
+    expect(now.parts[0].sha256).toBe(await sha256Hex(other.slice(0, PART).buffer as ArrayBuffer));
+  });
+
   it("refuses a record that holds another file's upload", async () => {
     const h = hub();
     await uploadInParts(blob(bytes(10)), "One.epub", "application/epub+zip", h.io);

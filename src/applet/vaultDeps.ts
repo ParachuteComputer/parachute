@@ -93,7 +93,11 @@ export function vaultDeps(c: VaultClient, kept?: VaultClient): VaultDeps {
         hash: sha256Hex,
         online: () => typeof navigator === "undefined" || navigator.onLine !== false,
         // back online, or a few seconds gone (the screen may have closed meanwhile: the upload looks again)
-        whenOnline: () => new Promise<void>((r) => { const t = setTimeout(r, 5000); addEventListener("online", () => { clearTimeout(t); r(); }, { once: true }); }),
+        whenOnline: () => new Promise<void>((r) => {
+          const back = () => { clearTimeout(t); r(); };
+          const t = setTimeout(() => { removeEventListener("online", back); r(); }, 5000);
+          addEventListener("online", back, { once: true });
+        }),
         sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
         closed,
       };

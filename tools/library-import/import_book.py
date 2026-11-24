@@ -1050,7 +1050,8 @@ def run_job(a, hub, types_hub=None):
     if any(p.get("path") not in on for p in parts):
         raise SystemExit(f"{job.rec.get('path')}: its upload names a file not attached to it: left as it is")
     # taken: on the version read, so two takers can't both have it
-    try: job.set(status="working", by=a.by, taken=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    mine = {"by": a.by, "taken": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    try: job.set(status="working", **mine)
     except RuntimeError as e:
         if " 409 " in str(e): raise SystemExit(f"{job.rec.get('path')} was taken or changed meanwhile: left to whoever has it") from None
         raise
@@ -1075,7 +1076,9 @@ def run_job(a, hub, types_hub=None):
         why = str(e) if isinstance(e, (RuntimeError, SystemExit, ValueError, KeyError, zipfile.BadZipFile)) else type(e).__name__
         try:
             job.rec = hub.req("GET", f"/notes/{job.id}?include_metadata=true")
-            job.set(status="failed", note=why[:400] or "the import stopped")
+            # still this run's: a taker that came after (this one went stale) keeps it
+            if all(job.fields.get(k) == v for k, v in mine.items()):
+                job.set(status="failed", note=why[:400] or "the import stopped")
         except Exception as e2:
             print(f"  the job couldn't be marked failed: {e2}", file=sys.stderr)
         raise
