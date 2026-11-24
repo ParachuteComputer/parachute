@@ -262,15 +262,18 @@ export default function Rooms() {
       const from = now() - 5;
       const m = ((await relay.query([{ kinds: [39000], "#d": [id] }])) as Ev[]).sort((a, b) => b.created_at - a.created_at)[0];
       if (down) throw new Error("away");
+      // the key unknown yet, it is learnt from the description: none read, the word waits
+      if (!m && !relayKey) throw new Error("not described");
       if (!on || (word.pubkey !== relayKey && word.pubkey !== m?.pubkey)) return;
       relayKey ||= word.pubkey;
-      if (word.kind === 44101) { if (drop(id)) changed(); return; }
+      if (word.kind === 44101) { gone.add(id); if (drop(id)) changed(); return; }
       if (!m) throw new Error("not described");
       const meta = metaOf(m);
       if (!meta) return;
       if (!s.rooms.has(id)) {
         const history = (await relay.query([{ kinds: [9], "#h": [id], limit: 40 }]).catch(() => [])) as Ev[];
         const endings = await askEndings(relay, history);
+        if (down) throw new Error("away");
         if (!on) return;
         s.msgs.set(id, s.msgs.get(id) ?? new Map());
         history.forEach(st.add); endings.forEach(st.add);
@@ -283,6 +286,8 @@ export default function Rooms() {
     // the newest word on each room waiting to be read again, read one room at a time; and the words done with (the relay
     // sends them all again when it is back), with each room's newest, so an older word never undoes a newer one
     const heard = new Map<string, Ev>(), done = new Set<string>(), newest = new Map<string, number>();
+    // rooms taken out of by word since a read began: that read's answer may still list them
+    const gone = new Set<string>();
     // a word whose read failed goes again when the relay is back, or (it was busy) a little later, three times at most
     const tries = new Map<string, number>();
     let reading = Promise.resolve(), retry: ReturnType<typeof setTimeout> | null = null;
@@ -299,7 +304,7 @@ export default function Rooms() {
           try { await reread(id, n); done.add(n.id); newest.set(id, Math.max(newest.get(id) ?? 0, n.created_at)); }
           catch {
             if (!heard.has(id)) heard.set(id, n);
-            const k = (tries.get(n.id) ?? 0) + 1; tries.set(n.id, k);
+            const k = (tries.get(n.id) ?? 0) + (down ? 0 : 1); tries.set(n.id, k);
             if (k <= 3 && !down && !retry) retry = setTimeout(() => { retry = null; if (on) onWord([]); }, 2000 * k);
           }
         }
@@ -320,9 +325,10 @@ export default function Rooms() {
       try {
         // what comes after starts now: anything posted (or any room you are put in) while the rest is read still arrives
         const since = now() - 5;
+        gone.clear();
         const [members, read] = await Promise.all([relay.query([{ kinds: [39002], "#p": [s.me], limit: 500 }]), loadRead(relay)]);
         const ids = [...new Set(members.map((e: Ev) => tag(e, "d")).filter(Boolean))] as string[];
-        relayKey = (members[0] as Ev | undefined)?.pubkey ?? "";
+        relayKey = (members[0] as Ev | undefined)?.pubkey ?? relayKey;
         if (!on || down) return;
         // the relay's read state is in hand: merged now, only forward (a room read on this device a moment ago stays read),
         // so marks made meanwhile can be written, whatever the rest of this read finds
@@ -349,7 +355,7 @@ export default function Rooms() {
         const came = [...live.keys()].flatMap((id) => s.rooms.get(id) ?? []);
         s.rooms.clear();
         for (const m of metas as Ev[]) {
-          const meta = metaOf(m); if (!meta) continue;
+          const meta = metaOf(m); if (!meta || gone.has(meta.id)) continue;
           s.rooms.set(meta.id, meta); described.set(meta.id, m.created_at);
         }
         for (const r of came) if (!s.rooms.has(r.id)) s.rooms.set(r.id, r);
