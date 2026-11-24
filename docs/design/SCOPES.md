@@ -97,10 +97,10 @@ token the app holds now gets 403 on a write. Settings shows what the app holds o
 allowed applet needs (the person's own, or write held from an install before this change), and **Sign out**
 ([../ACCESS.md](../ACCESS.md)).
 
-What stays at the hub: on the released hubs (core 0.8, 0.9.0-pre.1), the grant record. They remember the union of what
+What stays at the hub: on core 0.8 and 0.9.0-pre.1, the grant record. They remember the union of what
 this registration was ever granted, so allowing Journal again goes straight through without the hub's page: the token
-is dead, the memory of the yes is not. Proposal 2 ends that, and is merged on both hubs' `next` (core #131, 11-19;
-Cloud #422, 11-20): there a revoke drops from this registration's grant each vault scope no live token of it still
+is dead, the memory of the yes is not. Proposal 2 ends that, released in core 0.9.0-pre.2 and merged on Cloud's `next`
+(core #131, 11-19; Cloud #422, 11-20): there a revoke drops from this registration's grant each vault scope no live token of it still
 holds, so the hub asks again. Two limits, found in review (T-476): the trim is per registration, so on core a new
 registration under the same name still inherits an older one's grant (the last row of the table below); and revoking a refresh
 token the hub has already rotated past changes nothing there, so the app ends a token that comes back from a refresh

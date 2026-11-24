@@ -1,7 +1,7 @@
 //! Sharing a vault with a friend against a real hub (docs/design/SHARING.md), the requests the shell signs itself: the
 //! owner's key invites someone to `recipes` and lists who is in, the friend's own key accepts the link once, and the
 //! owner ends it. Runs when `PARACHUTE_CORE` names a hub; a hub before sharing (core T-476) says so and the test passes,
-//! unless `E2E_CORE_NEXT=1` says the hub is core's next (CI), where it must run.
+//! unless `E2E_CORE_NEXT=1` says the hub must have it (CI's 0.9.0-pre.2 leg).
 #[path = "support/hub.rs"]
 mod hub;
 
@@ -36,8 +36,8 @@ async fn the_owner_invites_the_friend_accepts_with_his_key_and_the_owner_ends_it
     let made = door::sharing_tool(&origin, &owner, "invite-to-vault", &args(json!({ "vault": "recipes", "name": "Bo", "from": "Aaron" }))).await;
     let made = match made {
         Err(e) if e.message.contains("Unknown tool") => {
-            // E2E_CORE_NEXT=1: this hub is core's next (CI), so sharing must be there
-            assert!(std::env::var("E2E_CORE_NEXT").as_deref() != Ok("1"), "core's next has no sharing: {}", e.message);
+            // E2E_CORE_NEXT=1: this hub must have sharing (CI's 0.9.0-pre.2 leg)
+            assert!(std::env::var("E2E_CORE_NEXT").as_deref() != Ok("1"), "this core has no sharing: {}", e.message);
             eprintln!("this hub has no sharing (core before T-476): skipping");
             return;
         }

@@ -4,7 +4,7 @@
 // the list once, in its group, saying what it reaches; Bo is one row, never also his sign-in. End on each leaves it in
 // the list as ended, and its next request is refused: Bo's too, and he can't sign in to the vault again.
 // Needs a hub with the one list (core T-476 #144 or later); an older hub skips, unless E2E_CORE_NEXT=1 says this hub is
-// core's next and must have it (CI's pinned leg; the red run).
+// a core that must have it (CI's 0.9.0-pre.2 leg; the red run).
 import { createHash, randomBytes } from "node:crypto";
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { expect, test, type FrameLocator, type Locator, type Page } from "@playwright/test";
