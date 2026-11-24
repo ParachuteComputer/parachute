@@ -33,7 +33,7 @@ Records live at `People/<Name>` with type `person` (parent `entity`). All new fi
 | `keep_in_touch` | `string` | How often to be in touch: `"every week"`, `"every 2 weeks"`, `"every month"`, `"every 3 months"`, `"every 6 months"`, `"every year"`. People also reads `"monthly"`, `"quarterly"`, `"yearly"` and a number of days (`45`, `"45 days"`) |
 | `talked` | `string[]` | Times you were in touch that left no note of their own, newest first: `"YYYY-MM-DD"` or `"YYYY-MM-DD: what about"` |
 | `how_we_met` | `string` | How you met, in your words |
-| `met` | `string` | When you met: `"YYYY-MM-DD"`, or `"YYYY"` when that's all you know |
+| `met` | `string` | When you met: `"YYYY-MM-DD"`, `"YYYY-MM"`, or `"YYYY"` when that's all you know |
 
 ### Body
 
@@ -142,3 +142,19 @@ import never misses a match.
 - **Export:** vCard 4.0 (CRLF, 75-octet folding, escaped values) for everyone, the filtered list, or one person: phones,
   emails, address, birthday, links, `groups` as `CATEGORIES`, `tags` as `X-PARACHUTE-TAGS`, `summary` as `NOTE`, and
   the photo embedded. Importing an export back changes nothing.
+
+## On the phone (CardDAV)
+
+`services/carddav` serves `People/` to a phone as one CardDAV address book (DAVx5 on Android syncs it into Contacts),
+read-write, straight from the vault: the vault stays the only copy. Only card facts cross (phones, emails, address,
+birthday, links, groups, summary, photo); the body and every other field never leave. A phone edit replaces the card
+facts and keeps the rest; a name changed on the phone doesn't rename the note. It adds four fields to a record:
+
+| Field | Type | Notes |
+|---|---|---|
+| `uid` | `string` | The card's UID, for a person made on the phone (one made in the vault uses its record id) |
+| `href` | `string` | The card's file name on the phone, kept only when it isn't the UID |
+| `vcard_extra` | `string[]` | Raw vCard lines the phone sent that People has no field for (`ORG`, `TITLE`, `NICKNAME`, `X-…`), sent back as they came |
+| `on_phone` | `boolean` | `false` keeps the person off the phone (deleting a contact on the phone sets it); **On my phone** in Edit details turns it back on (People removes the field) |
+
+How to run it, what maps to what and why: [services/carddav/README.md](../services/carddav/README.md).

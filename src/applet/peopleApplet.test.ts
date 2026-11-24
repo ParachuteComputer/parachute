@@ -819,3 +819,10 @@ describe("People round 2, third review (T-476)", () => {
     expect(api.withTalk(held, "2026-09-02", "lunch", "2026-09-01: lunch")).toEqual(["2026-09-02: lunch", { date: "2026-10-01", note: "coffee" }, "last spring", 7]);
   });
 });
+
+describe("People and the phone (T-476)", () => {
+  it("reads an address whose lines an Android export sends as a list in the street part", () => {
+    const vcf = ["BEGIN:VCARD", "VERSION:3.0", "FN:Maya Lin", "N:Lin;Maya;;;", "ADR;TYPE=home:;;412 Pine St,Boulder\\, CO 80302;;;;", "END:VCARD", ""].join("\r\n");
+    expect(api.parseVCard(vcf)[0].address).toBe("412 Pine St\nBoulder, CO 80302");
+  });
+});
