@@ -1,0 +1,40 @@
+# The iPhone drive's own small Xcode project (xcodegen): a UI test that drives the installed Parachute app by its
+# bundle id (scripts/ios-drive.sh), and the empty app a UI test needs as its host. Simulator only, never signed.
+name: ParachuteDrive
+options:
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    GENERATE_INFOPLIST_FILE: YES
+    SWIFT_VERSION: "5.0"
+targets:
+  DriveHost:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: computer.parachute.drive.host
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  Drive:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Drive]
+    dependencies:
+      - target: DriveHost
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: computer.parachute.drive
+        TEST_TARGET_NAME: DriveHost
+schemes:
+  Drive:
+    build:
+      targets:
+        DriveHost: all
+        Drive: [test]
+    test:
+      targets: [Drive]

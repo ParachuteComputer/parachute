@@ -19,6 +19,10 @@ fn main() {
     println!("cargo:rerun-if-env-changed=PARACHUTE_UPDATE_FEED");
     // the build for Google Play (PARACHUTE_STORE=play, docs/STORES.md) is updated by Play: it never reads a feed
     println!("cargo:rerun-if-env-changed=PARACHUTE_STORE");
+    // an iPhone build is updated only by TestFlight and the App Store, whose rules allow no other way (docs/STORES.md)
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") && std::env::var("PARACHUTE_UPDATE_FEED").is_ok_and(|f| !f.trim().is_empty()) {
+        panic!("PARACHUTE_UPDATE_FEED is set for an iPhone build: it has no update feed (docs/STORES.md)");
+    }
     match std::env::var("PARACHUTE_STORE").as_deref() {
         Err(_) | Ok("") => {}
         Ok("play") => {

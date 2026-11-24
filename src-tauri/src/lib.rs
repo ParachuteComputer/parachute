@@ -193,14 +193,14 @@ pub fn run() {
             notify::push_signals
         ])
         .setup(|app| {
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "ios"))]
             {
                 use tauri::Manager;
                 if let Some(window) = app.get_webview_window("main") {
                     seal_webview(&window);
                 }
             }
-            #[cfg(mobile)]
+            #[cfg(target_os = "android")]
             let _ = app;
             Ok(())
         })
@@ -227,8 +227,10 @@ fn webview_runtime() -> String {
 
 /// Close the two holes a sealed applet's frame would otherwise have on desktop: the bridge to native code
 /// (wry's `ipc` message handler) and WebRTC, which ignores the frame's content policy. Copied from the Uni app's shell.
-/// The app reaches its few commands through Tauri's custom protocol, not this handler, on desktop.
-#[cfg(desktop)]
+/// The app reaches its few commands through Tauri's custom protocol, not this handler, on desktop and on an iPhone.
+/// On an iPhone only the bridge is closed: WebRTC goes off only through a private WebKit call, which an App Store build
+/// must not make, so the self-test finds it on and runs approved code only there, as on Android.
+#[cfg(any(desktop, target_os = "ios"))]
 fn seal_webview(window: &tauri::WebviewWindow) {
     let label = window.label().to_string();
     let logged = label.clone();
@@ -266,7 +268,21 @@ fn seal_webview(window: &tauri::WebviewWindow) {
                 }
             }
         }
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(target_os = "ios")]
+        {
+            use objc2::{msg_send, rc::Retained, runtime::AnyObject};
+            // SAFETY: on iOS `inner()` is the live WKWebView, and `with_webview` runs this on the main thread; both
+            // messages are public WebKit API (WKWebView.configuration, WKUserContentController
+            // removeScriptMessageHandlerForName:).
+            unsafe {
+                let wk = &*webview.inner().cast::<AnyObject>();
+                let config: Retained<AnyObject> = msg_send![wk, configuration];
+                let controller: Retained<AnyObject> = msg_send![&*config, userContentController];
+                let () = msg_send![&*controller, removeScriptMessageHandlerForName: objc2_foundation::ns_string!("ipc")];
+            }
+            let _ = label;
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
         let _ = (webview, label);
     }) {
         log::warn!("seal_webview({logged}): with_webview failed ({err}); webview left unsealed");

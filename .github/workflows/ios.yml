@@ -1,0 +1,174 @@
+name: iOS
+# The iPhone app (docs/STORES.md "iPhone"). Two jobs on GitHub's Macs:
+#
+# - simulator: the app built for the iOS simulator (unsigned, a debug build), installed on a fresh simulator and driven
+#   as a person would (scripts/ios-drive.sh): paste a key, sign in to a throwaway hub on loopback, see the applets,
+#   open Rooms, allow it with Face ID, see a room on a fake relay. Screenshots are the artifact `ios-drive`.
+# - testflight: run by hand or by a release tag, the app signed for the App Store and uploaded to TestFlight, when the
+#   three iPhone signing secrets are set: IOS_CERTIFICATE (the Apple Distribution certificate and its key, a .p12, base64),
+#   IOS_CERTIFICATE_PASSWORD, IOS_MOBILE_PROVISION (the App Store provisioning profile for computer.parachute.app,
+#   base64). The upload uses the App Store Connect key the Mac workflow notarises with (APPLE_API_KEY, APPLE_API_ISSUER,
+#   APPLE_API_KEY_P8). None of the three set: it says so and stops, green. Some but not all: the run fails. Never on a
+#   pull request. The build number is the commit count, as Play's (scripts/play-version-code.sh): build from next.
+permissions:
+  contents: read
+on:
+  push:
+    tags: ["v*"]
+  # a change to the shell, the Xcode project or the drive is built and driven on the simulator before it merges
+  pull_request:
+    paths:
+      - "src-tauri/**"
+      - "scripts/ios-drive.sh"
+      - "scripts/ios-drive/**"
+      - "e2e/ios/**"
+      - "package-lock.json"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash  # -eo pipefail: a failing step in a pipe fails the step
+
+jobs:
+  simulator:
+    name: iPhone simulator (build, sign in, Rooms)
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ios-sim
+      - uses: ./.github/actions/core
+        with:
+          core: 0.8.0
+      - run: brew install xcodegen
+      - name: Build for the simulator (no update feed: an iPhone build never has one)
+        run: |
+          unset PARACHUTE_UPDATE_FEED
+          npx tauri ios build --debug --target aarch64-sim --ci
+          app=$(find src-tauri/gen/apple/build -name 'Parachute.app' -type d -path '*sim*' | head -1)
+          [ -n "$app" ] || app=$(find src-tauri/gen/apple/build -name 'Parachute.app' -type d | head -1)
+          [ -n "$app" ] || { echo "no Parachute.app under src-tauri/gen/apple/build" >&2; find src-tauri/gen/apple/build -maxdepth 4; exit 1; }
+          echo "APP=$app" >> "$GITHUB_ENV"
+          /usr/libexec/PlistBuddy -c Print "$app/Info.plist"
+      # the Xcode project is generated once (tauri ios init) and kept in the repository; a build may only rewrite what
+      # the plugins own in it, and the same way each time: a change here means gen/apple needs that change committed
+      - name: The Xcode project in the repository is the one the build used
+        run: git diff --exit-code -- src-tauri/gen/apple
+      - name: Sign in and open Rooms on the simulator, as a person would
+        run: scripts/ios-drive.sh "$APP" ios-drive
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-drive
+          path: |
+            ios-drive/*.png
+            ios-drive/*.log
+          retention-days: 14
+
+  testflight:
+    name: TestFlight (signed, uploaded)
+    if: github.event_name != 'pull_request'
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - name: Signed, or not this time
+        id: sign
+        env:
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          have=0
+          for v in IOS_CERTIFICATE IOS_CERTIFICATE_PASSWORD IOS_MOBILE_PROVISION; do [ -n "${!v}" ] && have=$((have+1)); done
+          if [ "$have" = 0 ]; then
+            echo "signed=" >> "$GITHUB_OUTPUT"
+            echo "Not signed or uploaded: no iPhone signing secrets here (docs/STORES.md). The simulator job built and drove the app." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$have" = 3 ]; then
+            for v in APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_P8; do
+              [ -n "${!v}" ] || { echo "::error::$v isn't set: the upload to TestFlight needs the App Store Connect key (docs/STORES.md)."; exit 1; }
+            done
+            echo "signed=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::$have of the three iPhone signing secrets are set: set all of IOS_CERTIFICATE, IOS_CERTIFICATE_PASSWORD and IOS_MOBILE_PROVISION, or none (docs/STORES.md)."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        if: steps.sign.outputs.signed
+        with:
+          fetch-depth: 0  # the build number is the commit count (scripts/play-version-code.sh)
+      - uses: actions/setup-node@v4
+        if: steps.sign.outputs.signed
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.sign.outputs.signed
+        run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.sign.outputs.signed
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        if: steps.sign.outputs.signed
+        with:
+          workspaces: src-tauri
+          key: ios
+      - if: steps.sign.outputs.signed
+        run: brew install xcodegen
+      # Tauri imports the certificate into a keychain of its own and installs the profile; the export is for App Store
+      # Connect. The build number joins the version: 0.1.0.<count>.
+      - name: Build and sign for the App Store
+        if: steps.sign.outputs.signed
+        env:
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+        run: |
+          unset PARACHUTE_UPDATE_FEED
+          n=$(scripts/play-version-code.sh)
+          npx tauri ios build --target aarch64 --export-method app-store-connect --build-number "$n" --ci
+          ipa=$(find src-tauri/gen/apple/build -name '*.ipa' | head -1)
+          [ -n "$ipa" ] || { echo "no .ipa under src-tauri/gen/apple/build" >&2; exit 1; }
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          mkdir -p out && cp "$ipa" "out/Parachute_${version}.${n}.ipa"
+          echo "IPA=out/Parachute_${version}.${n}.ipa" >> "$GITHUB_ENV"
+          echo "Built $(basename "out/Parachute_${version}.${n}.ipa"), signed for the App Store." >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload to TestFlight
+        if: steps.sign.outputs.signed
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          # altool reads the key from API_PRIVATE_KEYS_DIR as AuthKey_<id>.p8; the folder is removed after
+          dir="$RUNNER_TEMP/asc" && mkdir -p "$dir" && chmod 700 "$dir"
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$dir/AuthKey_$APPLE_API_KEY.p8" && chmod 600 "$dir/AuthKey_$APPLE_API_KEY.p8"
+          API_PRIVATE_KEYS_DIR="$dir" xcrun altool --upload-app --type ios --file "$IPA" --apiKey "$APPLE_API_KEY" --apiIssuer "$APPLE_API_ISSUER"
+          echo "Uploaded to App Store Connect: it shows in TestFlight once Apple has processed it (minutes)." >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove the App Store Connect key from the runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/asc"
+      - uses: actions/upload-artifact@v4
+        if: steps.sign.outputs.signed
+        with:
+          name: parachute-ios
+          path: out/*.ipa
+          retention-days: 30

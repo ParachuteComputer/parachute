@@ -27,7 +27,8 @@ pub struct Feed {
     platform: &'static str,
 }
 
-const PLATFORM: &str = if cfg!(target_os = "android") { "android" } else if cfg!(target_os = "macos") { "mac" } else if cfg!(target_os = "windows") { "windows" } else { "linux" };
+// (an iPhone build never has a feed: build.rs refuses one, and TestFlight and the App Store update it)
+const PLATFORM: &str = if cfg!(target_os = "android") { "android" } else if cfg!(target_os = "macos") { "mac" } else if cfg!(target_os = "ios") { "ios" } else if cfg!(target_os = "windows") { "windows" } else { "linux" };
 
 /// Only https, or http to this machine (a test feed).
 fn feed_url(raw: &str) -> Result<url::Url, String> {

@@ -15,9 +15,9 @@ export type GateMode = "sealed" | "approved-code";
 export type SelfTestPass = { platform: string; passedAt: string; appVersion: string; userAgent: string; mode: GateMode; runtime?: string };
 export const MODE_LABEL: Record<GateMode, string> = { sealed: "Sealed", "approved-code": "Approved code only (WebRTC present)" };
 
-/** `android` is checked first: Android user agents also say Linux. */
+/** `android` is checked first: Android user agents also say Linux; `ios` before `mac`: an iPhone's says "like Mac OS X". */
 export function platformName(ua: string): string {
-  return /Android/i.test(ua) ? "android" : /Mac OS X|Macintosh|iPhone|iPad/i.test(ua) ? "mac" : /Linux|X11/i.test(ua) ? "linux" : "other";
+  return /Android/i.test(ua) ? "android" : /iPhone|iPad/i.test(ua) ? "ios" : /Mac OS X|Macintosh/i.test(ua) ? "mac" : /Linux|X11/i.test(ua) ? "linux" : "other";
 }
 
 export function parseSelfTest(raw: string | null): SelfTestPass | null {

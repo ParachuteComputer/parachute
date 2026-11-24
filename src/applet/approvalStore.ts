@@ -212,9 +212,9 @@ export const signPick = (s: Subject, name: string, vaults: readonly VaultRef[] |
   signApproval({ subject: s, name, approved: true, code: PICK_CODE, scope: PICK_CODE, vaults, passcode, signed });
 
 /** What this device calls itself on an approval it signs. */
-export function deviceName(): string {
-  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
-  return /Android/i.test(ua) ? "Android" : /Mac/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : /Windows/i.test(ua) ? "Windows" : "a device";
+export function deviceName(ua: string = typeof navigator === "undefined" ? "" : navigator.userAgent): string {
+  // an iPhone's user agent says "like Mac OS X": it is asked first
+  return /Android/i.test(ua) ? "Android" : /iPhone/i.test(ua) ? "iPhone" : /iPad/i.test(ua) ? "iPad" : /Mac/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : /Windows/i.test(ua) ? "Windows" : "a device";
 }
 
 /** Whether approving code here asks the passcode (this device's level for it, src-tauri/src/levels.rs). */

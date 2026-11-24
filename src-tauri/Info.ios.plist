@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged by the Tauri CLI into the iPhone app's Info.plist (gen/apple/parachute_iOS/Info.plist). The Mac's is Info.plist.
+     iOS shows each Usage line when it first asks the person; an app that reaches the microphone, the camera or Face ID
+     without one is stopped. -->
+<plist version="1.0">
+<dict>
+	<!-- the recorder sheet (src/views/DeviceSheets.tsx) -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Parachute records a voice note when you press Record.</string>
+	<!-- scanning another device's pairing code (src/key/Pair.tsx), and a photo taken for a note -->
+	<key>NSCameraUsageDescription</key>
+	<string>Parachute uses the camera when you scan another device's pairing code or take a photo for a note.</string>
+	<!-- the device unlock before an approval (src-tauri/src/keyring.rs) -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>Parachute asks for Face ID before it approves something in your name.</string>
+	<!-- saved files go into the app's Documents (src-tauri/src/files.rs): Files shows them as On My iPhone → Parachute -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+</dict>
+</plist>
