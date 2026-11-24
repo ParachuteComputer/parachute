@@ -716,7 +716,9 @@ describe("vault.file: a picture attached to a record in the applet's folders, an
     // HTML disguised as audio/webm is refused by magic-byte check
     await expect(mkAudio(FAKE_BYTES, "audio/webm")(`/api/storage/${SPOOF}`)).rejects.toMatchObject({ code: "out_of_scope" });
     // Audio over 2 MB is refused
-    await expect(mkAudio(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, ...new Uint8Array(2 * 1024 * 1024)]), "audio/webm")(`/api/storage/${CLIP}`)).rejects.toMatchObject({ code: "too_large" });
+    const big = new Uint8Array(2 * 1024 * 1024 + 4);
+    big.set([0x1a, 0x45, 0xdf, 0xa3]);
+    await expect(mkAudio(big, "audio/webm")(`/api/storage/${CLIP}`)).rejects.toMatchObject({ code: "too_large" });
   });
 });
 

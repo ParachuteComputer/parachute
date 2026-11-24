@@ -1,11 +1,11 @@
-// The scheduler in applets/languages.tsx (SM-2 as Anki has it): the first intervals, lapses, the ease floor, overdue
-// cards, and the line each review adds to a card.
+// The scheduler in applets/languages.tsx (SM-2 as Anki's v2 scheduler has it): the first intervals, lapses, the ease
+// floor, overdue cards, and the line each review adds to a card. Expected days are worked by hand from Anki's rules.
 import { describe, expect, it } from "vitest";
 import { L } from "./applet";
 
 const { addDays, daysBetween, formatInterval, formatReviewLine, isDue, MIN_EASE, newSm2Card, previewIntervals, scheduleCard, sm2FromFields, STARTING_EASE } = L;
 type Sm2Card = Parameters<typeof scheduleCard>[0];
-const GRADUATING_INTERVAL = 1, SECOND_INTERVAL = 6, EASY_INTERVAL = 4;
+const GRADUATING_INTERVAL = 1, EASY_INTERVAL = 4;
 
 const TODAY = "2026-11-23";
 
@@ -43,45 +43,22 @@ describe("SM-2 first intervals and graduation (Anki behavior)", () => {
     expect(isDue(c, TODAY)).toBe(true);
   });
 
-  it("follows classic SM-2 first intervals on Good: new -> 1d -> 6d -> 15d -> 38d", () => {
+  it("follows Anki's first intervals on Good: new -> 1d -> 3d -> 7d -> 17d -> 42d", () => {
     let c = newSm2Card(TODAY);
-    // 1st pass (new -> review, 1 day)
-    let r = scheduleCard(c, "good", TODAY);
-    c = r.card;
-    expect(c.state).toBe("review");
-    expect(c.interval).toBe(GRADUATING_INTERVAL); // 1d
-    expect(c.due).toBe("2026-11-24");
-    expect(c.reps).toBe(1);
-    expect(c.ease).toBe(2.5);
-
-    // 2nd pass on due date (1d -> 6d)
-    r = scheduleCard(c, "good", c.due);
-    c = r.card;
-    expect(c.interval).toBe(SECOND_INTERVAL); // 6d
-    expect(c.due).toBe("2026-11-30");
-    expect(c.reps).toBe(2);
-    expect(c.ease).toBe(2.5);
-
-    // 3rd pass on due date (6 * 2.5 = 15d)
-    r = scheduleCard(c, "good", c.due);
-    c = r.card;
-    expect(c.interval).toBe(15);
-    expect(c.due).toBe("2026-12-15");
-    expect(c.reps).toBe(3);
-
-    // 4th pass on due date (round(15 * 2.5) = 38d)
-    r = scheduleCard(c, "good", c.due);
-    c = r.card;
-    expect(c.interval).toBe(38);
-    expect(c.reps).toBe(4);
+    const days: number[] = [];
+    for (let i = 0; i < 5; i++) { c = scheduleCard(c, "good", c.due).card; days.push(c.interval); }
+    // 1; max(trunc(1×2.5)=2, hard 2 + 1)=3; trunc(3×2.5)=7; trunc(7×2.5)=17; trunc(17×2.5)=42
+    expect(days).toEqual([GRADUATING_INTERVAL, 3, 7, 17, 42]);
+    expect(c).toMatchObject({ state: "review", reps: 5, ease: 2.5, lapses: 0 });
+    expect(scheduleCard(newSm2Card(TODAY), "good", TODAY).card.due).toBe("2026-11-24");
   });
 
-  it("graduates a new card on Easy to 4 days with +0.15 ease", () => {
+  it("graduates a new card on Easy to 4 days, its ease as it was (Anki sets no bonus on graduating)", () => {
     const r = scheduleCard(newSm2Card(TODAY), "easy", TODAY);
     expect(r.card.state).toBe("review");
     expect(r.card.interval).toBe(EASY_INTERVAL);
     expect(r.card.due).toBe("2026-11-27");
-    expect(r.card.ease).toBe(2.65);
+    expect(r.card.ease).toBe(2.5);
     expect(r.card.reps).toBe(1);
   });
 
@@ -100,15 +77,12 @@ describe("SM-2 first intervals and graduation (Anki behavior)", () => {
     expect(c.ease).toBe(2.5);
     expect(c.lapses).toBe(0);
 
-    // New + Hard -> learning today, then Learning + Hard -> graduates to 1d
+    // Hard keeps it learning today (Anki repeats the step), new or learning; Good then graduates it
     const h1 = scheduleCard(newSm2Card(TODAY), "hard", TODAY).card;
-    expect(h1.state).toBe("learning");
-    expect(h1.interval).toBe(0);
-    expect(h1.ease).toBe(2.5);
+    expect(h1).toMatchObject({ state: "learning", interval: 0, ease: 2.5 });
     const h2 = scheduleCard(h1, "hard", TODAY).card;
-    expect(h2.state).toBe("review");
-    expect(h2.interval).toBe(1);
-    expect(h2.ease).toBe(2.5);
+    expect(h2).toMatchObject({ state: "learning", interval: 0, ease: 2.5 });
+    expect(scheduleCard(h2, "good", TODAY).card).toMatchObject({ state: "review", interval: 1 });
   });
 });
 
@@ -138,7 +112,7 @@ describe("SM-2 lapses, relearning, and ease floor", () => {
     expect(stillRelearning.card.ease).toBe(2.3);
     expect(stillRelearning.card.lapses).toBe(1);
 
-    // Passing relearning with Good returns to review at 1d, then 6d on the next Good
+    // Passing relearning with Good returns to review at 1d (Easy: 2d), then 3d on the next Good
     const back = scheduleCard(stillRelearning.card, "good", TODAY);
     expect(back.card.state).toBe("review");
     expect(back.card.interval).toBe(1);
@@ -146,8 +120,10 @@ describe("SM-2 lapses, relearning, and ease floor", () => {
     expect(back.card.reps).toBe(1);
     expect(back.card.ease).toBe(2.3);
 
+    expect(scheduleCard(stillRelearning.card, "easy", TODAY).card).toMatchObject({ state: "review", interval: 2, ease: 2.3 });
+    expect(scheduleCard(stillRelearning.card, "hard", TODAY).card).toMatchObject({ state: "relearning", interval: 0 });
     const nextGood = scheduleCard(back.card, "good", back.card.due);
-    expect(nextGood.card.interval).toBe(6);
+    expect(nextGood.card.interval).toBe(3);
     expect(nextGood.card.reps).toBe(2);
   });
 
@@ -166,7 +142,7 @@ describe("SM-2 lapses, relearning, and ease floor", () => {
     const atFloor: Sm2Card = { state: "review", due: TODAY, interval: 10, ease: 1.3, reps: 4, lapses: 4 };
     const hardRes = scheduleCard(atFloor, "hard", TODAY);
     expect(hardRes.card.ease).toBe(MIN_EASE);
-    expect(hardRes.card.interval).toBe(12); // round(10 * 1.2)
+    expect(hardRes.card.interval).toBe(12); // trunc(10 × 1.2)
   });
 
   it("guarantees strictly increasing intervals Hard < Good < Easy on review cards even at ease floor", () => {
@@ -188,10 +164,12 @@ describe("SM-2 lapses, relearning, and ease floor", () => {
     const onTime = scheduleCard({ ...card, due: TODAY }, "good", TODAY);
     const overdueGood = scheduleCard(card, "good", TODAY);
     const overdueEasy = scheduleCard(card, "easy", TODAY);
-    // On time: 10 * 2.5 = 25; overdue 10d: (10 + 10/2) * 2.5 = 38
+    // On time: 10 × 2.5 = 25; overdue 10d: (10 + 10/2) × 2.5 = 37.5 → 37; Easy: (10 + 10) × 2.5 × 1.3 = 65
     expect(onTime.card.interval).toBe(25);
-    expect(overdueGood.card.interval).toBe(38);
-    expect(overdueEasy.card.interval).toBeGreaterThan(overdueGood.card.interval);
+    expect(overdueGood.card.interval).toBe(37);
+    expect(overdueEasy.card.interval).toBe(65);
+    // Easy works with the ease as it was, then adds 0.15: 10 × 2.5 × 1.3 = 32.5 → 32
+    expect(scheduleCard({ ...card, due: TODAY }, "easy", TODAY).card).toMatchObject({ interval: 32, ease: 2.65 });
   });
 
   it("caps enormous intervals at MAX_INTERVAL", () => {
@@ -221,7 +199,7 @@ describe("SM-2 field normalization and formatting", () => {
 
     const res = scheduleCard({ state: "review", due: TODAY, interval: 1, ease: 2.5, reps: 1, lapses: 0 }, "good", TODAY);
     expect(formatReviewLine(res, "2026-11-23 14-35")).toBe(
-      "- 2026-11-23 14-35 · Good · 1d → 6d · ease 2.50 · due 2026-11-29",
+      "- 2026-11-23 14-35 · Good · 1d → 3d · ease 2.50 · due 2026-11-26",
     );
   });
 });

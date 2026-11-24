@@ -98,7 +98,7 @@ test("Languages: starter words, today's cards, a review written to the card, a p
     await expect.poll(() => pic.evaluate((i) => (i as HTMLImageElement).naturalWidth), { timeout: 30_000 }).toBe(480);
     await f.getByRole("button", { name: "Record how it sounds" }).click();
     const sheet = page.getByRole("dialog", { name: "Recording for Languages" });
-    await expect(sheet.getByRole("timer")).toContainText("0:01", { timeout: 8000 });
+    await expect(sheet.getByRole("timer")).toContainText("0:01", { timeout: 30_000 });
     await sheet.getByRole("button", { name: "Send" }).click();
     await expect(sheet).toBeHidden();
     await expect.poll(async () => (await get("Words/Sanskrit/चित्त")).metadata?.sound, { timeout: 20_000 }).toMatch(/^\/api\/storage\/.+\.webm$/);

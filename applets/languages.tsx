@@ -38,14 +38,14 @@ export interface Sm2Result {
   rating: Rating;
 }
 
-// SM-2 as Anki has it, in whole days. A new card: Again keeps it in today's learning, Hard once more today, Good 1 day,
-// Easy 4 days (+0.15 ease). The second interval is 6 days, then interval × ease (plus half of any days overdue). Hard:
-// × 1.2 and −0.15 ease; Easy: × ease × 1.3 and +0.15. A lapse (Again on a review card): −0.20 ease, relearn today,
-// then 1 day. Ease never falls below 1.30.
+// SM-2 as Anki has it (its v2 scheduler), in whole days. A new card: Again or Hard keep it in today's learning, Good
+// graduates it at 1 day, Easy at 4. A card in review: Hard × 1.2, Good × ease, Easy × ease × 1.3, each at least a day
+// more than the answer below it, with days overdue counted (half of them for Good); then Hard takes 0.15 from the ease
+// and Easy adds 0.15. A lapse (Again in review): −0.20 ease, relearn today, then 1 day (Easy: 2). Ease never falls
+// below 1.30. One way it isn't Anki's: learning steps are "again today, a few cards on", not minutes.
 export const STARTING_EASE = 2.5;
 export const MIN_EASE = 1.3;
 const GRADUATING_INTERVAL = 1;
-const SECOND_INTERVAL = 6;
 const EASY_INTERVAL = 4;
 const HARD_FACTOR = 1.2;
 const EASY_BONUS = 1.3;
@@ -117,27 +117,25 @@ export function scheduleCard(card: Sm2Card, rating: Rating, today: string, revie
     ({ previousInterval, previousEase, previousState, rating, card: { state, due: addDays(today, interval), interval, ease, reps, lapses, lastReviewed } });
 
   if (previousState === "new" || previousState === "learning") {
-    if (rating === "again" || (rating === "hard" && previousState === "new")) return out("learning", 0, previousEase, 0);
-    if (rating === "hard" || rating === "good") return out("review", GRADUATING_INTERVAL, previousEase, 1);
-    return out("review", EASY_INTERVAL, clampEase(previousEase + 0.15), 1);
+    if (rating === "again" || rating === "hard") return out("learning", 0, previousEase, 0);
+    if (rating === "good") return out("review", GRADUATING_INTERVAL, previousEase, 1);
+    return out("review", EASY_INTERVAL, previousEase, 1);
   }
   if (previousState === "relearning") {
-    if (rating === "again") return out("relearning", 0, previousEase, 0);
-    if (rating === "hard" || rating === "good") return out("review", GRADUATING_INTERVAL, previousEase, 1);
-    return out("review", EASY_INTERVAL, clampEase(previousEase + 0.15), 1);
+    if (rating === "again" || rating === "hard") return out("relearning", 0, previousEase, 0);
+    return out("review", rating === "easy" ? GRADUATING_INTERVAL + 1 : GRADUATING_INTERVAL, previousEase, 1);
   }
   if (rating === "again") return out("relearning", 0, clampEase(previousEase - 0.2), 0, card.lapses + 1);
 
-  const baseIvl = Math.max(1, previousInterval);
+  // Anki's constrained interval: whole days (truncated), more than `above`, within the cap
+  const ivl = Math.max(1, previousInterval);
   const delay = Math.max(0, daysBetween(card.due, today));
-  const hardIvl = clampInterval(Math.max(1, Math.round(baseIvl * HARD_FACTOR)));
-  const isFirstReview = card.reps <= 1 && baseIvl <= GRADUATING_INTERVAL;
-  const goodIvl = clampInterval(Math.max(hardIvl + 1, isFirstReview ? SECOND_INTERVAL : Math.round((baseIvl + delay / 2) * previousEase)));
+  const fit = (days: number, above: number) => clampInterval(Math.max(Math.trunc(days), above + 1));
+  const hardIvl = fit(ivl * HARD_FACTOR, ivl);
+  const goodIvl = fit((ivl + Math.floor(delay / 2)) * previousEase, hardIvl);
   if (rating === "hard") return out("review", hardIvl, clampEase(previousEase - 0.15), card.reps + 1);
   if (rating === "good") return out("review", goodIvl, previousEase, card.reps + 1);
-  const nextEase = clampEase(previousEase + 0.15);
-  const easyRaw = isFirstReview ? Math.round(SECOND_INTERVAL * EASY_BONUS) : Math.round((baseIvl + delay) * nextEase * EASY_BONUS);
-  return out("review", clampInterval(Math.max(goodIvl + 1, easyRaw)), nextEase, card.reps + 1);
+  return out("review", fit((ivl + delay) * previousEase * EASY_BONUS, goodIvl), clampEase(previousEase + 0.15), card.reps + 1);
 }
 
 export function previewIntervals(card: Sm2Card, today: string): Record<Rating, number> {
@@ -298,6 +296,9 @@ export const cardPathFor = (wordPath: string, ask: Ask) => {
   const parts = wordPath.slice(WORDS.length).split("/");
   return `${CARDS}${parts.slice(0, -1).join("/") || "Other"}/${parts[parts.length - 1]} ${ask}`;
 };
+/** What makes two records the same word, whatever their paths (Library may write a Sanskrit word in IAST). */
+export const wordKey = (w: Pick<WordData, "language" | "word" | "translit">) =>
+  `${langKey(w.language)}\n${(langKey(w.language) === "sanskrit" ? sanskritPair(w.word, w.translit).deva : w.word).normalize("NFC").trim().toLowerCase()}`;
 /** A verse or other record he met the word in, when `from` is a path. */
 export const fromPath = (from: string | null) => (from && /^[^\s/][^/]*\/.+[^/]$/.test(from.trim()) && !/^https?:/i.test(from.trim()) ? from.trim() : null);
 export const fromLabel = (from: string) => { const p = fromPath(from); return p ? p.split("/").pop()! : from; };
@@ -635,6 +636,7 @@ export default function Languages() {
 
   const wordById = useMemo(() => new Map((words ?? []).map((w) => [w.rec.id, w])), [words]);
   const wordByPath = useMemo(() => new Map((words ?? []).map((w) => [w.rec.path.normalize("NFC"), w])), [words]);
+  const wordByKey = useMemo(() => new Map((words ?? []).map((w) => [wordKey(w.data), w])), [words]);
   const cardById = useMemo(() => new Map((cards ?? []).map((c) => [c.rec.id, c])), [cards]);
   const due = useMemo(() => dueToday((cards ?? []).filter((c) => wordByPath.has(c.word)).map((c) => ({ id: c.rec.id, word: c.word, language: c.language, sm2: c.sm2, days: c.days })), day), [cards, wordByPath, day]);
   const dueIds = useMemo(() => new Set(due.map((c) => c.id)), [due]);
@@ -686,6 +688,16 @@ export default function Languages() {
         if ((e as { status?: number })?.status !== 409) throw e;
         const fresh = await vault.getRecord(current.rec.id);
         if (!fresh?.updatedAt) throw e;
+        if ((fresh.fields?.last_reviewed ?? null) !== (current.rec.fields?.last_reviewed ?? null)) {
+          // answered on another device since: that answer stands, and this one isn't added on top of it
+          const sm2 = sm2FromFields(fresh.fields ?? {}, today());
+          setCards((cs) => (cs ?? []).map((c) => (c.rec.id === fresh.id ? { ...c, rec: fresh, sm2, days: reviewDays(fresh.body) } : c)));
+          setQueue((q) => (q ?? []).slice(1));
+          setRevealed(false);
+          setTyped("");
+          toast("This card was just answered on another device. On to the next.");
+          return;
+        }
         done = await answer(fresh);
       }
       const res = done.res;
@@ -758,7 +770,7 @@ export default function Languages() {
     try {
       let n = 0;
       for (const r of starterWords()) {
-        if (wordByPath.has(r.path)) continue;
+        if (wordByPath.has(r.path) || wordByKey.has(wordKey(wordFromRecord(r)))) continue;
         await vault.createRecord(r);
         n++;
       }
@@ -957,7 +969,7 @@ export default function Languages() {
         </>
       )}
       <AddWord open={adding} onClose={() => setAdding(false)} initial={langFilter === "spanish" ? "spanish" : "sanskrit"} pickPicture={pickPicture}
-        exists={(path) => wordByPath.get(path) ?? null}
+        exists={(w) => wordByPath.get(wordPathFor(w)) ?? wordByKey.get(wordKey(w)) ?? null}
         onAdded={async (id) => { setAdding(false); await load(); setOpenWordId(id); }}
         onLocal={(at, url) => setLocal((l) => ({ ...l, [at]: url }))} />
     </Page>
@@ -968,7 +980,7 @@ export default function Languages() {
  *  picture, its sound, grammar, his memory, and where he met it. Its cards are made once it is saved. */
 function AddWord({ open, onClose, initial, pickPicture, exists, onAdded, onLocal }: {
   open: boolean; onClose: () => void; initial: "sanskrit" | "spanish"; pickPicture: () => Promise<Media | null>;
-  exists: (path: string) => WordRec | null; onAdded: (id: string) => Promise<void>; onLocal: (at: string, url: string) => void;
+  exists: (w: WordData) => WordRec | null; onAdded: (id: string) => Promise<void>; onLocal: (at: string, url: string) => void;
 }) {
   const [lang, setLang] = useState<"sanskrit" | "spanish">(initial);
   const [word, setWord] = useState("");
@@ -985,7 +997,7 @@ function AddWord({ open, onClose, initial, pickPicture, exists, onAdded, onLocal
     for (const m of [picture, sound]) if (m) URL.revokeObjectURL(m.url);
     setWord(""); setTranslit(""); setGloss(""); setGrammar(""); setMemory(""); setFrom(""); setPicture(null); setSound(null);
   };
-  const sk = lang === "sanskrit" && (word.trim() || translit.trim()) ? sanskritPair(word, translit) : null;
+  const sk = lang === "sanskrit" && word.trim() ? sanskritPair(word) : null;
   const headword = lang === "sanskrit" ? sk?.deva ?? "" : word.trim();
 
   const save = async () => {
@@ -993,7 +1005,7 @@ function AddWord({ open, onClose, initial, pickPicture, exists, onAdded, onLocal
     const data: WordData = { language: lang, word: headword, translit: (lang === "sanskrit" ? sk?.iast : translit.trim()) || null, gloss: gloss.trim(),
       grammar: grammar.trim() || null, memory: memory.trim() || null, cue: null, picture: null, sound: null, from: from.trim() || null };
     const path = wordPathFor(data);
-    const there = exists(path);
+    const there = exists(data);
     if (there) { toast(`${headword} is already in your words.`); clear(); await onAdded(there.rec.id); return; }
     setSaving(true);
     try {

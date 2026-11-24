@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { L } from "./applet";
 
-const { appendReviewLine, cardFace, cardPathFor, dueToday, fromPath, missingCards, newSm2Card, reviewDays, starterWords, STARTER, wordFields, wordFromRecord, wordPathFor, withPicture } = L;
+const { appendReviewLine, cardFace, cardPathFor, dueToday, fromPath, missingCards, newSm2Card, reviewDays, starterWords, STARTER, wordFields, wordFromRecord, wordKey, wordPathFor, withPicture } = L;
 type WordData = Parameters<typeof wordFields>[0];
 type Scheduled = Parameters<typeof dueToday>[0][number];
 const TODAY = "2026-11-23";
@@ -27,6 +27,13 @@ describe("where words and cards live", () => {
     expect(wordFromRecord({ path: "Words/Sanskrit/nirodha", fields: { gloss: "stilling" } })).toMatchObject({ language: "sanskrit", word: "निरोध", translit: "nirodha", gloss: "stilling" });
     expect(wordFromRecord({ path: "Words/Spanish/el agua", fields: wordFields(AGUA) })).toEqual(AGUA);
     expect(wordFields({ ...CITTA, grammar: "  ", memory: null })).not.toHaveProperty("grammar");
+  });
+
+  it("knows a word is already there, whatever its path: one Library wrote in IAST is the same word in Devanagari", () => {
+    const key = (path: string) => wordKey(wordFromRecord({ path, fields: {} }));
+    expect(key("Words/Sanskrit/nirodha")).toBe(key("Words/Sanskrit/निरोध"));
+    expect(key("Words/Spanish/El agua")).toBe(key("Words/Spanish/el agua"));
+    expect(key("Words/Spanish/el agua")).not.toBe(key("Words/Sanskrit/el agua"));
   });
 
   it("knows a verse's path from a few words", () => {
