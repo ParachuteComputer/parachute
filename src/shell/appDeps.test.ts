@@ -85,6 +85,20 @@ describe("app.follow", () => {
   });
 });
 
+describe("app.links while a hub can't be reached (T-476)", () => {
+  it("a note in the applet's own vault is a link; one in another vault held stays nothing, so no vault name is told", async () => {
+    const { saveVault, listVaults } = await import("../vault/store");
+    for (const vault of ["uni", "library"]) saveVault({ issuer: "https://hub.example", vault, tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", accessToken: "t", scope: `vault:${vault}:read`, addedAt: "" } as never);
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => { throw new TypeError("Failed to fetch"); }) as typeof fetch;
+    try {
+      const uni = listVaults().find((v) => v.vault === "uni")!;
+      const d = appDeps(() => {}, () => null, { pick: async () => [] }, () => uni, [], () => true);
+      expect(await d.links(["uni:01KA3Z9V6B2W8XQJ4M7N5P0R2A", "library:01KA3Z9V6B2W8XQJ4M7N5P0R2B"], undefined, () => {})).toEqual(["note", null]);
+    } finally { globalThis.fetch = realFetch; }
+  });
+});
+
 describe("noteFinder", () => {
   it("a read the hub leaves hanging counts as not asked after READ_MS, and is asked again next time", async () => {
     vi.useFakeTimers();

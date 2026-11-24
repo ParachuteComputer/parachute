@@ -68,8 +68,10 @@ export function answerFor(link: string, from?: string): Promise<Answer> {
   }
   return p;
 }
-// the person back (the applet shown again, the app back in front): links that led nowhere ask again. Uni may cite a note
-// a moment before the hub has it, and a busy shell or a lapse leaves a link without an answer; a link drawn stays drawn
+// the person back (the applet shown again, the app back in front): links that led nowhere ask again, at most once a
+// minute (the shell keeps a miss that long, and each link asked costs the frame's reads). Uni may cite a note a moment
+// before the hub has it, and a busy shell or a lapse leaves a link without an answer; a link drawn stays drawn
+export const AGAIN_MS = 60_000;
 const backs = new Set<() => void>();
 let heard = false;
 function hearBacks() {
@@ -83,20 +85,23 @@ function hearBacks() {
 export function useAnswers(links: readonly string[], from?: string): Map<string, Answer> {
   const [got, setGot] = useState<Map<string, Answer>>(() => new Map());
   const [round, setRound] = useState(0);
-  const nowhere = useRef<string[]>([]);
-  nowhere.current = links.filter((l) => got.get(l) === null);
+  const nowhere = useRef(false);
+  const askedAt = useRef(0);
+  useEffect(() => { nowhere.current = links.some((l) => got.get(l) === null); });
   useEffect(() => {
     hearBacks();
     // only while one of its links led nowhere: a page of links already drawn asks nothing
-    const f = () => { if (nowhere.current.length) setRound((n) => n + 1); };
+    const f = () => { if (nowhere.current && Date.now() - askedAt.current >= AGAIN_MS) setRound((n) => n + 1); };
     backs.add(f);
     return () => { backs.delete(f); };
   }, []);
   const key = links.join("\n") + "\n" + (from ?? "");
   useEffect(() => {
     let on = true;
+    askedAt.current = Date.now();
     for (const l of new Set(links)) {
-      if (round && got.get(l) !== null) continue;
+      // asked again, all but the links drawn: one still on its way, or new here, is asked as any (its answer, if asked)
+      if (round && got.get(l)) continue;
       // asked again: its last answer (nothing) is let go first (one another link is asking now stays)
       const k = keyOf(l, from), was = answers.get(k);
       if (round && was && came.get(was) === null) answers.delete(k);
