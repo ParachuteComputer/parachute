@@ -155,7 +155,8 @@ const buildAskRecord = writingExports.buildAskRecord as (
   piece: Pick<VaultRec, "id" | "path" | "fields">,
   line: string,
   at?: Date,
-) => { path: string; body: string; types: string[]; fields: Record<string, unknown> };
+  piecesFolder?: string,
+) => { path: string; body: string; types?: string[]; fields: Record<string, unknown> };
 const formatQuoteMarkdown = writingExports.formatQuoteMarkdown as (ref: Pick<VaultRec, "id" | "path" | "fields" | "body">) => string;
 const groupPiecesByStage = writingExports.groupPiecesByStage as (pieces: readonly VaultRec[]) => Record<"draft" | "seed" | "ready" | "published", VaultRec[]>;
 const insertAtSelection = writingExports.insertAtSelection as (
@@ -217,7 +218,7 @@ const REF_READY: VaultRec = {
   updatedAt: "2026-11-23T09:30:00Z",
   tags: ["reference"],
   fields: {
-    for: PIECE_DRAFT.id,
+    piece: "Tools that stay quiet",
     state: "ready",
     quote: "A room that lets you hear yourself think has no more than two things asking for your eyes.",
     source: "Notes on Calm Rooms",
@@ -235,7 +236,7 @@ const REF_OLDER: VaultRec = {
   updatedAt: "2026-11-22T14:00:00Z",
   tags: ["reference"],
   fields: {
-    for: "Writing/Pieces/Tools that stay quiet",
+    piece: "Writing/Pieces/Tools that stay quiet",
     state: "kept",
     quote: "Keep the desk clear except for the page and one open book.",
     source: "Fieldcraft Notebook",
@@ -250,7 +251,7 @@ const REF_LET_GO: VaultRec = {
   updatedAt: "2026-11-23T11:00:00Z",
   tags: ["reference"],
   fields: {
-    for: PIECE_DRAFT.id,
+    piece: PIECE_DRAFT.id,
     state: "let go",
     quote: "Something already set aside.",
     source: "Other essay",
@@ -264,7 +265,7 @@ const REF_OTHER_PIECE: VaultRec = {
   updatedAt: "2026-11-23T12:00:00Z",
   tags: ["reference"],
   fields: {
-    for: PIECE_SEED.id,
+    piece: PIECE_SEED.id,
     state: "ready",
     quote: "Shallow ponds warm early in spring.",
     source: "Meadow Survey",
@@ -309,7 +310,7 @@ describe("Writing applet record & pack checks", () => {
     const doc = readFileSync(join(process.cwd(), "docs", "WRITING.md"), "utf8");
     const writingPack = checkPack(packFromPage(doc));
     expect(writingPack.id).toBe("writing");
-    expect(Object.keys(writingPack.types.reference.fields)).toEqual(expect.arrayContaining(["for", "used_in", "state"]));
+    expect(Object.keys(writingPack.types.reference.fields)).toEqual(expect.arrayContaining(["piece", "used_in", "state"]));
     expect(Object.keys(writingPack.types.piece.fields)).toEqual(expect.arrayContaining(["stage", "slug", "url", "published_at"]));
 
     const all = [...STARTERS, writingPack];
@@ -331,7 +332,7 @@ describe("Writing applet record & pack checks", () => {
         const res = await applyPack(p, target);
         expect(res.notes, `collision applying ${p.id}`).toEqual([]);
       }
-      expect(Object.keys(types.get("reference")!.fields)).toEqual(expect.arrayContaining(["for", "used_in", "state"]));
+      expect(Object.keys(types.get("reference")!.fields)).toEqual(expect.arrayContaining(["piece", "used_in", "state"]));
     }
   });
 });
@@ -341,19 +342,22 @@ describe("Writing applet record & pack checks", () => {
 describe("Beside-it query & matching", () => {
   it("matches references targeting a piece by id, path, wikilink, hub URL, short ref, array, or links; not by a shared title", () => {
     const variants: VaultRec[] = [
-      { ...REF_READY, id: "v1", fields: { for: PIECE_DRAFT.id } },
-      { ...REF_READY, id: "v2", fields: { for: "Writing/Pieces/Tools that stay quiet" } },
-      { ...REF_READY, id: "v3", fields: { for: "[[Tools that stay quiet]]" } },
-      { ...REF_READY, id: "v4", fields: { for: `https://hub.example/vault/home/view/${PIECE_DRAFT.id}` } },
-      { ...REF_READY, id: "v5", fields: { for: `home:${PIECE_DRAFT.id}` } },
-      { ...REF_READY, id: "v6", fields: { for: ["other", PIECE_DRAFT.id] } },
+      { ...REF_READY, id: "v1", fields: { piece: PIECE_DRAFT.id } },
+      { ...REF_READY, id: "v2", fields: { piece: "Writing/Pieces/Tools that stay quiet" } },
+      { ...REF_READY, id: "v3", fields: { piece: "[[Tools that stay quiet]]" } },
+      { ...REF_READY, id: "v4", fields: { piece: `https://hub.example/vault/home/view/${PIECE_DRAFT.id}` } },
+      { ...REF_READY, id: "v5", fields: { piece: `home:${PIECE_DRAFT.id}` } },
+      { ...REF_READY, id: "v6", fields: { piece: ["other", PIECE_DRAFT.id] } },
       { ...REF_READY, id: "v7", fields: {}, links: [{ sourceId: "v7", targetId: PIECE_DRAFT.id }] },
     ];
     for (const r of variants) expect(matchesPiece(r, PIECE_DRAFT), r.id).toBe(true);
     expect(matchesPiece(REF_OTHER_PIECE, PIECE_DRAFT)).toBe(false);
-    // two pieces may share a title; a reference "for: Intro" is the piece at Writing/Pieces/Intro only
+    // two pieces may share a title; a reference "piece: Intro" is the piece at Writing/Pieces/Intro only
     const intro = { id: "01INTRO", path: "Writing/Pieces/2025/Intro", fields: { title: "Intro" } };
-    expect(matchesPiece({ ...REF_READY, fields: { for: "Intro" } }, intro, "Writing/Pieces/")).toBe(false);
+    expect(matchesPiece({ ...REF_READY, fields: { piece: "Intro" } }, intro, "Writing/Pieces/")).toBe(false);
+    // as Uni writes the research it prepares: `piece` names the piece, `for` the person it's for (never the piece)
+    expect(matchesPiece({ ...REF_READY, fields: { for: "aaron", piece: "Tools that stay quiet" } }, PIECE_DRAFT)).toBe(true);
+    expect(matchesPiece({ ...REF_READY, fields: { for: PIECE_DRAFT.id } }, PIECE_DRAFT)).toBe(false);
   });
 
   it("filters to the piece, excludes let go by default, deduplicates, and sorts newest first", () => {
@@ -363,13 +367,13 @@ describe("Beside-it query & matching", () => {
     expect(withLetGo.map((r) => r.id)).toEqual([REF_LET_GO.id, REF_READY.id, REF_OLDER.id]);
   });
 
-  it("queryBeside combines direct fields.for query and folder query, and falls back gracefully on 400", async () => {
+  it("queryBeside combines direct fields.piece query and folder query, and falls back gracefully on 400", async () => {
     const calls: Record<string, unknown>[] = [];
     const olderHub = {
       async queryRecords(q: Record<string, unknown> = {}) {
         calls.push(q);
         if (q.orderBy === "created_at") throw Object.assign(new Error("400"), { status: 400 });
-        if ((q.fields as { for?: unknown } | undefined)?.for === PIECE_DRAFT.id) return [REF_READY];
+        if ((q.fields as { piece?: unknown } | undefined)?.piece === "Tools that stay quiet") return [REF_READY];
         return [REF_OLDER, REF_LET_GO, REF_OTHER_PIECE];
       },
     };
@@ -447,16 +451,18 @@ describe("pieces grouping, Ask Uni payload, and used_in merge", () => {
     expect(stageOf({ fields: {} })).toBe("seed");
   });
 
-  it("buildAskRecord creates a reference record with state: asked and for set to the piece id", () => {
+  it("buildAskRecord makes a record with state: asked and piece set to the piece's name, and names no type", () => {
     const payload = buildAskRecord("References/", PIECE_DRAFT, "Find the quote about tools staying out of sight", new Date("2026-11-23T12:34:56Z"));
-    expect(payload.types).toEqual(["reference"]);
-    expect(payload.fields).toEqual({ for: PIECE_DRAFT.id, state: "asked" });
+    // the app gives it `reference` as the vault has it (a type, or a plain tag a vault would refuse as a type)
+    expect(payload.types).toBeUndefined();
+    expect(payload.fields).toEqual({ piece: "Tools that stay quiet", state: "asked" });
+    expect(buildAskRecord("References/", { ...PIECE_DRAFT, path: "Essays/Drafts/On margins" }, "x", new Date(), "Essays/").fields.piece).toBe("Drafts/On margins");
     expect(payload.body).toBe("Find the quote about tools staying out of sight");
     // one flat name in References/, not folders by date
     expect(payload.path).toMatch(/^References\/Ask [^/]+$/);
   });
 
-  it("mergeUsedIn appends piece id once without duplicating", () => {
+  it("mergeUsedIn appends a piece once without duplicating", () => {
     expect(mergeUsedIn(undefined, "p1")).toEqual(["p1"]);
     expect(mergeUsedIn(["p1"], "p2")).toEqual(["p1", "p2"]);
     expect(mergeUsedIn(["p1", "p2"], "p1")).toBeNull();
@@ -559,7 +565,7 @@ describe("Writing applet UI flows", { timeout: 20_000 }, () => {
     fireEvent.click(screen.getByRole("button", { name: "Open source" }));
     expect(mockState.followCalls.some((c) => c.to === "https://example.org/calm-rooms")).toBe(true);
 
-    // Ask Uni creates a reference with state: asked and for: piece.id, NEVER modifying piece body
+    // Ask Uni creates a reference with state: asked and piece: the piece's name, NEVER modifying piece body
     const bodyBeforeAsk = editor.value;
     const askBox = screen.getByLabelText("Ask Uni");
     fireEvent.change(askBox, { target: { value: "Find the passage about quiet tools in workshops" } });
@@ -568,7 +574,8 @@ describe("Writing applet UI flows", { timeout: 20_000 }, () => {
     await waitFor(() => {
       const asked = refs.find((r) => r.fields?.state === "asked");
       expect(asked).toBeTruthy();
-      expect(asked!.fields?.for).toBe(PIECE_DRAFT.id);
+      expect(asked!.fields?.piece).toBe("Tools that stay quiet");
+      expect(asked!.types).toBeUndefined();
       expect(asked!.body).toBe("Find the passage about quiet tools in workshops");
     });
     expect(editor.value).toBe(bodyBeforeAsk);
@@ -835,7 +842,7 @@ describe("Writing applet UI flows", { timeout: 20_000 }, () => {
 
   it("an asked reference can be let go but not kept, so a question never goes in as a quote", async () => {
     const { refs } = setupMockVault();
-    refs.unshift({ ...structuredClone(REF_OLDER), id: "01ASK", path: "References/Ask 2026 find", createdAt: "2026-11-23T23:00:00Z", body: "Find a passage on margins", fields: { for: PIECE_DRAFT.id, state: "asked" } });
+    refs.unshift({ ...structuredClone(REF_OLDER), id: "01ASK", path: "References/Ask 2026 find", createdAt: "2026-11-23T23:00:00Z", body: "Find a passage on margins", fields: { piece: PIECE_DRAFT.id, state: "asked" } });
     render(<Writing />);
     fireEvent.click(await screen.findByRole("button", { name: /Tools that stay quiet/ }));
     await screen.findByText("Find a passage on margins");
@@ -868,7 +875,7 @@ describe("Writing applet UI flows", { timeout: 20_000 }, () => {
     hubRef.updatedAt = "2026-11-23T18:00:00Z";
     hubRef.fields = { ...hubRef.fields, used_in: ["01OTHER_PIECE"] };
     fireEvent.click(screen.getAllByRole("button", { name: "Insert quote" })[0]);
-    await waitFor(() => expect(hubRef.fields?.used_in).toEqual(["01OTHER_PIECE", PIECE_DRAFT.id]));
+    await waitFor(() => expect(hubRef.fields?.used_in).toEqual(["01OTHER_PIECE", "Tools that stay quiet"]));
     expect(mockState.toastCalls.some((t) => t.opts?.error)).toBe(false);
   });
 
@@ -891,7 +898,7 @@ describe("Writing applet UI flows", { timeout: 20_000 }, () => {
   it("typing into a long piece does not re-render the Beside-it panel on keystrokes", async () => {
     const longBody = Array.from({ length: 120 }, (_, i) => `Paragraph ${i + 1}: quiet tools stay out of the writer's way while ideas form on the page.`).join("\n\n");
     const longPiece: VaultRec = { ...PIECE_DRAFT, id: "01LONG", body: longBody };
-    const longRef: VaultRec = { ...REF_READY, fields: { ...REF_READY.fields, for: longPiece.id } };
+    const longRef: VaultRec = { ...REF_READY, fields: { ...REF_READY.fields, piece: longPiece.id } };
     mockState.queryRecords.mockImplementation(async (q: Record<string, unknown> = {}) =>
       q.pathPrefix === "Writing/Pieces/" ? [longPiece] : [longRef, REF_OLDER],
     );

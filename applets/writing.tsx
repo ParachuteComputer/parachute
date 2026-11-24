@@ -1,7 +1,8 @@
 // Writing: pieces by stage (draft, seed, ready, published) and a quiet editor with Uni's prepared references and
 // quotes beside it — a sticky column on wide screens, a drawer on phones. Folder-scoped to Writing/Pieces/ (where
-// unforced.org reads pieces) and References/ (read from ready().access), with additive reference fields (`for`,
-// `used_in`, `state`: asked | ready | kept | let go). unforced.org publishes a piece whose stage is ready or published,
+// unforced.org reads pieces) and References/ (read from ready().access), with additive reference fields (`piece`,
+// `used_in`, `state`: asked | ready | kept | let go). `piece` names the piece as Uni already writes it on the research
+// it prepares (the piece's name in Writing/Pieces/); `for` is left alone: in a vault it names the person a thing is for. unforced.org publishes a piece whose stage is ready or published,
 // so this applet only moves a piece between seed and draft and shows `slug`, `url` and `published_at` read-only.
 // Typing stays instant: the editor is memoized with its own local state and debounced saves, never re-rendering the
 // page or Beside-it panel on keystrokes.
@@ -149,7 +150,14 @@ function normalizeTarget(raw: string): string[] {
   return [...out];
 }
 
-/** All string identifiers that a reference's `for` field might use to name this piece. */
+/** The piece's name, as a reference's `piece` field gives it: its path inside the pieces folder (unique there, unlike a
+ *  title), else its whole path. */
+export function pieceName(piece: Pick<VaultRec, "path">, piecesFolder = DEFAULT_PIECES_FOLDER): string {
+  const bare = piece.path.replace(/\.md$/i, "");
+  return piecesFolder && bare.startsWith(piecesFolder) ? bare.slice(piecesFolder.length) : bare;
+}
+
+/** All string identifiers that a reference's `piece` field might use to name this piece. */
 export function pieceMatchKeys(piece: Pick<VaultRec, "id" | "path" | "fields">, piecesFolder = DEFAULT_PIECES_FOLDER): string[] {
   // not its title: two pieces may share one
   const barePath = piece.path.replace(/\.md$/i, "");
@@ -158,11 +166,11 @@ export function pieceMatchKeys(piece: Pick<VaultRec, "id" | "path" | "fields">, 
   return [...keys].filter(Boolean);
 }
 
-/** True when a reference's `for` field (or links) targets the given piece. */
+/** True when a reference's `piece` field (or links) targets the given piece. */
 export function matchesPiece(ref: VaultRec, piece: Pick<VaultRec, "id" | "path" | "fields">, piecesFolder = DEFAULT_PIECES_FOLDER): boolean {
   const targets = new Set(pieceMatchKeys(piece, piecesFolder).map((k) => k.toLowerCase()));
-  const rawFor = ref.fields?.for;
-  const values = Array.isArray(rawFor) ? rawFor : rawFor !== undefined && rawFor !== null ? [rawFor] : [];
+  const raw = ref.fields?.piece;
+  const values = Array.isArray(raw) ? raw : raw !== undefined && raw !== null ? [raw] : [];
   for (const v of values) {
     if (typeof v !== "string") continue;
     for (const norm of normalizeTarget(v)) {
@@ -205,8 +213,8 @@ export function besideReferences(
 }
 
 /** Query the References folder for all references serving `piece`, newest first.
- *  Uses a server-side `fields.for` filter first (so large vaults don't miss older records past a page limit),
- *  then merges with the recent folder query (so wikilink/URL/array `for` values and older 0.8 hubs work too). */
+ *  Uses a server-side `fields.piece` filter first (so large vaults don't miss older records past a page limit),
+ *  then merges with the recent folder query (so wikilink/URL/array `piece` values and older 0.8 hubs work too). */
 export async function queryBeside(
   vaultApi: QueryVault,
   refsFolder: string,
@@ -218,7 +226,7 @@ export async function queryBeside(
   const directPromise = vaultApi
     .queryRecords({
       pathPrefix: refsFolder,
-      fields: { for: { in: keys } },
+      fields: { piece: { in: keys } },
       includeBody: true,
       includeFields: true,
       orderBy: "created_at",
@@ -229,7 +237,7 @@ export async function queryBeside(
       vaultApi
         .queryRecords({
           pathPrefix: refsFolder,
-          fields: { for: piece.id },
+          fields: { piece: pieceName(piece, piecesFolder) },
           includeBody: true,
           includeFields: true,
           limit: 50,
@@ -347,36 +355,37 @@ export function insertAtSelection(
   return { text, cursor: prefix.length + block.length };
 }
 
-/** Build the `createRecord` payload for Ask Uni: a `reference` record with `state: "asked"` and `for` set to the piece.
- *  Never touches the piece's body. */
+/** Build the `createRecord` payload for Ask Uni: a record in the references folder with `state: "asked"` and `piece` set
+ *  to the piece's name. Never touches the piece's body. No `types`: the app gives a new record the `reference` the
+ *  applet opens there, as a type or a plain tag, whichever the vault has (a vault refuses a plain tag sent as a type). */
 export function buildAskRecord(
   refsFolder: string,
   piece: Pick<VaultRec, "id" | "path" | "fields">,
   line: string,
   at: Date = new Date(),
-): { path: string; body: string; types: string[]; fields: Record<string, unknown> } {
+  piecesFolder = DEFAULT_PIECES_FOLDER,
+): { path: string; body: string; fields: Record<string, unknown> } {
   const text = line.trim();
   const slug = cleanName(text.split(/\s+/).slice(0, 6).join(" "), "Question");
   return {
     path: `${refsFolder}Ask ${when.stamp(at)} ${slug}`,
     body: text,
-    types: ["reference"],
     fields: {
-      for: piece.id,
+      piece: pieceName(piece, piecesFolder),
       state: "asked",
     },
   };
 }
 
-/** Merge `pieceId` into a reference's `used_in` list; returns null when already present. */
-export function mergeUsedIn(existing: unknown, pieceId: string): string[] | null {
+/** Merge a piece's name into a reference's `used_in` list; returns null when already present. */
+export function mergeUsedIn(existing: unknown, name: string): string[] | null {
   const list = Array.isArray(existing)
     ? existing.filter((x): x is string => typeof x === "string" && x.length > 0)
     : typeof existing === "string" && existing.trim()
       ? [existing.trim()]
       : [];
-  if (list.includes(pieceId)) return null;
-  return [...list, pieceId];
+  if (list.includes(name)) return null;
+  return [...list, name];
 }
 
 /** Change a reference's fields, reading it again once if it changed since it was listed (Uni may have added to it, or
@@ -401,10 +410,10 @@ export async function changeReference(
   }
 }
 
-/** Add the piece to a reference's `used_in`. */
-export function noteUsedIn(ref: VaultRec, pieceId: string): Promise<VaultRec | null> {
+/** Add the piece (by name) to a reference's `used_in`. */
+export function noteUsedIn(ref: VaultRec, name: string): Promise<VaultRec | null> {
   return changeReference(ref, (cur) => {
-    const next = mergeUsedIn(cur.fields?.used_in, pieceId);
+    const next = mergeUsedIn(cur.fields?.used_in, name);
     return next ? { used_in: next } : null;
   });
 }
@@ -425,7 +434,9 @@ const CSS = `
   .wr-split { grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); gap: calc(var(--gap) * 1.8); }
   .wr-beside { position: sticky; top: var(--pad); padding-left: calc(var(--pad) * 1.2); border-left: var(--line-row); }
 }
-.wr-editor .pa-write-box { min-height: 48dvh; font-family: var(--serif); font-size: var(--fs-lead); line-height: 1.7; }
+.wr-editor .pa-write-box { min-height: 48dvh; font-family: var(--serif); font-size: var(--fs-lead); line-height: 1.7;
+  /* grows with the piece, so the page is the one thing that scrolls (a browser without field-sizing keeps a box) */
+  field-sizing: content; resize: none; }
 .wr-editor-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--gap); margin-top: 4px; }
 .wr-save-note { font: italic var(--fs-small) var(--serif); color: var(--muted); font-variant-numeric: tabular-nums; }
 .wr-published { margin-top: var(--gap); }
@@ -1212,7 +1223,8 @@ export default function Writing() {
       if (!name) return;
       const path = `${foldersRef.current.pieces}${name}`;
       try {
-        const made: VaultRec = await vault.createRecord({ path, body: "", types: ["piece"], fields: { stage: "seed" } });
+        // no `types`: the app gives it the `piece` the applet opens here, as the vault has it (buildAskRecord)
+        const made: VaultRec = await vault.createRecord({ path, body: "", fields: { stage: "seed" } });
         toast(`Started ${name}.`);
         await loadPieces();
         await openPiece(made.id);
@@ -1263,7 +1275,7 @@ export default function Writing() {
     async (line: string) => {
       const piece = selectedPieceRef.current;
       if (!piece) return;
-      const payload = buildAskRecord(foldersRef.current.refs, piece, line);
+      const payload = buildAskRecord(foldersRef.current.refs, piece, line, new Date(), foldersRef.current.pieces);
       try {
         await vault.createRecord(payload);
         toast("Asked Uni.");
@@ -1295,7 +1307,7 @@ export default function Writing() {
       toast("Inserted quote.");
       const piece = selectedPieceRef.current;
       if (!piece) return;
-      void noteUsedIn(ref, piece.id)
+      void noteUsedIn(ref, pieceName(piece, foldersRef.current.pieces))
         .then((updated) => {
           if (updated) patchReference(updated);
         })

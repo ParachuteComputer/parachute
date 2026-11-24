@@ -62,7 +62,7 @@ test("Writing applet: open a piece, type, see a reference, insert it as a quote,
     tags: ["reference"],
     content: "Context note.",
     metadata: {
-      for: piece.id,
+      piece: piece.path.slice("Writing/Pieces/".length),
       state: "ready",
       quote: "A calm desk holds only the page and one open reference.",
       source: "Fieldcraft Notes",
@@ -98,10 +98,14 @@ test("Writing applet: open a piece, type, see a reference, insert it as a quote,
     await f.getByRole("button", { name: "Ask" }).click();
     await expect(f.getByText("Find a counterexample from letterpress shops")).toBeVisible();
     expect(await box.inputValue()).toBe(beforeAsk);
+    // on the hub: an ask for this piece by name, in a vault where `reference` is a plain tag (made so above)
+    const asks = (await api(h, "GET", "notes?path_prefix=References/Ask")).filter((n: { metadata?: Record<string, unknown> }) =>
+      n.metadata?.piece === piece.path.slice("Writing/Pieces/".length));
+    expect(asks.map((n: { metadata: Record<string, unknown>; tags: string[] }) => [n.metadata.state, n.tags.includes("reference")])).toEqual([["asked", true]]);
   } finally {
     for (const n of await api(h, "GET", "notes?path_prefix=References/").catch(() => [])) {
       // only what this test made: its references, and the asks for its piece
-      if (made.includes(n.id) || n.metadata?.for === piece.id) await api(h, "DELETE", `notes/${n.id}`).catch(() => {});
+      if (made.includes(n.id) || n.metadata?.piece === piece.path.slice("Writing/Pieces/".length)) await api(h, "DELETE", `notes/${n.id}`).catch(() => {});
     }
     for (const id of made) await api(h, "DELETE", `notes/${id}`).catch(() => {});
   }
@@ -135,7 +139,7 @@ test("typing into a long piece in Writing stays within the same keystroke budget
       tags: ["reference"],
       content: `Note ${i}`,
       metadata: {
-        for: piece.id,
+        piece: piece.path.slice("Writing/Pieces/".length),
         state: i % 3 === 0 ? "kept" : "ready",
         quote: `Prepared passage number ${i + 1} on steady pacing and clear margins.`,
         source: `Notebook ${i + 1}`,
@@ -156,6 +160,15 @@ test("typing into a long piece in Writing stays within the same keystroke budget
     await f.getByRole("button", { name: new RegExp(`Long essay ${stamp}`) }).click();
     await expect(f.getByLabel("Piece", { exact: true })).toBeVisible();
     const measured = await keysIn(page, "Writing", "Piece", WORDS);
+    // the piece's page scrolls down in one column, as any place since #194: nothing turns sideways, no page line
+    const inner = (await (await page.locator('iframe[title="Writing"]').elementHandle())!.contentFrame())!;
+    await page.keyboard.press("Escape");
+    await inner.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); window.scrollTo(0, document.documentElement.scrollHeight); });
+    const geo = await inner.evaluate(() => ({ y: scrollY, h: document.documentElement.scrollHeight, vh: innerHeight, wide: document.documentElement.scrollWidth - innerWidth }));
+    expect(geo.h, "a long piece is taller than the screen").toBeGreaterThan(geo.vh);
+    expect(geo.y, "and scrolls to its foot").toBeGreaterThan(0);
+    expect(geo.wide, "nothing sideways").toBeLessThanOrEqual(0);
+    await expect(f.getByText(/^\d+ of \d+$/)).toHaveCount(0);
 
     const base = Math.max(FRAME, p90(floor));
     console.log(`keystrokes over ${FRAME} ms at ${SLOWDOWN}x CPU: plain p90 ${p90(floor)} ms (${floor.length}), Writing p90 ${p90(measured)} ms (${measured.length})`);
@@ -186,18 +199,18 @@ test("walkthrough: Writing at 1440 and 390", async ({ page }) => {
     await piece("Writing/Pieces/Letterpress spacing", ["piece"], "Lead furniture, leading, and why generous margins change how carefully people read.", { stage: "seed" });
     await piece("Writing/Pieces/Notes on small ponds", ["piece"], "How a backyard pond holds warmth in late autumn.", { stage: "seed" });
     await piece("Writing/Pieces/A long field essay on calm workshops", ["piece"], "Benches, light, and the sound of a room where people make things.", { stage: "draft" });
-    const quiet = await piece("Writing/Pieces/Tools that stay quiet", ["piece"],
+    await piece("Writing/Pieces/Tools that stay quiet", ["piece"],
       "Most software asks for attention before you have a sentence down. A good writing surface does the opposite: it hands back the page, keeps your notes within arm's reach, and gets out of the way while a thought is still fragile.\n\nWhen research lives in another window, switching tabs breaks the cadence of a paragraph.",
       { stage: "draft" });
     // oldest first, so the ready one is newest and on top
     await piece("References/Ask 2026-11-23 11-20 Margin notes history", ["reference"],
-      "Find a historical example of scholars keeping marginalia beside drafts.", { for: quiet.id, state: "asked" });
+      "Find a historical example of scholars keeping marginalia beside drafts.", { piece: "Tools that stay quiet", state: "asked" });
     await piece("References/Fieldcraft desk margin", ["reference"], "", {
-      for: quiet.id, state: "kept", quote: "Keep the desk clear except for the sheet in progress and one open notebook beside it.",
+      piece: "Tools that stay quiet", state: "kept", quote: "Keep the desk clear except for the sheet in progress and one open notebook beside it.",
       source: "Fieldcraft Notebook", author: "H. Okafor", source_url: "https://example.org/fieldcraft-notebook",
       why: "Gives a physical picture of the page with one shelf beside it." });
     await piece("References/Alvarez on calm rooms", ["reference"], "", {
-      for: quiet.id, state: "ready", quote: "A room that lets you hear yourself think has no more than two things asking for your eyes.",
+      piece: "Tools that stay quiet", state: "ready", quote: "A room that lets you hear yourself think has no more than two things asking for your eyes.",
       source: "Notes on Calm Rooms", author: "M. Alvarez", source_url: "https://example.org/calm-rooms",
       why: "Echoes your opening: only the page and one nearby shelf in view." });
 
@@ -254,7 +267,7 @@ test("walkthrough: Writing at 1440 and 390", async ({ page }) => {
     await shot("390-04-reference-page");
   } finally {
     for (const n of await api(h, "GET", "notes?path_prefix=References/").catch(() => [])) {
-      if (n.metadata?.for && made.includes(n.metadata.for)) made.push(n.id);
+      if (n.metadata?.piece === "Tools that stay quiet") made.push(n.id);
     }
     for (const id of made) await api(h, "DELETE", `notes/${id}`).catch(() => {});
   }
