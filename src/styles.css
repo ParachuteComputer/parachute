@@ -184,7 +184,7 @@ fieldset.plain legend { padding: 0; }
 .with-bar .applet-screen .grant-card > .grant-actions { bottom: calc(var(--foot-h) + env(safe-area-inset-bottom)); }
 .passcode-line { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
 .grant-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
-/* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, the sheet rises once; in it nothing moves but the figures and the shape of what it hears, drawn as it comes */
+/* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, the dock fades in once; in it nothing moves but the figures and the shape of what it hears, drawn as it comes */
 /* it rests at the foot of the applet's screen, in its flow and held there (sticky), never over the applet: the frame
    above gets shorter (its least height let go), so the applet still scrolls under a finger while it records and its
    foot (a room's newest line) stays in sight above it. Aaron, 11-23: "I can't scroll ... while I'm recording" (T-476) */

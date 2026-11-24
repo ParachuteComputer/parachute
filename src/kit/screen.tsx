@@ -352,23 +352,29 @@ export function Write({ label, labelled, value, onChange, placeholder, onSend, s
 
 // ── Record ──
 
-/** The microphone button. A tap opens the app's own recorder sheet, recording (the applet never touches the microphone; it needs
- *  `reach: [voice]`); `onRecorded` gets what was recorded on Send, nothing on Cancel. A failure is said as a toast. */
+/** The microphone button. A tap opens the app's own recorder, recording (the applet never touches the microphone; it needs
+ *  `reach: [voice]`); `onRecorded` gets what was recorded on Send, nothing on Cancel. A failure is said as a toast. While
+ *  the recorder is up the applet still takes taps (it scrolls beside it): this button shows it is on, and another tap on
+ *  it changes nothing. */
 export function Record({ onRecorded, children, max_s, disabled, kind = "plain", small, label }: {
   onRecorded: (r: Recording) => void | Promise<unknown>; children?: ReactNode; max_s?: number; disabled?: boolean;
   kind?: ButtonProps["kind"]; small?: boolean; label?: string;
 }) {
   const [busy, setBusy] = useState(false);
+  const [on, setOn] = useState(false);
+  const open = useRef(false);
   const tap = async () => {
+    if (open.current) return;
     const v = kit()?.voice;
     if (!v) { toast("This Parachute can't record here.", { error: true }); return; }
     let r: Recording | null;
-    try { r = await v.record(max_s ? { max_s } : undefined); } catch (e) { toast(`Not recorded: ${said(e)}`, { error: true }); return; }
+    open.current = true; setOn(true);
+    try { r = await v.record(max_s ? { max_s } : undefined); } catch (e) { toast(`Not recorded: ${said(e)}`, { error: true }); return; } finally { open.current = false; setOn(false); }
     if (!r) return;
     setBusy(true);
     try { await onRecorded(r); } catch (e) { toast(`Not saved: ${said(e)}`, { error: true }); } finally { setBusy(false); }
   };
-  return <Button kind={kind} small={small} className="pa-record" busy={busy} disabled={disabled} aria-label={label ?? "Record"} onClick={() => void tap()}>{children ?? "Record"}</Button>;
+  return <Button kind={kind} small={small} className="pa-record" busy={busy} disabled={disabled} aria-pressed={on || undefined} aria-label={label ?? "Record"} onClick={() => void tap()}>{children ?? "Record"}</Button>;
 }
 
 // ── voice notes ──

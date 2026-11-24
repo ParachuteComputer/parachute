@@ -203,7 +203,7 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
           </svg>
         )}
         {phase === "stopped" && stopped && <p className="quiet small" role="status">{STOPPED[stopped]} What was recorded is here.</p>}
-        {phase !== "failed" && <p className="quiet small record-note">{name} gets it only when you press Send.</p>}
+        {phase !== "failed" && <p className="quiet small">{name} gets it only when you press Send.</p>}
       </section>
     </div>
   );
@@ -244,7 +244,7 @@ function PickSheet({ name, accept, multiple, max, note, done }: { name: string; 
 
 /** The shell's recorder and picker for one applet's screen. `record` and `pick` are stable (the frame's router keeps
  *  them); one sheet at a time, and an open one answers "none" when the screen goes or `cancel` is called (its frame's
- *  session ended). `ui` goes over the frame. */
+ *  session ended). `ui` goes last in the applet's screen: the recorder rests at its foot, the picker over the frame. */
 export function useDeviceSheets(name: string) {
   const [asking, setAsking] = useState<Asking | null>(null);
   const open = useRef<Asking | null>(null);

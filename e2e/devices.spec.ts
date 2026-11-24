@@ -184,8 +184,10 @@ async function swipeDown(page: Page, x: number, y: number, by = 300) {
 
 // Aaron, 11-23: "I can't scroll because of a glitch in the parachute thing while I'm recording". The recorder sheet's
 // scrim lay over the whole applet and took every touch, so the room he was answering couldn't be read while he spoke.
-test.describe("on a phone 390 wide, while recording", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+// 844 tall, and 640 (a shorter phone, or the keyboard up), where the frame must give up its least height for the recorder
+for (const height of [844, 640])
+test.describe(`on a phone 390 by ${height}, while recording`, () => {
+  test.use({ viewport: { width: 390, height } });
 
   test("the room scrolls under a finger while the recorder records and after it stops, its newest line above the recorder; Send still sends", async ({ page }) => {
     test.skip(!RELAY || !KEYS, "needs our Buzz relay (BUZZ_RELAY, BUZZ_KEYS): e2e/services/README.md");
@@ -218,14 +220,24 @@ test.describe("on a phone 390 wide, while recording", () => {
       await page.waitForTimeout(600);
       const first = log.locator("article", { hasText: `The question about the pear trees ${stamp}` });
 
-      await app.getByRole("button", { name: "Record a voice note" }).click();
+      const mic = app.getByRole("button", { name: "Record a voice note" });
+      await mic.click();
       const sheet = page.getByRole("dialog", { name: "Recording for Rooms" });
+      await expect(sheet.getByRole("timer")).toContainText("Recording");
+      // the room still takes taps: its microphone shows it is on, and a second tap on it changes nothing
+      await expect(mic).toHaveAttribute("aria-pressed", "true");
+      await mic.click();
+      await page.waitForTimeout(400);
+      await expect(app.getByText(/Not recorded/)).toHaveCount(0);
       await expect(sheet.getByRole("timer")).toContainText("Recording");
       await page.waitForTimeout(600); // the frame has made room for the recorder
       const top = (await sheet.boundingBox())!.y;
       // the newest line stands above the recorder, not under it
       const nb = (await newest.boundingBox())!;
       expect(nb.y + nb.height, `the newest line (${JSON.stringify(nb)}) ends above the recorder at ${top}`).toBeLessThanOrEqual(top + 1);
+      // and so does the room's whole foot, its box to write in: the frame got shorter, the recorder covers none of it
+      const box = (await app.getByLabel(`Message ${name}`).boundingBox())!;
+      expect(box.y + box.height, `the box to write in (${JSON.stringify(box)}) ends above the recorder at ${top}`).toBeLessThanOrEqual(top + 1);
       // a finger on the talk, above the recorder, swipes it down to the line being answered: it scrolls, and recording
       // goes on. It lands in the middle of what the room shows of its talk, as the screen is now
       const scroller = app.locator(".room .scroll");
@@ -252,6 +264,7 @@ test.describe("on a phone 390 wide, while recording", () => {
       await sheet.getByRole("button", { name: "Send" }).click();
       await expect(sheet).toBeHidden();
       await expect(log.locator("article.mine").getByLabel("Voice note voice.webm")).toBeAttached({ timeout: 20_000 });
+      await expect(mic).not.toHaveAttribute("aria-pressed", "true");
     } finally {
       bob.close();
       await made.remove();
