@@ -114,7 +114,7 @@ fn numbered(name: &str, k: u32) -> String {
 
 /// Writes `bytes` into `dir` as `name`, or the first free numbered name; never over a file that is there. Returns the
 /// file name it got.
-#[cfg(any(desktop, test))]
+#[cfg(any(desktop, target_os = "ios", test))]
 pub fn save_free(dir: &std::path::Path, name: &str, bytes: &[u8]) -> std::io::Result<String> {
     use std::io::{ErrorKind, Write};
     std::fs::create_dir_all(dir)?;
