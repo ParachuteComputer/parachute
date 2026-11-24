@@ -28,7 +28,7 @@ function TechneHeld({ rec, subject, entry }: { rec: VaultRecord; subject: string
   if (!held.length) return null;
   const back = (cap: TechneCap) => void takeBackTechne({ subject, name: entry.manifest.name, approval: approvalSubject(rec, entry.noteId, entry.manifest.id) }, cap)
     .then(() => setSaid(null), (e) => setSaid(`Taken back on this device only: ${e instanceof Error ? e.message : "it couldn't be signed"}`)).finally(() => setN((n) => n + 1));
-  return <ul className="plain" aria-label={`On Techne for ${entry.manifest.name}`}>{said && <li className="line"><p className="error" role="alert">{said}</p></li>}{held.map(([cap, at]) => (
+  return <ul className="plain applet-techne" aria-label={`On Techne for ${entry.manifest.name}`}>{said && <li className="line"><p className="error" role="alert">{said}</p></li>}{held.map(([cap, at]) => (
     <li key={cap} className="line">
       <span>{heldLine(cap as Exclude<TechneCap, "read">)} <span className="quiet">since {day(at)}</span></span>
       <button type="button" className="quiet-button" onClick={() => back(cap)}>Take back</button>

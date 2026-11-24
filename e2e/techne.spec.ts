@@ -36,9 +36,9 @@ test("techne: reads as you from the card; the first post asks and is signed for 
     await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Techne/ }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
-    await expect(card).toContainText(`Read what you see on Techne at ${host}`);
-    await expect(card).toContainText(`your private circles included`);
-    await expect(card).toContainText(`Will ask you once before it can post as you in your circles at ${host}`);
+    await expect(card).toContainText(`As you on Techne at ${host} (your key): reads what you see there, your private circles included.`);
+    await expect(card).toContainText(`Asks you first, once, before it can post as you in your circles at ${host}.`);
+    await expect(card.getByText("Act as you on Techne")).toHaveCount(1);
     await page.getByRole("button", { name: "Allow" }).click();
 
     // read at once, as Maya, signed with her key
