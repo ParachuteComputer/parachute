@@ -170,3 +170,105 @@ test("journal: a voice entry, recorded on the shell's sheet, attached to its not
     expect(atts[0].metadata?.transcribe_origin).toBe("legacy"); // asked for, not guessed by the hub
   } finally { for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {}); }
 });
+
+/** A finger's swipe at (x, y) on the screen, `by` pixels down (up when negative), as raw touches the browser hit-tests
+ *  and scrolls with itself (its synthesized gesture doesn't reach a sandboxed frame here). */
+async function swipeDown(page: Page, x: number, y: number, by = 300) {
+  const cdp = await page.context().newCDPSession(page);
+  const steps = 12;
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+  for (let i = 1; i <= steps; i++) { await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y + (by * i) / steps }] }); await page.waitForTimeout(16); }
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
+}
+
+// Aaron, 11-23: "I can't scroll because of a glitch in the parachute thing while I'm recording". The recorder sheet's
+// scrim lay over the whole applet and took every touch, so the room he was answering couldn't be read while he spoke.
+// 844 tall, and 640 (a shorter phone, or the keyboard up), where the frame must give up its least height for the recorder
+for (const height of [844, 640])
+test.describe(`on a phone 390 by ${height}, while recording`, () => {
+  test.use({ viewport: { width: 390, height } });
+
+  test("the room scrolls under a finger while the recorder records and after it stops, its newest line above the recorder; Send still sends", async ({ page }) => {
+    test.skip(!RELAY || !KEYS, "needs our Buzz relay (BUZZ_RELAY, BUZZ_KEYS): e2e/services/README.md");
+    test.setTimeout(150_000);
+    const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
+    const bob = await person(RELAY!, secret("bob"));
+    const stamp = Date.now().toString(36);
+    const owner = await person(RELAY!, secret("owner"));
+    const g = crypto.randomUUID(), name = `Orchard ${stamp}`;
+    for (const p of [alice, bob.pubkey]) await owner.publish({ kind: 9030, tags: [["p", p]] });
+    expect((await owner.publish({ kind: 9007, tags: [["h", g], ["name", name], ["visibility", "private"], ["channel_type", "stream"]] })).ok).toBe(true);
+    for (const p of [alice, bob.pubkey]) expect((await owner.publish({ kind: 9000, tags: [["h", g], ["p", p]] })).ok).toBe(true);
+    owner.close();
+    // more than a screen of talk: the first line is the one being answered, far above the newest
+    expect((await bob.publish({ kind: 9, content: `The question about the pear trees ${stamp}`, tags: [["h", g]] })).ok).toBe(true);
+    await new Promise((r) => setTimeout(r, 1100)); // a second older than the rest: posts in one second come in any order
+    for (let i = 1; i <= 24; i++) expect((await bob.publish({ kind: 9, content: `Line ${i} of the orchard talk, long enough to wrap on a phone ${stamp}`, tags: [["h", g]] })).ok).toBe(true);
+    await new Promise((r) => setTimeout(r, 1100));
+    expect((await bob.publish({ kind: 9, content: `The newest line ${stamp}`, tags: [["h", g]] })).ok).toBe(true);
+    await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
+    const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
+    try {
+      await page.goto(`/v/${VAULT}?with=vault`);
+      await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
+      await page.getByRole("button", { name: "Allow" }).click();
+      const app = frame(page);
+      await app.getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(name) }).click({ timeout: 30_000 });
+      const log = app.getByRole("log");
+      const newest = log.locator("article", { hasText: `The newest line ${stamp}` });
+      await expect(newest).toBeVisible({ timeout: 20_000 });
+      await page.waitForTimeout(600);
+      const first = log.locator("article", { hasText: `The question about the pear trees ${stamp}` });
+
+      const mic = app.getByRole("button", { name: "Record a voice note" });
+      await mic.click();
+      const sheet = page.getByRole("dialog", { name: "Recording for Rooms" });
+      await expect(sheet.getByRole("timer")).toContainText("Recording");
+      // the room still takes taps: its microphone shows it is on, and a second tap on it changes nothing
+      await expect(mic).toHaveAttribute("aria-pressed", "true");
+      await mic.click();
+      await page.waitForTimeout(400);
+      await expect(app.getByText(/Not recorded/)).toHaveCount(0);
+      await expect(sheet.getByRole("timer")).toContainText("Recording");
+      await page.waitForTimeout(600); // the frame has made room for the recorder
+      const top = (await sheet.boundingBox())!.y;
+      // the newest line stands above the recorder, not under it
+      const nb = (await newest.boundingBox())!;
+      expect(nb.y + nb.height, `the newest line (${JSON.stringify(nb)}) ends above the recorder at ${top}`).toBeLessThanOrEqual(top + 1);
+      // and so does the room's whole foot, its box to write in: the frame got shorter, the recorder covers none of it
+      const box = (await app.getByLabel(`Message ${name}`).boundingBox())!;
+      expect(box.y + box.height, `the box to write in (${JSON.stringify(box)}) ends above the recorder at ${top}`).toBeLessThanOrEqual(top + 1);
+      // a finger on the talk, above the recorder, swipes it down to the line being answered: it scrolls, and recording
+      // goes on. It lands in the middle of what the room shows of its talk, as the screen is now
+      const scroller = app.locator(".room .scroll");
+      const talk = async () => { const b = (await scroller.boundingBox())!; return b.y + b.height / 2; };
+      const at = (await newest.boundingBox())!.y;
+      await swipeDown(page, 195, await talk(), 150);
+      await expect.poll(async () => (await newest.boundingBox())?.y ?? 9999, { message: "the talk moved under the finger" }).toBeGreaterThan(at + 60);
+      for (let i = 0; i < 30 && ((await first.boundingBox())?.y ?? -1) < (await scroller.boundingBox())!.y; i++) await swipeDown(page, 195, await talk(), 150);
+      const fb = (await first.boundingBox())!;
+      expect(fb.y >= 0 && fb.y + fb.height <= top, `the line being answered is on screen above the recorder: ${JSON.stringify(fb)}`).toBe(true);
+      await expect(sheet.getByRole("timer")).toContainText(/Recording 0:(0[2-9]|[1-5]\d)/, { timeout: 8000 });
+
+      // stopped (the app went to the background and came back): the talk still scrolls, and Send sends what was kept
+      await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); document.dispatchEvent(new Event("visibilitychange")); });
+      await expect(sheet.getByRole("timer")).toContainText("Recorded");
+      await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true }); document.dispatchEvent(new Event("visibilitychange")); });
+      await page.waitForTimeout(1000); // the last swipe's fling has come to rest
+      const was = await scroller.evaluate((e) => e.scrollTop);
+      // a swipe up shows what is below (again if a swipe was taken as a tap; before the fix none ever moved it)
+      await expect(async () => {
+        await swipeDown(page, 195, await talk(), -160);
+        expect(await scroller.evaluate((e) => e.scrollTop), `the talk moved under the finger, stopped (from ${was}; ${await scroller.evaluate((e) => `${e.scrollHeight} tall, ${e.clientHeight} shown`)}; finger at ${await talk()})`).toBeGreaterThan(was + 60);
+      }).toPass({ intervals: [300, 600], timeout: 8000 });
+      await sheet.getByRole("button", { name: "Send" }).click();
+      await expect(sheet).toBeHidden();
+      await expect(log.locator("article.mine").getByLabel("Voice note voice.webm")).toBeAttached({ timeout: 20_000 });
+      await expect(mic).not.toHaveAttribute("aria-pressed", "true");
+    } finally {
+      bob.close();
+      await made.remove();
+    }
+  });
+});

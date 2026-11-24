@@ -2,7 +2,8 @@
 // links, storage"): the recorder (`voice.record`) and the file picker (`app.pick`). Both run in the shell's document,
 // never the frame. The recorder opens only on the person's tap in the applet (AppletScreen's tappingIn: live user
 // activation, the focus in that applet's frame) and starts recording at once, as the Uni app's microphone button does;
-// the applet gets the recording only on Send. Beside useShellSheets (ShellSheets.tsx), which draws the approvals'.
+// the applet gets the recording only on Send. It rests at the foot of the applet's screen, never over it, so the applet
+// can still be read and scrolled while it records. Beside useShellSheets (ShellSheets.tsx), which draws the approvals'.
 // Every word is the app's. Nothing pulses or loops: the recorder says what it is doing in words, a running time, and
 // the shape of what it has heard so far.
 import { useEffect, useRef, useState } from "react";
@@ -177,27 +178,32 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
   useEffect(() => { const t = setTimeout(() => setArmed(true), SEND_ARM_MS); return () => clearTimeout(t); }, []);
   const live = phase === "recording";
   return (
-    <div className="sheet-scrim sheet-over-frames" role="presentation">
-      <section className="sheet device-sheet recorder" role="dialog" aria-modal="true" aria-label={`Recording for ${name}`}>
-        <h2>Recording for {name}</h2>
-        {phase === "starting" && <p className="quiet" role="status">Opening the microphone…</p>}
-        {(phase === "recording" || phase === "stopped") && (
-          <p className="record-time" role="timer" aria-label={live ? "Recording time" : "Recorded time"}>
-            <strong>{live ? "Recording" : "Recorded"}</strong> {clock(secs)} <span className="quiet">of {clock(max)}</span>
-          </p>
-        )}
+    // not over the applet but at the foot of its screen, beside it: what it shows (the message being answered) still
+    // scrolls under a finger while it records, and the frame above is shortened so its foot stays in sight (T-476)
+    <div className="recorder-dock">
+      <section className="sheet device-sheet recorder" role="dialog" aria-modal="false" aria-label={`Recording for ${name}`}>
+        {/* one row: what it is doing and its time, then Cancel and Send; the talk above keeps the most of the screen.
+            Its name ("Recording for Rooms") is the dialog's label, not a heading that says "Recording" twice */}
+        <div className="record-head">
+          {phase === "starting" && <p className="quiet" role="status">Opening the microphone…</p>}
+          {(phase === "recording" || phase === "stopped") && (
+            <p className="record-time" role="timer" aria-label={live ? "Recording time" : "Recorded time"}>
+              <strong>{live ? "Recording" : "Recorded"}</strong> {clock(secs)} <span className="quiet">of {clock(max)}</span>
+            </p>
+          )}
+          {phase === "failed" && <p role="alert">{why}</p>}
+          <div className="grant-actions">
+            <button type="button" className="quiet-button" onClick={cancel}>{phase === "failed" ? "Close" : "Cancel"}</button>
+            {phase !== "failed" && <button type="button" className="primary" disabled={!armed || phase === "starting" || sending} onClick={send}>Send</button>}
+          </div>
+        </div>
         {(phase === "recording" || phase === "stopped") && levels.length > 0 && (
           <svg className="record-shape" viewBox={`0 0 ${BARS * 3} 24`} preserveAspectRatio="none" aria-hidden="true">
             {levels.map((l, i) => { const h = Math.max(1.5, l * 24); return <rect key={i} x={(BARS - levels.length + i) * 3} y={(24 - h) / 2} width="2" height={h} rx="1" />; })}
           </svg>
         )}
-        {phase === "stopped" && stopped && <p className="quiet" role="status">{STOPPED[stopped]} What was recorded is here.</p>}
+        {phase === "stopped" && stopped && <p className="quiet small" role="status">{STOPPED[stopped]} What was recorded is here.</p>}
         {phase !== "failed" && <p className="quiet small">{name} gets it only when you press Send.</p>}
-        {phase === "failed" && <p role="alert">{why}</p>}
-        <div className="grant-actions">
-          <button type="button" className="quiet-button" onClick={cancel}>{phase === "failed" ? "Close" : "Cancel"}</button>
-          {phase !== "failed" && <button type="button" className="primary" disabled={!armed || phase === "starting" || sending} onClick={send}>Send</button>}
-        </div>
       </section>
     </div>
   );
@@ -238,7 +244,7 @@ function PickSheet({ name, accept, multiple, max, note, done }: { name: string; 
 
 /** The shell's recorder and picker for one applet's screen. `record` and `pick` are stable (the frame's router keeps
  *  them); one sheet at a time, and an open one answers "none" when the screen goes or `cancel` is called (its frame's
- *  session ended). `ui` goes over the frame. */
+ *  session ended). `ui` goes last in the applet's screen: the recorder rests at its foot, the picker over the frame. */
 export function useDeviceSheets(name: string) {
   const [asking, setAsking] = useState<Asking | null>(null);
   const open = useRef<Asking | null>(null);

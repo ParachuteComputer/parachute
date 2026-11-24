@@ -28,8 +28,10 @@
 //   uni.app.openLink(url)            → (links) an http/https/mailto address in the browser, during a tap: whether it went
 //   uni.app.save(name, bytes, type)  → (save) a file into Downloads, during a tap: {saved: name}
 //   uni.app.pick({accept, multiple}) → (attach) the shell's own picker, during a tap: [{name, type, bytes}], [] for none
-//   uni.voice.record({max_s})        → (reach: [voice]) the shell's recorder sheet, during a tap: {bytes, type, duration}
-//                                      on Send, null on Cancel (docs/design/KEYRING.md "Voice, files, links, storage")
+//                                      or when the shell makes the session again
+//   uni.voice.record({max_s})        → (reach: [voice]) the shell's recorder, during a tap: {bytes, type, duration}
+//                                      on Send, null on Cancel or when the shell makes the session again
+//                                      (docs/design/KEYRING.md "Voice, files, links, storage")
 //   uni.storage.get/set/keys         → (storage) a little JSON kept by the shell on this device for it, 256 KB in all (a
 //                                      value of any size within it: set sends it as bytes)
 //   uni.saved.get(key) / .set(key, value) / .all() / .flush() → what it saves on this device as the person goes (drafts,
@@ -74,6 +76,7 @@ export const FRAME_KIT = String.raw`(function () {
   var savedVals = {}, savedDirty = null, savedTimer = null, savedFirst = 0, savedOn = false, SAVE_MS = 250, SAVE_MAX_MS = 1000, SCROLL = "parachute:scroll";
   var measuring = false, lastHeight = -1, queued = false;
   var readyP = new Promise(function (r) { readyRes = r; });
+  var readied = false;
   // the person may take a while: a recording of up to 10 minutes and then Send, a file being chosen; and the shell may:
   // a Notion export is chosen, then its records written and up to 150 MB of its files uploaded one at a time
   var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000, "vaults.importNotion": 3600000, "vaults.addPack": 600000, "vaults.file": 120000, "vault.file": 120000, "vault.attachFrom": 120000 };
@@ -275,6 +278,20 @@ export const FRAME_KIT = String.raw`(function () {
     }
     if (m.uni !== 1) return;
     if (m.event === "ready") {
+      // a session made again under this page: the shell closed the old one's recorder or picker with it and drops its
+      // replies, so a recording or a pick it held is settled now as "none" (a Cancel), not at its own timeout (an hour,
+      // with Record held pressed meanwhile). Nothing else is touched: a write or a subscription may have reached the
+      // shell, and keeps its own timeout and retry
+      if (readied) {
+        Object.keys(pending).forEach(function (id) {
+          var j = pending[id], what = j.msg.ns + "." + j.msg.method;
+          if (!j.out || (what !== "voice.record" && what !== "app.pick")) return;
+          delete pending[id]; free(j); j.out = false; out--;
+          j.res(what === "app.pick" ? [] : null);
+        });
+        pump();
+      }
+      readied = true;
       if (m.data && m.data.saved && typeof m.data.saved === "object") { savedOn = true; savedVals = m.data.saved; restoreScroll(); }
       if (m.data && m.data.theme) applyTheme(m.data.theme);
       if (m.data && m.data.props) applyProps(m.data.props);

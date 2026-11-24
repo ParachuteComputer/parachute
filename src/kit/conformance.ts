@@ -64,7 +64,7 @@ export const RULES: readonly Rule[] = [
   { id: "search", what: "its own search box", use: "Search", test: /type\s*=\s*["']search["']/ },
   { id: "buttons", what: "a button of its own", use: "Button (primary, plain, quiet; small), a List row's onPress", test: /<button[\s>]|border-radius\s*:\s*999px/ },
   // voice
-  { id: "voice", what: "the recorder called itself", use: "Record (the app's own recorder sheet)", test: /\bvoice\s*\.\s*record\s*\(|\bgetUserMedia\b|\bMediaRecorder\b/ },
+  { id: "voice", what: "the recorder called itself", use: "Record (the app's own recorder)", test: /\bvoice\s*\.\s*record\s*\(|\bgetUserMedia\b|\bMediaRecorder\b/ },
   { id: "transcripts", what: "the hub's transcript marker handled itself", use: "voiceNote and useTranscripts", test: /_Transcript pending\._/ },
   // links and opening notes (were src/kit/links.test.ts)
   { id: "links", what: "a link of its own", use: "Link, Linked, Note, link.open", test: /<a[\s>]|\bhref\s*=\s*[{"']/ },
