@@ -15,7 +15,9 @@ export default function PickVaults({ pick, onError, onCancel }: { pick: VaultPic
   async function go() {
     if (!chosen) return;
     setBusy(true);
-    try { window.location.assign(await pick.go(mine, chosen)); } catch (e) { setBusy(false); onError(e); }
+    const t520 = (m: string) => document.body.insertAdjacentHTML("beforeend", `<p style="font-size:12px">[T520] ${m.replace(/</g, "&lt;")}</p>`);
+    t520(`go secure=${window.isSecureContext} subtle=${typeof crypto?.subtle}`);
+    try { const u = await pick.go(mine, chosen); t520(`to ${u.slice(0, 60)}`); window.location.assign(u); } catch (e) { t520(`failed ${e instanceof Error ? `${e.name}: ${e.message}` : JSON.stringify(e)}`); setBusy(false); onError(e); }
   }
   return (
     <div className="stack">
