@@ -279,6 +279,16 @@ fn seal_webview(window: &tauri::WebviewWindow) {
                 let config: Retained<AnyObject> = msg_send![wk, configuration];
                 let controller: Retained<AnyObject> = msg_send![&*config, userContentController];
                 let () = msg_send![&*controller, removeScriptMessageHandlerForName: objc2_foundation::ns_string!("ipc")];
+                // a debug build (the simulator drive, scripts/ios-drive.sh) copies the page's console into the system
+                // log, where the drive keeps it; a private WebKit switch, so never in a release build
+                #[cfg(debug_assertions)]
+                {
+                    use objc2::runtime::{Bool, NSObjectProtocol};
+                    let prefs: Retained<AnyObject> = msg_send![&*config, preferences];
+                    if prefs.respondsToSelector(objc2::sel!(_setLogsPageMessagesToSystemConsoleEnabled:)) {
+                        let () = msg_send![&*prefs, _setLogsPageMessagesToSystemConsoleEnabled: Bool::YES];
+                    }
+                }
             }
             let _ = label;
         }
