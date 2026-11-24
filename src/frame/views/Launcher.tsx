@@ -11,6 +11,7 @@ import { titleOf } from "../../vault/notes";
 import { Days } from "../../kit/parts";
 import { when } from "../../kit/when";
 import { appletPath } from "../../open/paths";
+import { PinButton } from "../../ui/PinButton";
 
 /** Connect an AI: a setting (Settings → Your AI) and a first step (Start here), not an applet in the list. (Its address
  *  is written out: the frame imports nothing of the shell's applet code, src/frame/boundary.test.ts.) */
@@ -24,8 +25,9 @@ const updated = (n: Note) => (n as { updatedAt?: string }).updatedAt ?? null;
 /**
  * The list: the open app's applets (shell/bundles.ts decides which), one plain list, whatever vault each is in. It is
  * where Back from a first screen lands and what the bar's Applets opens; the home page itself is the app's home applet.
- * Vaults are in Settings (and in a Vault applet, when the app lists one). A long-press (or a right-click) on an applet
- * offers pinning it to the bar and opening it on start.
+ * Vaults are in Settings (and in a Vault applet, when the app lists one); the person's vaults this device doesn't read yet,
+ * which the bundle draws applets from, end the list, a tap each to open (T-476: Library sat in one, unseen). Each applet's
+ * Pin puts it on the bar or takes it off; a long-press (or a right-click) offers opening it on start.
  */
 export default function Launcher() {
   const vaults = useVaults();
@@ -44,6 +46,15 @@ export default function Launcher() {
   // (the home record too: Start here's rows are its applets, so nothing is drawn above the list after it)
   const vaultsRead = useVaultsLoaded(), homeRead = useHomeLoaded();
   const fresh = useFresh(homeVault, vaultsRead && homeRead);
+  // Pin, on any row: one tap, written to the open bundle's record by the shell
+  const [pinning, setPinning] = useState(false);
+  const [pinError, setPinError] = useState("");
+  const pin = (v: FrameVault, a: FrameApplet, on: boolean) => {
+    if (pinning) return;
+    setPinning(true); setPinError("");
+    pinApplet(v.key, a.noteId, on).then(() => setPinning(false), (e: unknown) => { setPinError(e instanceof Error && e.message !== "not_allowed" ? e.message : "That needs a tap."); setPinning(false); });
+  };
+  const toOpen = (home.parachutes ?? []).filter((p) => p.fresh?.length);
   return (
     <main className="screen launcher">
       <h1 className="launcher-title">Applets</h1>
@@ -52,12 +63,18 @@ export default function Launcher() {
       {fresh === undefined ? <Loading /> : <>
       {fresh && homeVault && <StartHere v={homeVault} />}
       {fresh && homeVault && <h2 className="lately-label">All applets</h2>}
+      {pinError && <p className="error" role="alert">{pinError}</p>}
       <ol className="entries" aria-label="Applets">
         {/* Parachute's own (docs/design/PARACHUTE-SOURCE.md), in the home: first, from the app */}
-        {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).filter((a) => a.noteId !== CONNECT).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
-        {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} otherHome={vaults.some((x) => !x.home && (x.whose ?? "mine") === "mine")} onCount={count} onHold={(a) => setAsked({ v, a })} />)}
+        {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).filter((a) => a.noteId !== CONNECT).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} busy={pinning} onPin={(on) => pin(h, a, on)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
+        {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} otherHome={vaults.some((x) => !x.home && (x.whose ?? "mine") === "mine")} onCount={count} busy={pinning} onPin={(a, on) => pin(v, a, on)} onHold={(a) => setAsked({ v, a })} />)}
         {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}
       </ol>
+      {toOpen.length > 0 && <section className="launcher-closed" aria-label="Your vaults not open here">
+        <h2 className="lately-label">Not open here yet</h2>
+        <p className="quiet small">Their applets show here once you open them.</p>
+        {toOpen.map((p) => <VaultsToOpen key={p.hub} p={p} />)}
+      </section>}
       <Components vaults={vaults} onPart={(v, c) => setPart({ v, c })} />
       </>}
       {asked && <AppletSheet v={asked.v} a={asked.a} onClose={() => setAsked(null)} />}
@@ -174,7 +191,7 @@ function StartHere({ v }: { v: FrameVault }) {
 }
 
 /** One vault's applets in the list (and, in the home, the ones brought in from other Parachutes). */
-function VaultEntries({ v, many, otherHome, onCount, onHold }: { v: FrameVault; many: boolean; otherHome: boolean; onCount: (key: string, n: number) => void; onHold: (a: FrameApplet) => void }) {
+function VaultEntries({ v, many, otherHome, onCount, busy, onPin, onHold }: { v: FrameVault; many: boolean; otherHome: boolean; onCount: (key: string, n: number) => void; busy: boolean; onPin: (a: FrameApplet, on: boolean) => void; onHold: (a: FrameApplet) => void }) {
   const applets = useApplets(v.key);
   const home = useHome();
   const pointers = usePointers();
@@ -186,7 +203,7 @@ function VaultEntries({ v, many, otherHome, onCount, onHold }: { v: FrameVault; 
     {shown.map((a) => {
       const isHome = home.start?.vault === v.key && home.start.noteId === a.noteId;
       const pinned = home.bar.some((p) => p.vault === v.key && p.noteId === a.noteId);
-      return <Entry key={a.noteId} v={v} a={a} where={where} home={isHome} pinned={pinned} onHold={() => onHold(a)} />;
+      return <Entry key={a.noteId} v={v} a={a} where={where} home={isHome} pinned={pinned} busy={busy} onPin={(on) => onPin(a, on)} onHold={() => onHold(a)} />;
     })}
     {brought.map((p) => <Brought key={p.noteId} p={p} />)}
     {/* plain words for what is wrong (vault/failure.ts): a Parachute that isn't reached is a line, not an error */}
@@ -250,7 +267,7 @@ export function whoseLine(v: FrameVault, many: boolean): string | null {
   return null;
 }
 
-function Entry({ v, a, where, home, pinned, onHold }: { v: FrameVault; a: FrameApplet; where: string; home: boolean; pinned: boolean; onHold: () => void }) {
+function Entry({ v, a, where, home, pinned, busy, onPin, onHold }: { v: FrameVault; a: FrameApplet; where: string; home: boolean; pinned: boolean; busy: boolean; onPin: (on: boolean) => void; onHold: () => void }) {
   const hold = useHold(onHold);
   const o = a.opens[0];
   const load = useVaultQuery<Note[]>(o ? v : null, (r) => r.queryNotes({ tag: o!.type, pathPrefix: o!.path, orderBy: "updated_at", sort: "desc", limit: 30 }), [o?.type, o?.path]);
@@ -260,13 +277,14 @@ function Entry({ v, a, where, home, pinned, onHold }: { v: FrameVault; a: FrameA
     life = newest ? `${titleOf(newest)}, ${inLine(when.day(updated(newest)))}` : "nothing in it yet";
   }
   return (
-    <li>
+    <li className="entry-row">
       <Link className="entry" to={appletPath(v.key, a.noteId)} {...hold}>
         <span className="entry-glyph" aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span>
-        <span className="entry-name">{a.manifest.name}{home && <span className="entry-home">Home</span>}{pinned && !home && <span className="entry-pinned"><span aria-hidden="true">●</span> pinned</span>}</span>
+        <span className="entry-name">{a.manifest.name}{home && <span className="entry-home">Home</span>}</span>
         <span className="entry-life">{where && <span className="entry-where">{where} · </span>}{life}</span>
         {o && load.state === "ok" && <span className="entry-days" aria-hidden="true"><Days times={load.data.map(updated)} days={7} inline /></span>}
       </Link>
+      <PinButton name={a.manifest.name} pinned={pinned} busy={busy} onToggle={() => onPin(!pinned)} />
     </li>
   );
 }
@@ -316,13 +334,13 @@ function ComponentSheet({ v, c, onClose }: { v: FrameVault; c: FrameComponent; o
   );
 }
 
-/** Pin to the bar, and open on start: each a tap here, which the shell writes into the person's settings note. */
+/** Open on start (and, for someone else's, bring it in): each a tap here, which the shell writes into the open bundle's
+ *  record. Pinning is the row's own Pin. */
 function AppletSheet({ v, a, onClose }: { v: FrameVault; a: FrameApplet; onClose: () => void }) {
   const home = useHome();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const isHome = home.start?.vault === v.key && home.start.noteId === a.noteId;
-  const pinned = home.bar.some((p) => p.vault === v.key && p.noteId === a.noteId);
   const pointers = usePointers();
   const theirs = !!v.whose && v.whose !== "mine";
   const isBrought = pointers.some((p) => p.kind === "applet" && p.at === v.key && p.record === a.noteId);
@@ -337,7 +355,6 @@ function AppletSheet({ v, a, onClose }: { v: FrameVault; a: FrameApplet; onClose
       <section className="sheet" role="dialog" aria-modal="true" aria-label={a.manifest.name}>
         <h2><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> {a.manifest.name} <span className="quiet">in {v.vault}</span></h2>
         <ul className="plain sheet-list">
-          <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => pinApplet(v.key, a.noteId, !pinned))}>{pinned ? "Unpin from the bar" : "Pin to the bar"}</button></li>
           {!theirs && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => startApplet(v.key, isHome ? null : a.noteId))}>{isHome ? "Don't open on start" : "Open on start"}</button></li>}
           {theirs && !isBrought && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => bringIn(v.key, a.noteId))}>Bring into my Parachute</button></li>}
           {theirs && isBrought && <li className="quiet sheet-note">Brought into your Parachute.</li>}

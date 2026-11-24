@@ -63,7 +63,7 @@ export default function BarSettings() {
             <span aria-hidden="true">{a.glyph}{"︎"}</span> {a.name}</button>{many && a.where ? <span className="quiet small"> in {a.where}</span> : null}</li>))}
         </ul>
       </details>}
-      <p className="quiet small">Kept in the {bundle.name} bundle in {home.vault}, so your other devices show the same bar. A long-press on a place on the bar does the same.</p>
+      <p className="quiet small">Kept in {home.vault}, so your other devices show the same bar. Pin, on any applet in the list or at its top, does the same.</p>
       {busy && <p className="quiet small" role="status">Saving…</p>}
       {error && <p className="error" role="alert">{error}</p>}
     </fieldset>

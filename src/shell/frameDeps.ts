@@ -24,7 +24,7 @@ import { dismissVault, newVaultsOn, startAddVault } from "../vault/newVaults";
 import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
 import { bundleMissing, bundleNewer, barNow, openBundleNow, pinApplet, startApplet } from "./homeSettings";
-import { offered, namesApplet, type Bundle } from "./bundles";
+import { offered, offersIn, namesApplet, type Bundle } from "./bundles";
 import { chooseStart, forgetStart, START_WAIT_MS } from "./start";
 import { parachutesNow } from "./parachutes";
 
@@ -34,11 +34,15 @@ import { parachutesNow } from "./parachutes";
  *  the next start leads to makes. The built-in frame's "Open on start" is the app's own sheet, so it counts. */
 export const homeNow = () => {
   const b = barNow();
+  const bundle = openBundleNow(), h = homeVault();
+  const homeHub = h ? originOf(h.issuer) : "";
   // the app chosen here didn't load: made for a newer Parachute (its name), or malformed (null)
   const missing = bundleMissing(), newer = missing ? bundleNewer(missing) : null;
   return { start: b.start ? { vault: b.start.vault, noteId: b.start.noteId } : null, bar: b.pins.map((p) => ({ vault: p.vault, noteId: p.noteId })),
     parachutes: parachutesNow().map((p) => {
-      const fresh = newVaultsOn(p.hub);
+      // the person's vaults there this device doesn't read, that the open bundle would list applets from (the list ends
+      // with them, a tap each: T-476, his Library sat in one unseen)
+      const fresh = newVaultsOn(p.hub).filter((vault) => offersIn(bundle, { hub: originOf(p.hub), vault }, homeHub));
       return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh } : {}) };
     }), ...(openBundleNow().look === "notes" ? { look: "notes" as const, app: "simple" as const } : {}), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
     ...viewerNow(), ...officialNow() };

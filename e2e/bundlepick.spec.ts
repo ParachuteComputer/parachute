@@ -21,7 +21,7 @@ test("Your bundle lists the bundles in the person's other vaults and says what e
     const choice = page.getByRole("group", { name: "Which bundle opens" });
     // what Everything and Simplified are, in plain words
     await expect(choice.getByRole("radio", { name: /Everything/ })).toBeChecked();
-    await expect(choice).toContainText("Everything: every applet in every vault on this device, in one list. On the bar: Applets.");
+    await expect(choice).toContainText("Everything: every applet in every vault you open here, in one list. On the bar: Applets.");
     await expect(choice).toContainText("Parachute Simplified: your notes first. On the bar: Notes, Journal, Capture, Vault, Connect.");
     // the bundle in pantry, by name, where it is, and its bar
     const uni = choice.getByRole("radio", { name: /Uni/ });
@@ -51,7 +51,7 @@ test("the line says the person's own pins where a bundle has no bar of its own",
   try {
     await page.goto("/settings");
     const choice = page.getByRole("group", { name: "Which bundle opens" });
-    await expect(choice).toContainText("Everything: every applet in every vault on this device, in one list. On the bar: Post, Applets.");
+    await expect(choice).toContainText("Everything: every applet in every vault you open here, in one list. On the bar: Post, Applets.");
     await page.goto("/");
     await expect(bar(page).getByRole("link", { name: /Post/ })).toBeVisible();
   } finally { await api(hubState(), "DELETE", `notes/${note.id}`); }

@@ -74,11 +74,11 @@ export default function BundleChoice() {
           <label key={`${v.key} ${b.id}`} className="line"><span><input type="radio" name="bundle" checked={there === `${v.key} ${b.id}`} onChange={() => pickThere(v, b.id)} /> <span aria-hidden="true">{b.glyph}</span> <b>{b.name}</b>, in {v.vault}. {onBar(b)}</span></label>
         ))}
       </fieldset>
-      <p className="quiet small">Which applets this device shows, its bar and its home. Kept in {home.vault} too, so a new device opens the same one.{others.some((o) => o.v.key !== home.key) ? " Choosing a bundle kept in another vault makes that vault your home." : ""}</p>
+      <p className="quiet small">The applets in your list, the bar and what opens first. Kept in {home.vault}, so your other devices show the same.{others.some((o) => o.v.key !== home.key) ? " Choosing a bundle kept in another vault makes that vault your home." : ""}</p>
       {/* someone else's bundle: its first screen is theirs, as its bar is */}
       {!bundle.live && <fieldset className="plain" disabled={busy}>
         <legend className="settings-sub">Opens on</legend>
-        <label className="line"><span><input type="radio" name="opens-on" checked={now === ""} onChange={(e) => opensOn(e, null)} /> {bundle.look === "notes" ? <><span aria-hidden="true">¶</span> <b>Notes</b></> : <><span aria-hidden="true">⁂</span> <b>Applets</b>: the list</>}</span></label>
+        <label className="line"><span><input type="radio" name="opens-on" checked={now === ""} onChange={(e) => opensOn(e, null)} /> {bundle.look === "notes" ? <><span aria-hidden="true">¶</span> <b>Notes</b></> : <><span aria-hidden="true">⁂</span> <b>Applets</b></>}</span></label>
         {firsts.map((p) => (
           <label key={`${p.vault}/${p.noteId}`} className="line"><span><input type="radio" name="opens-on" checked={now === keyOf(p)} onChange={(e) => opensOn(e, p)} /> <span aria-hidden="true">{p.glyph}</span> <b>{p.name}</b></span></label>
         ))}

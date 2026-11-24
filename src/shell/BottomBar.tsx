@@ -6,7 +6,7 @@
 // under applets, so it is there on every screen, under a frame of the person's own too. A tap on a place is a real tap on a link inside the app: it marks that
 // address, so an allowed applet starts. A long-press (or a right-click) on a place offers moving it, unpinning it, and
 // open on start.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useHold } from "../ui/hold";
 import { Link, useLocation } from "react-router";
 import { move, pinApplet, setStart, useSettings, type Found, type Pin, type Place } from "./homeSettings";
@@ -30,18 +30,34 @@ export default function BottomBar() {
   const items = bar.pins.map(item);
   const here = (href: string) => pathname === href;
   useEffect(() => { setAsked(null); }, [pathname]);
+  // a phone's bar scrolls sideways when full: the place you are in is brought into view, clear of the held Applets and
+  // Settings (a start, or the hub's page coming back, opens it scrolled to its left end)
+  const nav = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = nav.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    const cur = el.querySelector<HTMLElement>('.home-bar-place[aria-current="page"]');
+    if (!cur || cur.closest(".home-bar-held")) return;
+    const view = el.clientWidth - (el.querySelector<HTMLElement>(".home-bar-held")?.offsetWidth ?? 0);
+    const left = cur.offsetLeft, right = left + cur.offsetWidth;
+    if (left < el.scrollLeft) el.scrollLeft = left - 6;
+    else if (right > el.scrollLeft + view) el.scrollLeft = right - view + 6;
+  }, [pathname, bar.entries.length]);
   const wayHome = bar.entries.some((e) => "screen" in e && e.screen === "home");
   return (
     <>
-      <nav className="home-bar" aria-label="Bar" onClickCapture={(e) => { const tab = (e.target as Element).closest(".home-bar-place"); if (tab && e.detail > 0) fromTab(tab); }}>
+      <nav ref={nav} className="home-bar" aria-label="Bar" onClickCapture={(e) => { const tab = (e.target as Element).closest(".home-bar-place"); if (tab && e.detail > 0) fromTab(tab); }}>
         {bar.entries.map((e) => ("href" in e
           ? <Place key={e.href} item={item(e)} current={here(e.href)} onHold={() => setAsked(item(e))} />
           : <AppPlaceLink key={JSON.stringify(e)} place={e} notes={notes} pathname={pathname} />))}
-        {!wayHome && <AppPlaceLink place={{ screen: "home" }} notes={notes} pathname={pathname} />}
-        {/* Settings, the shell's own: last, on every screen, whatever the bundle's bar or a frame of the person's own says */}
-        <Link className="home-bar-place home-bar-settings" to="/settings" aria-current={pathname === "/settings" ? "page" : undefined}>
-          <span className="home-bar-glyph" aria-hidden="true">⛭</span>Settings
-        </Link>
+        {/* the way home the app adds, and Settings, the shell's own: last, on every screen, whatever the bundle's bar or a
+            frame of the person's own says; held together at the edge, so a full bar scrolls under them */}
+        <span className="home-bar-held">
+          {!wayHome && <AppPlaceLink place={{ screen: "home" }} notes={notes} pathname={pathname} />}
+          <Link className="home-bar-place home-bar-settings" to="/settings" aria-current={pathname === "/settings" ? "page" : undefined}>
+            <span className="home-bar-glyph" aria-hidden="true">⛭</span>Settings
+          </Link>
+        </span>
       </nav>
       {asked && <PlaceSheet item={asked} first={items[0]?.href === asked.href} last={items.at(-1)?.href === asked.href} onClose={() => setAsked(null)} />}
     </>
@@ -101,7 +117,7 @@ function PlaceSheet({ item, first, last, onClose }: { item: Item; first: boolean
         <ul className="plain sheet-list">
           {!first && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => move(item.place, -1))}>Move left</button></li>}
           {!last && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => move(item.place, 1))}>Move right</button></li>}
-          <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => pinApplet(item.vault, item.noteId, false))}>Unpin</button></li>
+          <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => pinApplet(item.vault, item.noteId, false))}>Unpin from the bar</button></li>
           {item.home
             ? <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(async () => { await setStart(null); forgetStart(); })}>Don't open on start</button></li>
             : <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(async () => { await setStart(item.place); chooseStart(item.vault, item.noteId); })}>Open on start</button></li>}

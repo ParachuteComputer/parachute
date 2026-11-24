@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import { Bar } from "../ui/Bar";
+import { PinButton } from "../ui/PinButton";
 import { useVault } from "../vault/hooks";
 import { clientFor, keptClientFor, keptReaderFor } from "../vault/client";
 import { askAgain, onFresh } from "../vault/readCache";
@@ -94,7 +95,7 @@ import { useGate, useSelfTestRun } from "../applet/selftest/run";
 import { vaultDeps } from "../applet/vaultDeps";
 import { takeMark } from "../open/mark";
 import { chooseStart, startChosenHere, takeStart } from "../shell/start";
-import { barNow, settingsReadNow, useSettings } from "../shell/homeSettings";
+import { barNow, pinApplet, settingsReadNow, useSettings } from "../shell/homeSettings";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
@@ -599,6 +600,18 @@ export default function AppletScreen() {
   const handed = (official || decision === "run") && claim && note ? { note: { id: note.id, path: note.path ?? "" }, screen: screenOf(entry!.manifest, claim.screen ?? askedScreen).id } : null;
   const name = entry?.manifest.name ?? "Applet";
   const sized = !!entry?.embeds.length;
+  // Pin, in the top bar: one tap puts it on the bar or takes it off, written to the open bundle's record (as the list's
+  // Pin and Settings → On the bar do). Pinning runs nothing, so it is there while the applet asks or is stopped too
+  const { bar: barHere } = useSettings();
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const pinId = entry?.noteId ?? appletId ?? "";
+  const pinnedHere = !!rec && barHere.pins.some((p) => p.vault === rec.key && p.noteId === pinId);
+  const togglePin = () => {
+    if (!rec || !pinId || pinBusy) return;
+    setPinBusy(true); setPinError(null);
+    pinApplet(rec.key, pinId, !pinnedHere).then(() => setPinBusy(false), (e: unknown) => { setPinError(e instanceof Error ? e.message : "That couldn't be saved."); setPinBusy(false); });
+  };
   // a notification's tap opens the applet at a room and message (services/notifyLink.ts)
   const launch: { room: string; event?: string } | { vault: string; record?: string; show?: "changes" | "sharing" } | null = launchOf(params) ?? (entry?.app.includes("vaults") ? vaultLaunchOf(params) : null);
   const launchKey = launch ? ("room" in launch ? `${launch.room}|${launch.event ?? ""}` : `${launch.vault}|${launch.record ?? ""}|${launch.show ?? ""}|${location.key}`) : "";
@@ -727,7 +740,10 @@ export default function AppletScreen() {
   const back = (nav: Parameters<typeof backOrLauncher>[0]) => { if (!backToApplet()) backOrLauncher(nav); };
   const plainNote = note ? <Link to={`${noteHref(rec.key, note.id)}?with=vault`}>Open {titleOf(note)} in the vault view</Link> : null;
   const theirsLabel = notMine ? ` · ${rec.vault}'s` : "";
-  const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : loaded.state === "newer" ? `${loaded.entry.manifest.glyph} ${loaded.entry.manifest.name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu} />{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;
+  const pinName = entry ? name : loaded.state === "newer" ? loaded.entry.manifest.name : null;
+  const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : loaded.state === "newer" ? `${loaded.entry.manifest.glyph} ${loaded.entry.manifest.name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu}>
+    {pinName && <PinButton name={pinName} pinned={pinnedHere} busy={pinBusy} onToggle={togglePin} />}
+  </Bar>{pinError && <p className="error" role="alert">{pinError}</p>}{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;
 
   // Parachute's own run whatever the self-test found: it guards against code the person hasn't trusted, and this is the
   // app's own (docs/design/PARACHUTE-SOURCE.md). Not while it runs, though: its probes' escapes would stop any frame
