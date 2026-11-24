@@ -81,10 +81,11 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
   const givenVaults = () => listVaults().filter((v) => given(v.key));
   // two resolvers: what a link leads to, asked of the vaults it was given (the answer is the applet's); where a tap goes,
   // of every vault held (the shell goes there; the applet hears only true or false)
-  // A note in a vault that can't be asked now still counts: for what a link is drawn as, only in the applet's own vault
-  // (it knows that one; another's name would say which vaults are held); at a tap, in any (links/resolve.ts)
-  const resolver = (): ResolveDeps => ({ vaults: givenVaults, here, mayRead, find, unreached: (rec) => rec.key === here()?.key });
-  const tapResolver = (): ResolveDeps => ({ vaults: listVaults, here, mayRead, find: (rec, p, ok) => timed(find(rec, p, ok), TAP_READ_MS), unreached: () => true });
+  // a note in a vault that can't be asked now still counts, only in the applet's own vault: it knows that one, and
+  // another's name, drawn or tapped, would say which vaults are held (links/resolve.ts)
+  const ownVault = (rec: VaultRecord) => rec.key === here()?.key;
+  const resolver = (): ResolveDeps => ({ vaults: givenVaults, here, mayRead, find, unreached: ownVault });
+  const tapResolver = (): ResolveDeps => ({ vaults: listVaults, here, mayRead, find: (rec, p, ok) => timed(find(rec, p, ok), TAP_READ_MS), unreached: ownVault });
   return {
     async links(links, from, charge) {
       // the same for every link, read or not (a wikilink may take two): what it costs says nothing of what it names

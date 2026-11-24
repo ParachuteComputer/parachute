@@ -85,10 +85,9 @@ describe("resolveLink", () => {
     // the hub's own answer that the note isn't there stays nothing
     expect(await resolveLink(`kitchen:${OTHER}`, undefined, { ...deps(), unreached: () => true })).toEqual({ answer: null });
   });
-  it("at a tap, a note in any vault held that can't be asked now goes to its screen; a vault that has it wins over one that can't be asked", async () => {
-    const tap = { ...deps(), find: async () => { throw new TypeError("Load failed"); }, unreached: () => true };
-    expect(await resolveLink(`notes:${OTHER}`, undefined, tap)).toEqual({ answer: "note", href: `/v/notes/n/${OTHER}` });
-    const two = { ...deps(), vaults: () => [rec("kitchen", "https://old.example", { key: "old" }), kitchen], unreached: () => true,
+  it("of two vaults by the applet's own name, the one that has the note wins over one that can't be asked", async () => {
+    const old = rec("kitchen", "https://old.example", { key: "old" });
+    const two = { ...deps(), vaults: () => [old, kitchen], here: () => old, unreached: (r: VaultRecord) => r.key === "old",
       find: async (r: VaultRecord, p: string) => { if (r.key === "old") throw new TypeError("Load failed"); const n = notes[r.vault]?.[p]; return n ? { id: n.id, path: n.path, code: false } : null; } };
     expect(await resolveLink(`kitchen:${ID}`, undefined, two)).toEqual({ answer: "note", href: `/v/kitchen/n/${ID}` });
     expect(await resolveLink(`kitchen:${OTHER}`, undefined, two)).toEqual({ answer: "note", href: `/v/old/n/${OTHER}` });

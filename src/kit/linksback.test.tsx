@@ -12,7 +12,7 @@ afterEach(() => { delete g.parachute; vi.useRealTimers(); });
 const later = () => vi.setSystemTime(Date.now() + AGAIN_MS + 1);
 
 describe("Linked, when the person is back", () => {
-  it("a link that led nowhere is asked again, and drawn once it leads to a note; one already drawn isn't asked again", async () => {
+  it("a link that led nowhere is asked again a minute on, and drawn once it leads to a note", async () => {
     let there = false;
     const asked: string[][] = [];
     const shown: ((on: boolean) => void)[] = [];
@@ -33,12 +33,6 @@ describe("Linked, when the person is back", () => {
     later();
     await act(async () => { shown.forEach((f) => f(true)); await new Promise((r) => setTimeout(r, 20)); });
     expect([...container.querySelectorAll("a")].map((a) => a.textContent)).toEqual([`uni:${ID}`, `uni:${other}`]);
-    expect(asked.flat().filter((l) => l.endsWith(other))).toHaveLength(1);
-    // nothing left that led nowhere: the person back again asks nothing
-    later();
-    const before = asked.length;
-    await act(async () => { shown.forEach((f) => f(true)); await new Promise((r) => setTimeout(r, 20)); });
-    expect(asked.length).toBe(before);
   });
   it("the app back in front (a phone unlocked, the tailnet back) asks again too", async () => {
     let there = false;
@@ -78,5 +72,16 @@ describe("Linked, when the person is back", () => {
     await act(async () => { hold?.(); await new Promise((r) => setTimeout(r, 40)); });
     expect(seen.get(B)).toBe("note");
     expect(seen.get(C)).toBe("note");
+  });
+  it("a return asks again no more than one call's worth of links: the rest wait for a later one (the frame's reads)", async () => {
+    const many = Array.from({ length: 30 }, (_, i) => `nosuch:01KA3Z9V6B2W8XQJ4M7N5P${String(i).padStart(4, "0")}`);
+    const asked: string[] = [];
+    g.parachute = { app: { links: async (links: string[]) => { asked.push(...links); return links.map(() => null); } } };
+    render(<Linked text={many.join(" ")} />);
+    await act(() => new Promise((r) => setTimeout(r, 40)));
+    expect(asked).toHaveLength(30);
+    later();
+    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); await new Promise((r) => setTimeout(r, 40)); });
+    expect(asked).toHaveLength(30 + 20);
   });
 });

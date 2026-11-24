@@ -68,16 +68,18 @@ export function answerFor(link: string, from?: string): Promise<Answer> {
   }
   return p;
 }
-// the person back (the applet shown again, the app back in front): links that led nowhere ask again, at most once a
-// minute (the shell keeps a miss that long, and each link asked costs the frame's reads). Uni may cite a note a moment
-// before the hub has it, and a busy shell or a lapse leaves a link without an answer; a link drawn stays drawn
+// the person back (the applet shown again, the app back in front): links that led nowhere ask again, each at most once a
+// minute after its last answer (the shell keeps a miss that long), and no more than one call's worth a time (each link
+// asked costs the frame's reads; the rest ask at a later return). Uni may cite a note a moment before the hub has it, a
+// vault's hub may have been away, and a busy shell or a lapse leaves a link without an answer; a link drawn stays drawn
 export const AGAIN_MS = 60_000;
 const backs = new Set<() => void>();
+let left = 0;
 let heard = false;
 function hearBacks() {
   if (heard) return;
   heard = true;
-  const back = () => backs.forEach((f) => f());
+  const back = () => { left = LINKS_PER_CALL; backs.forEach((f) => f()); };
   kit().onShown?.((on) => { if (on) back(); });
   if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") back(); });
 }
@@ -98,14 +100,12 @@ export function useAnswers(links: readonly string[], from?: string): Map<string,
   const key = links.join("\n") + "\n" + (from ?? "");
   useEffect(() => {
     let on = true;
-    askedAt.current = Date.now();
     for (const l of new Set(links)) {
-      // asked again, all but the links drawn: one still on its way, or new here, is asked as any (its answer, if asked)
-      if (round && got.get(l)) continue;
-      // asked again: its last answer (nothing) is let go first (one another link is asking now stays)
+      // asked again: a last answer of nothing is let go first, while this round has room (one another link is asking
+      // now stays); any other answer is the one kept
       const k = keyOf(l, from), was = answers.get(k);
-      if (round && was && came.get(was) === null) answers.delete(k);
-      void answerFor(l, from).then((a) => { if (on) setGot((m) => (m.get(l) === a ? m : new Map(m).set(l, a))); });
+      if (round && was && came.get(was) === null && left > 0) { left--; answers.delete(k); }
+      void answerFor(l, from).then((a) => { askedAt.current = Date.now(); if (on) setGot((m) => (m.get(l) === a ? m : new Map(m).set(l, a))); });
     }
     return () => { on = false; };
   }, [key, round]); // eslint-disable-line react-hooks/exhaustive-deps

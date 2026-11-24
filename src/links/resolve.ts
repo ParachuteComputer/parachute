@@ -9,9 +9,8 @@
 // the network, a hub that doesn't answer in time), is "note" too: it may well be there, and its screen says so when it
 // can't be read (T-476: Aaron's relay is public and his hub is on his tailnet, so his rooms came in before his hub could
 // answer, and every `uni:` link in them stayed text). The applet knows its own vault already (`address`), so the answer
-// tells it nothing new; any other vault that can't be asked stays nothing until asked again. A tap goes further: to a
-// note in any vault held that can't be asked now (the shell goes there, in sight; the applet hears only true or false).
-// Only a hub's own answer that the note isn't there is null.
+// tells it nothing new; any other vault that can't be asked stays nothing until asked again (kit/links.tsx), drawn or
+// tapped: its name would say which vaults are held. Only a hub's own answer that the note isn't there is null.
 // A short form or a wikilink is "note" only for a note that is there (or, in the applet's own vault, may be: above): the
 // answer itself says a vault is held only to an applet that already knows a note's id in it, or its own. (How long an answer takes can still hint that a name is held: that is
 // what `open`'s card line says it may learn.) Each link costs the same, whatever it names (shell/appDeps.ts). A wikilink
@@ -40,7 +39,7 @@ export type ResolveDeps = {
    *  when the vault couldn't be asked (the network, a hub that doesn't answer in time): not a miss. */
   find(rec: VaultRecord, idOrPath: string, ok: (f: Found) => boolean): Promise<Found | null>;
   /** Whether a note named by its id in `rec`, which couldn't be asked, still counts as there (its screen reads it
-   *  again): the applet's own vault for what a link is drawn as, any vault held at a tap. None, if not said. */
+   *  again): the applet's own vault. None, if not said. */
   unreached?(rec: VaultRecord): boolean;
 };
 

@@ -1,8 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type { Note } from "@openparachute/surface-client";
+import { VaultServerError, VaultUnreachableError, type Note } from "@openparachute/surface-client";
 import { listVaults, subscribeVaults, type VaultRecord } from "./store";
 import { clientFor } from "./client";
-import { VaultServerError, VaultUnreachableError } from "@openparachute/surface-client";
 import { failureNow, failureOf } from "./failure";
 
 export const useVaults = (): VaultRecord[] => useSyncExternalStore(subscribeVaults, () => listVaults(), () => []);
@@ -40,7 +39,8 @@ export function messageOf(e: unknown, vault?: string): string {
   // a request that reached no hub (off the network, off the tailnet): plain words, never "GET … failed: Failed to fetch";
   // one this vault's sign-in was refused for looks the same (vault/failure.ts), and says so. Any other error as it is
   const f = vault ? failureNow({ key: vault }, e) : failureOf(e);
-  if (f === "refused") return REFUSED;
+  // (refused only for what looks like the network: a bug's own error keeps its words)
+  if (f === "refused" && reachedNoOne(e)) return REFUSED;
   if (f === "offline" && reachedNoOne(e)) return "Can't reach the vault just now.";
   return e instanceof Error && e.message ? e.message : "Something went wrong reaching the vault.";
 }
