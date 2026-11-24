@@ -129,7 +129,7 @@ function VaultsToAdd({ hub, name }: { hub: string; name: string }) {
   };
   return (
     <details className="parachute-more">
-      <summary>{fresh.length === 1 ? "1 more vault there, which Parachute doesn't read" : `${fresh.length} more vaults there, which Parachute doesn't read`}</summary>
+      <summary>{fresh.length === 1 ? "1 more vault there, not open here" : `${fresh.length} more vaults there, not open here`}</summary>
       <p className="small quiet">Open one and Parachute reads that one vault; an applet there asks for more on its card.</p>
       <ul className="parachute-new plain" aria-label={`Vaults to open on ${name}`}>
         {fresh.map((v) => (

@@ -7,7 +7,7 @@ import { useState, useSyncExternalStore } from "react";
 import { appletsNow, subscribeApplets } from "../applet/useApplets";
 import { OFFICIAL_NAMES, officialFace, officialId } from "../applet/parachuteSource";
 import { offered } from "../shell/bundles";
-import { copyBundle, move, pinApplet, useSettings } from "../shell/homeSettings";
+import { barOwnIds, copyBundle, move, pinApplet, useSettings } from "../shell/homeSettings";
 import { homeVault } from "../shell/frameSource";
 import { useVaults } from "../vault/hooks";
 import { originOf } from "../vault/store";
@@ -32,10 +32,9 @@ export default function BarSettings() {
   const theirs = vaults.flatMap((v) => { const e = appletsNow(v.key); return e?.state === "ok" ? e.found.entries
     .filter((a) => offered(bundle, { hub: originOf(v.issuer), vault: v.vault }, a, originOf(home.issuer)))
     .map((a) => ({ vault: v.key, noteId: a.noteId, name: a.manifest.name, glyph: a.manifest.glyph, where: v.vault })) : []; });
-  // one of Parachute's own the bar already has as a place of the bundle's: shipped there, Connect, or the home screen (Notes
-  // or Home, by the bundle's look)
-  const onBarAlready = new Set(bar.entries.flatMap((e) => ("href" in e ? [] : "shipped" in e ? [officialId(e.shipped)]
-    : e.screen === "connect" ? [officialId("connect")] : [officialId(bundle.look === "notes" ? "notes" : "home")])));
+  // one of Parachute's own the bar already has as a place of the bundle's: shipped there, Connect, or Notes as the home
+  // screen (the list, in other bundles, is no applet)
+  const onBarAlready = new Set(barOwnIds(bar.entries, bundle.look));
   const more = [...own, ...theirs].filter((a) => !pinned.has(`${a.vault} ${a.noteId}`) && !onBarAlready.has(a.noteId));
   const many = new Set(theirs.map((a) => a.vault)).size > 1;
   const appName = (e: (typeof bar.entries)[number]) => ("href" in e ? null : "shipped" in e ? officialFace(e.shipped).name : e.screen === "connect" ? officialFace("connect").name : bundle.look === "notes" ? "Notes" : "Applets");
@@ -63,7 +62,7 @@ export default function BarSettings() {
             <span aria-hidden="true">{a.glyph}{"︎"}</span> {a.name}</button>{many && a.where ? <span className="quiet small"> in {a.where}</span> : null}</li>))}
         </ul>
       </details>}
-      <p className="quiet small">Kept in the {bundle.name} bundle in {home.vault}, so your other devices show the same bar. A long-press on a place on the bar does the same.</p>
+      <p className="quiet small">Kept in {home.vault}, so your other devices show the same bar. Pin, on any applet in the list or at its top, does the same.</p>
       {busy && <p className="quiet small" role="status">Saving…</p>}
       {error && <p className="error" role="alert">{error}</p>}
     </fieldset>

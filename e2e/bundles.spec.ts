@@ -32,8 +32,7 @@ test("a bundle record offers only its sources; its bar is its own; a pin in it g
 
   // a pin made here is the record's; the settings note's bar is untouched
   await start(page);
-  await entries.getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
-  await ui(page).getByRole("button", { name: "Unpin" }).click();
+  await entries.getByRole("button", { name: "Pin Recipe box to the bar" }).click();
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toHaveCount(0);
   const [app] = await tagged("parachute-bundle");
   expect(app.metadata.bundle.bar).toEqual([]);
@@ -129,8 +128,7 @@ test("bar and home live in the bundle only: with no record, a pin makes the open
   await start(page);
   // the settings note's pins are read until 2026-12-20, after the bundle's own places
   await expect(bar(page).getByRole("link", { name: /Cook mode/ })).toBeVisible();
-  await ui(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
-  await ui(page).getByRole("button", { name: "Pin to the bar" }).click();
+  await ui(page).getByRole("button", { name: "Pin Recipe box to the bar" }).click();
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
   // Everything's record, under the older names while the vault has none under the newer; only what changed and its name
   await expect.poll(async () => (await tagged("parachute-app")).map((n) => [n.path.replace(/\.md$/, ""), n.metadata.app])).toEqual([["Parachute/Apps/everything",
@@ -154,8 +152,7 @@ test("an older record (Parachute/Apps, parachute-app, fields.app) still opens, a
 
   // a change is written as the record is, under its older names, which the builds before 11-20 read (a device of the
   // person's may run one); scripts/migrate-bundles.ts moves it later
-  await entries.getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
-  await ui(page).getByRole("button", { name: "Unpin" }).click();
+  await entries.getByRole("button", { name: "Pin Recipe box to the bar" }).click();
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toHaveCount(0);
   await expect.poll(async () => (await tagged("parachute-app")).map((n) => [n.path.replace(/\.md$/, ""), n.metadata.app?.bar])).toEqual([["Parachute/Apps/kitchen-table", []]]);
   expect(await tagged("parachute-bundle")).toEqual([]);

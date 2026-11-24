@@ -93,7 +93,7 @@ shot 14-list
 ax press "Settings" || fail "no Settings on the list"
 ax wait "Open recipes" 20 || fail "the home isn't in Settings"
 # the vaults it doesn't read are counted on one line; a tap shows them (src/views/Settings.tsx VaultsToAdd)
-ax press "1 more vault there, which Parachute doesn't read" || fail "no line counting the vault it doesn't read"
+ax press "1 more vault there, not open here" || fail "no line counting the vault it doesn't read"
 ax wait "Open work" 20 || fail "the other vault isn't offered to open"
 shot 14b-settings-vaults
 ax dump > "$out/14-settings-ui.txt" 2>&1 || true
