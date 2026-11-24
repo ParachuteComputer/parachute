@@ -1,6 +1,6 @@
 // The Techne write capabilities an applet holds (docs/design/TECHNE.md "Read on the card, each write at first use").
 // On a device with the person's key, a capability is held while its own signed approval says so: the applet's
-// approval subject with the record `<record id>.techne.<capability>`, the applet's code hash, and the scope
+// approval subject with the record `<record id>/Posting on Techne` (one name per capability), the applet's code hash, and the scope
 // `techne:<capability>:<the applet approval's number>:<its asks hash>` (techne.ts capRecord, capScope), checked by
 // approvals.ts `decide`, read fresh from the home vault, before every write. So it names exactly one capability, ends with changed code or a changed card, can't be put back once
 // taken back (the floor), and follows the person to every device. A device without the key keeps the grant on the

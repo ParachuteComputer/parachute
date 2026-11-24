@@ -73,7 +73,7 @@ signed, for any applet: default deny.
 
 | Capability | The card says | Methods (spike in bold) | Granted |
 |---|---|---|---|
-| `read` | **Read what you see on Techne at techne.computer, as you** (your profile, posts and circles) | **`social.scenius.getProfile`**, **`pub.techne.draft.query.listRecords`**, `query.getRecords`, `query.countRecords`, **`social.scenius.listCirclePosts`**, `getCircleThread`, `listCircleProfiles` | on the card (Allow) |
+| `read` | **Read what you see on Techne at techne.computer, your private circles included, as you** | **`social.scenius.getProfile`**, **`pub.techne.draft.query.listRecords`**, `query.getRecords`, `query.countRecords`, **`social.scenius.listCirclePosts`**, `getCircleThread`, `listCircleProfiles` | on the card (Allow) |
 | `post` | Post as you in your circles | **`social.scenius.createCirclePost`** | asked the first time |
 | `follow` | Follow people as you (anyone can see who you follow) | **`social.scenius.offerConnection`** | asked the first time |
 | `delete` | Delete any of your posts in your circles | `social.scenius.deleteCirclePost` (it deletes any post of the person's there, not only this applet's) | asked the first time |
@@ -92,9 +92,9 @@ Only `read`, `post` and `follow` are in the spike. The rest are the plan; each n
 
 ## Read on the card, each write at first use
 
-- **The card** lists `read` as a stressed line, *Read what you see on Techne at techne.computer, your private circles
-  included, as you (with your key)*, and the write capabilities on one: *Will ask you once before it can post as you in
-  your circles, or follow people as you (anyone can see who you follow)*. Allow grants what the card says: read. When
+- **The card** says, under *Act as you on Techne*: *As you on Techne at techne.computer (your key): reads what you see
+  there, your private circles included.* and, under *Ask before it acts as you*: *Asks you first, once, before it can
+  post as you in your circles, or follow people as you (anyone can see who you follow) at techne.computer.* Allow grants what the card says: read. When
   the applet also declares a server, a stressed line says *What it reads on Techne, your private circles too, could
   reach mail.example*. The declaration is part of the grant's key (`grantKey`) and the asks' hash, only when declared,
   so every grant and approval made before holds.
@@ -106,8 +106,8 @@ Only `read`, `post` and `follow` are in the spike. The rest are the plan; each n
 - **Allow signs an approval naming exactly that capability.** It is the same signed approval as an applet's
   ([APP-RECORD.md](APP-RECORD.md)): kind 30479, signed in Rust after this device's level for approving (the unlock by
   default, the passcode if set), written to the home vault, read by every device, checked by `decide`. Its subject is
-  the applet's with the record `<record id>.techne.<capability>`, so it lives beside the applet's own approval
-  (`Parachute/Approvals/<host>/<vault>/<record id>.techne.post`); its `code` is the applet's code hash and its `scope`
+  the applet's with the record `<record id>/Posting on Techne` (one name per capability), so it lives beside the
+  applet's own approval (`Parachute/Approvals/<host>/<vault>/<record id>/Posting on Techne`) under a name Vault shows; its `code` is the applet's code hash and its `scope`
   is `techne:<capability>:<n>:<the applet's asks hash>`, where `n` is the number of the applet's own approval it was
   given under. So: it covers that one capability; changed code or a changed card ends it (the next write asks again);
   Revoke then Allow of the same version makes a new applet approval, so a write given before doesn't come back; the `d`
@@ -116,7 +116,7 @@ Only `read`, `post` and `follow` are in the spike. The rest are the plan; each n
 - **Why its own record and not a field in the applet's approval** (ACCESS.md proposal 5 puts the vault pick in the
   applet's approval): granting or taking back one capability never rewrites the applet's own approval, so it can't
   race an Allow on another device, and an older build that rewrites the applet's approval drops nothing. The asks'
-  hash of the applet stays as it is. Proposal 5's pick could use the same shape (`<record id>.vaults`), and then the
+  hash of the applet stays as it is. Proposal 5's pick could use the same shape (`<record id>/Vaults`), and then the
   two mechanisms are one.
 - **A browser tab** has no key, so it reaches no Techne at all. A device that holds the key but doesn't sign approvals
   (its home is someone else's) keeps a grant on the device only, bound to the grant's key and when it was allowed, so a

@@ -139,8 +139,10 @@ export function checkCall(t: Techne, held: ReadonlySet<TechneCap>, nsid: unknown
   return { ok: true, cap: m.cap, http: m.http };
 }
 
-/** A capability's signed approval sits beside the applet's own (approvals.ts): its record and its scope name it. The
- *  scope also names the applet's own approval it was given under (its number, `n`): Revoke then Allow again makes a
- *  new one, so a write given before the Revoke doesn't come back with it. */
-export const capRecord = (record: string, cap: TechneCap) => `${record}.techne.${cap}`;
+/** A capability's signed approval sits beside the applet's own (approvals.ts): its record and its scope name it. Its
+ *  record reads as a name in the home vault (`<record id>/Posting on Techne`), as Vault shows it. The scope also names
+ *  the applet's own approval it was given under (its number, `n`): Revoke then Allow again makes a new one, so a write
+ *  given before the Revoke doesn't come back with it. */
+const CAP_NAMES: Record<TechneCap, string> = { read: "Reading on Techne", post: "Posting on Techne", follow: "Following on Techne" };
+export const capRecord = (record: string, cap: TechneCap) => `${record}/${CAP_NAMES[cap]}`;
 export const capScope = (scope: string, cap: TechneCap, under: number) => `techne:${cap}:${under}:${scope}`;

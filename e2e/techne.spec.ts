@@ -65,7 +65,8 @@ test("techne: reads as you from the card; the first post asks and is signed for 
     expect(ap.posts.some((p) => p.author === maya.did && p.value.text === "Tomatoes are ready to share, come by the garden.")).toBe(true);
     expect((await approvalsSigned(page)).slice(before)).toEqual(["Techne"]);
     const kept = (await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Parachute/Approvals/")}&limit=200`)) as { path: string }[];
-    expect(kept.some((n) => n.path.endsWith(`${applet.id}.techne.post`))).toBe(true);
+    // beside the applet's own approval, under a name Vault can show (not a bare id)
+    expect(kept.some((n) => n.path.endsWith(`${applet.id}/Posting on Techne`))).toBe(true);
 
     // the second post doesn't ask
     await app.getByLabel("Post in your circle").fill("Bike co-op is open late on Thursday.");

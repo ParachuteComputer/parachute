@@ -182,7 +182,7 @@ describe("signed: one capability, one approval", () => {
     const dev = signedDevice();
     await applet({ signed: dev.signed }).call(POST, { input: {} });
     expect(dev.events).toHaveLength(1);
-    expect(JSON.parse(dev.events[0].content)).toMatchObject({ subject: { record: "01TECHNE.techne.post" }, scope: "techne:post:1:asks1", approved: true });
+    expect(JSON.parse(dev.events[0].content)).toMatchObject({ subject: { record: "01TECHNE/Posting on Techne" }, scope: "techne:post:1:asks1", approved: true });
     const other = applet({ signed: signedDevice(dev.events).signed, answer: "no" });
     await other.call(POST, { input: {} });
     expect(other.asked).toEqual([]);
@@ -193,7 +193,7 @@ describe("signed: one capability, one approval", () => {
     expect(await dev.signed.holds("follow")).toBe(false);
     // a vault writer relabels the post approval as follow: the d tag, subject and scope no longer match, or the signature breaks
     const ev = dev.events[0];
-    const relabelled = { ...ev, content: ev.content.replaceAll("techne.post", "techne.follow").replace("techne:post:", "techne:follow:"), tags: [["d", dOf(capSubject("follow"))]] };
+    const relabelled = { ...ev, content: ev.content.replaceAll("Posting on Techne", "Following on Techne").replace("techne:post:", "techne:follow:"), tags: [["d", dOf(capSubject("follow"))]] };
     expect(await signedDevice([relabelled]).signed.holds("follow")).toBe(false);
     // the applet's own approval (same code and record) is never a capability's
     const own = finalizeEvent({ kind: APPROVAL_KIND, created_at: Math.floor(T0 / 1000), tags: [["d", dOf(applet0)]], content: JSON.stringify(approvalContent({ subject: applet0, approved: true, code: CODE, scope: ASKS, now: T0, seen: null })) }, me) as SignedEvent;
