@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { hostOf } from "../vault/store";
 import type { VaultPick } from "../vault/signInFlow";
 
@@ -12,10 +12,12 @@ export default function PickVaults({ pick, onError, onCancel }: { pick: VaultPic
   // the home is one of the person's own; on someone else's Parachute, any vault they reach
   const choices = pick.home ? (pick.askMine ? pick.vaults.filter((v) => mine.includes(v)) : pick.mine) : pick.vaults;
   const chosen = choices.includes(first) ? first : choices[0] ?? "";
+  const t520 = (m: string) => document.body.insertAdjacentHTML("beforeend", `<p style="font-size:12px">[T520] ${m.replace(/</g, "&lt;")}</p>`);
+  useEffect(() => { t520("pick mounted"); return () => t520("pick unmounted"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   async function go() {
+    t520(`go chosen=${chosen}`);
     if (!chosen) return;
     setBusy(true);
-    const t520 = (m: string) => document.body.insertAdjacentHTML("beforeend", `<p style="font-size:12px">[T520] ${m.replace(/</g, "&lt;")}</p>`);
     t520(`go secure=${window.isSecureContext} subtle=${typeof crypto?.subtle}`);
     try { const u = await pick.go(mine, chosen); t520(`to ${u.slice(0, 60)}`); window.location.assign(u); } catch (e) { t520(`failed ${e instanceof Error ? `${e.name}: ${e.message}` : JSON.stringify(e)}`); setBusy(false); onError(e); }
   }
@@ -36,7 +38,7 @@ export default function PickVaults({ pick, onError, onCancel }: { pick: VaultPic
       </fieldset>}
       <p className="small quiet">{pick.home ? "Parachute reads and writes your home now. Your other vaults are asked for one at a time, when you open one or allow an applet in it." : "Parachute reads this one now. The others are asked for one at a time, when you open them."}</p>
       <button className="primary" type="button" disabled={busy || !chosen} onClick={() => void go()}>{busy ? "Signing in…" : "Continue"}</button>
-      <button className="quiet-button" type="button" disabled={busy} onClick={onCancel}>Back</button>
+      <button className="quiet-button" type="button" disabled={busy} onClick={() => { t520("back"); onCancel(); }}>Back</button>
     </div>
   );
 }
