@@ -160,7 +160,9 @@ export default function Mail() {
         ...(threads ? [["Thread/get", { accountId: account, "#ids": { resultOf: "g", name: "Email/get", path: "/list/*/threadId" } }, "t"]] : []),
       ]);
       if (mine !== reading.current) return;
-      setSizes(Object.fromEntries(((res.find((x) => x[0] === "Thread/get")?.[1].list ?? []) as { id: string; emailIds: string[] }[]).map((t) => [t.id, t.emailIds.length])));
+      // a thread's count is a nicety: an answer without one (an older gateway, a test's) leaves the rows as they are
+      const threadList = res.find((x) => x[0] === "Thread/get")?.[1]?.list;
+      setSizes(Object.fromEntries((Array.isArray(threadList) ? threadList : []).filter((t: any) => t && typeof t.id === "string" && Array.isArray(t.emailIds)).map((t: any) => [t.id, t.emailIds.length])));
       setList((res.find((x) => x[0] === "Email/get")?.[1].list ?? []) as Email[]);
     } catch (e: any) { if (mine !== reading.current) return; setErr({ lead: `Couldn't read ${searched ? "the search" : placeName(place) ?? place}`, e, retry: () => void load() }); setList([]); }
   };
