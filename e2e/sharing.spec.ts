@@ -59,6 +59,13 @@ async function edit(page: Page, vault: string, id: string, words: string, reader
 
 const vaultApplet = (page: Page) => page.frameLocator('iframe.applet-frame[title="Vault"]');
 
+// the pick Aaron signed for Vault (recipes added) is his key's, in the shared home: taken away after, so the walks that
+// follow start from none
+test.afterEach(async () => {
+  const r = await api(hubState(), "GET", "notes?tag=parachute-approval&include_metadata=true") as { id: string; path: string }[] | { notes?: { id: string; path: string }[] };
+  for (const n of Array.isArray(r) ? r : r.notes ?? []) if (n.path.replace(/\.md$/, "").endsWith("/parachute:vault")) await api(hubState(), "DELETE", `notes/${n.id}`).catch(() => {});
+});
+
 test("Aaron invites Bo to recipes; Bo accepts with his own key; their edits read by name; Aaron ends it", async ({ browser }, info) => {
   test.setTimeout(360_000);
   const hub = hubState();

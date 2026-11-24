@@ -216,17 +216,15 @@ const STOPS: Stop[] = [
   { name: "home", go: async (p) => { await p.goto(official("home")); await see(p, "Lately"); } },
   { name: "applets", go: async (p) => { await p.goto("/"); await see(p, "Applets"); await p.waitForTimeout(1500); } },
   // Vault reaches the home until more is ticked (docs/ACCESS.md proposal 5): the person ticks letters and pantry on
-  // its sheet, once (this device has the key: the pick is signed, so the second walk finds it)
+  // its sheet, from its menu (whatever an earlier walk picked: this device has the key, so picks are signed and stay)
   { name: "vault's vaults", go: async (p) => { await p.goto(official("vault"));
-    const change = p.locator("p.pick-line").getByRole("button", { name: "Change" });
-    if (await change.waitFor({ timeout: 8000 }).then(() => true, () => false)) {
-      await change.click();
-      const sheet = p.getByRole("dialog", { name: /^Vaults Vault reaches$|^Which vaults may Vault reach\?$/ });
-      for (const v of ["letters", "pantry"]) await sheet.getByRole("checkbox", { name: new RegExp(`^${v}\\b`) }).check();
-      await p.waitForTimeout(800);
-      await sheet.getByRole("button", { name: "Save" }).click();
-      await sheet.waitFor({ state: "detached" });
-    }
+    await p.locator("header.bar").getByRole("button", { name: "Menu" }).click();
+    await p.getByRole("button", { name: "Vaults it reaches" }).click();
+    const sheet = p.getByRole("dialog", { name: /^Vaults Vault reaches$|^Which vaults may Vault reach\?$/ });
+    for (const v of ["letters", "pantry"]) await sheet.getByRole("checkbox", { name: new RegExp(`^${v}\\b`) }).check();
+    await p.waitForTimeout(800);
+    await sheet.getByRole("button", { name: "Save" }).click();
+    await sheet.waitFor({ state: "detached" });
     await see(p, "letters"); } },
   // Vault opens where it was left (a vault, its Sharing): back, as a person goes, to the list of vaults
   { name: "vault list", go: async (p) => { await p.goto(official("vault")); await see(p, /Your vaults|Types|Sharing|Changes|History/);
