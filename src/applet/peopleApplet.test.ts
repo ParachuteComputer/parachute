@@ -65,8 +65,8 @@ const api = new Function(
   };
   timelineOf: (person: PersonRecord) => { key: string; date: string | null; title: string; kind: string; id: string | null }[];
   talksOf: (fields?: Record<string, unknown>) => { date: string; what: string }[];
-  withTalk: (fields: Record<string, unknown> | undefined, date: string, what: string, replacing?: string) => string[];
-  withoutTalk: (fields: Record<string, unknown> | undefined, entry: string) => string[];
+  withTalk: (fields: Record<string, unknown> | undefined, date: string, what: string, replacing?: string) => unknown[];
+  withoutTalk: (fields: Record<string, unknown> | undefined, entry: string) => unknown[];
   cadenceDays: (v: unknown) => number | null;
   normalizePhoneKey: (raw: string) => string;
   initialsOf: (name: string) => string;
@@ -808,5 +808,14 @@ describe("People round 2, second review (T-476)", () => {
     expect(api.filterPeople(people, { ...opts, since: "week" }).map((x) => x.id)).toEqual(["D6"]);
     expect(api.filterPeople(people, { ...opts, since: "month" }).map((x) => x.id)).toEqual(["D29", "D6", "D7"]);
     expect(api.filterPeople(people, { ...opts, since: "older" }).map((x) => x.id)).toEqual(["D91"]);
+  });
+});
+
+describe("People round 2, third review (T-476)", () => {
+  it("adding, correcting or removing a talk keeps entries People can't read, as they were written", () => {
+    const held = { talked: [{ date: "2026-10-01", note: "coffee" }, "2026-09-01: lunch", "last spring", 7] };
+    expect(api.withTalk(held, "2026-11-20", "call")).toEqual(["2026-11-20: call", "2026-09-01: lunch", { date: "2026-10-01", note: "coffee" }, "last spring", 7]);
+    expect(api.withoutTalk(held, "2026-09-01: lunch")).toEqual([{ date: "2026-10-01", note: "coffee" }, "last spring", 7]);
+    expect(api.withTalk(held, "2026-09-02", "lunch", "2026-09-01: lunch")).toEqual(["2026-09-02: lunch", { date: "2026-10-01", note: "coffee" }, "last spring", 7]);
   });
 });

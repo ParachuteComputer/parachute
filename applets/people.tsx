@@ -343,7 +343,7 @@ function ymdOf(v: unknown): string | null {
 function metOf(fields?: Record<string, unknown>): string {
   const v = fields?.met;
   const t = typeof v === "number" && Number.isInteger(v) ? String(v) : str(v);
-  return ymdOf(t) ?? (/^\d{4}(-\d{2})?$/.test(t) ? t : "");
+  return ymdOf(t) ?? (/^\d{4}(-(0[1-9]|1[0-2]))?$/.test(t) ? t : "");
 }
 
 /** An instant (an ISO time) as the day it fell on here; a bare day stays as written. */
@@ -400,19 +400,21 @@ function talksOf(fields?: Record<string, unknown>): Talk[] {
   return out.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-/** A new `talked` log with one more entry (or one entry put right: `replacing` names it), newest first; the same entry
- *  twice is kept once. */
-function withTalk(fields: Record<string, unknown> | undefined, date: string, what: string, replacing?: string): string[] {
+/** A new `talked` log with one more entry (or one entry put right: `replacing` names it). The entries People writes
+ *  come newest first; any other entry (one with no day, or in another shape an AI or an import wrote) is kept as it
+ *  was, after them. The same entry twice is kept once. */
+function withTalk(fields: Record<string, unknown> | undefined, date: string, what: string, replacing?: string): unknown[] {
   const entry = what.trim() ? `${date}: ${what.trim().replace(/\s+/g, " ")}` : date;
   const held = withoutTalk(fields, replacing ?? "");
-  const all = held.some((e) => e === entry) ? held : [entry, ...held];
-  return [...all].sort((a, b) => (ymdOf(b) ?? "").localeCompare(ymdOf(a) ?? ""));
+  const all = held.some((e) => typeof e === "string" && e.trim() === entry) ? held : [entry, ...held];
+  const dated = all.filter((e): e is string => typeof e === "string" && !!ymdOf(e));
+  return [...dated.sort((a, b) => ymdOf(b)!.localeCompare(ymdOf(a)!)), ...all.filter((e) => !(typeof e === "string" && ymdOf(e)))];
 }
 
-/** The `talked` log without one entry (as written), every other entry kept as it is. */
-function withoutTalk(fields: Record<string, unknown> | undefined, entry: string): string[] {
-  const held = strList(fields?.talked);
-  const at = entry ? held.indexOf(entry) : -1;
+/** The `talked` log without one entry (as written); every other entry kept as it is, whatever its shape. */
+function withoutTalk(fields: Record<string, unknown> | undefined, entry: string): unknown[] {
+  const held = heldList(fields?.talked);
+  const at = entry ? held.findIndex((e) => typeof e === "string" && e.trim() === entry) : -1;
   return at < 0 ? held : [...held.slice(0, at), ...held.slice(at + 1)];
 }
 
@@ -478,14 +480,14 @@ function keepInTouch(people: readonly PersonRecord[], todayYmd: string, soonDays
   return { due: due.sort(order), soon: soon.sort(order) };
 }
 
-type Moment = { key: string; date: string | null; title: string; kind: string; id: string | null; isPerson: boolean; detail: string; entry?: string };
+type Moment = { key: string; date: string | null; title: string; kind: string; id: string | null; isPerson: boolean; detail: string; entry?: string; what?: string };
 
 /** A person's timeline, newest first: talks, the meetings, journal entries and notes that link them, and how you met.
  *  Not when the card was made (most were made at once, by an import), and not other people's cards that link them:
  *  those show as linked people. */
 function timelineOf(person: PersonRecord): Moment[] {
   const out: Moment[] = [];
-  talksOf(person.fields).forEach((t, i) => out.push({ key: `talk-${i}`, date: t.date, title: t.what || "Talked", kind: "Talked", id: null, isPerson: false, detail: "", entry: t.entry }));
+  talksOf(person.fields).forEach((t, i) => out.push({ key: `talk-${i}`, date: t.date, title: t.what || "Talked", kind: "Talked", id: null, isPerson: false, detail: "", entry: t.entry, what: t.what }));
   for (const m of mentionsOf(person)) {
     if (m.isPerson) continue;
     out.push({ key: m.id, date: m.date, title: m.title, kind: m.kind, id: m.id, isPerson: false, detail: m.relationship && !/^(wiki)?link$/.test(m.relationship) ? m.relationship : "" });
@@ -1261,7 +1263,7 @@ function relationLabel(r: string): string {
 }
 
 function formatDaysSince(days: number | null): string {
-  if (days === null) return "No linked notes yet";
+  if (days === null) return "No connection yet";
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
   if (days < 30) return `${days} days ago`;
@@ -1590,7 +1592,7 @@ export default function People() {
     }
     else if (name === "met") {
       const m = String(value ?? "").trim();
-      if (m && !ymdOf(m) && !/^\d{4}(-\d{2})?$/.test(m)) { toast("When you met is YYYY-MM-DD, or just YYYY.", { error: true }); return; }
+      if (m && !metOf({ met: m })) { toast("When you met is YYYY-MM-DD, YYYY-MM or just YYYY.", { error: true }); return; }
       clean = m || null;
     }
     else if (Array.isArray(value)) {
@@ -1608,7 +1610,7 @@ export default function People() {
   const logTalk = async (remove = false) => {
     if (!selected || talkBusy) return;
     // a draft is for the person it was begun on, and a talk being put right must still be there as it was
-    if (talkDraft.id !== selected.id || (talkDraft.entry && !strList(selected.fields?.talked).includes(talkDraft.entry))) {
+    if (talkDraft.id !== selected.id || (talkDraft.entry && !heldList(selected.fields?.talked).some((e) => typeof e === "string" && e.trim() === talkDraft.entry))) {
       toast("That changed meanwhile. Open it again.", { error: true });
       setTalkOpen(false);
       return;
@@ -1930,7 +1932,8 @@ export default function People() {
     const last = lastConnection(selected, todayYmd);
     const cadence = cadenceDays(selected.fields?.keep_in_touch);
     const howWeMet = str(selected.fields?.how_we_met);
-    const met = metOf(selected.fields);
+    // a day People can place on the timeline; anything else written there ("summer 2019") still shows on the card
+    const met = metOf(selected.fields) || (typeof selected.fields?.met === "number" ? String(selected.fields.met) : str(selected.fields?.met));
     const keepText = !cadence || pf.status === "past" ? "" : (() => {
       // as written ("monthly", "every month"); a bare number as days
       const written = str(selected.fields?.keep_in_touch).toLowerCase();
@@ -2156,7 +2159,7 @@ export default function People() {
                 title: m.title,
                 meta: [m.kind, m.detail].filter(Boolean).join(" · "),
                 aside: m.date ? (ymdOf(m.date) ? when.short(m.date) : m.date) : undefined,
-                onPress: m.id ? () => void link.open(m.id!) : m.entry ? () => openTalk({ date: m.date ?? todayYmd, what: m.kind === "Talked" && m.title !== "Talked" ? m.title : "", entry: m.entry! }) : undefined,
+                onPress: m.id ? () => void link.open(m.id!) : m.entry ? () => openTalk({ date: m.date ?? todayYmd, what: m.what ?? "", entry: m.entry! }) : undefined,
               }))}
             />
           ) : (
