@@ -644,3 +644,56 @@ test.describe(`on a phone 390 wide, ${which}`, () => {
     }
   });
 });
+
+test("a room you are put in after the list loaded shows at once, with its name and last line, and goes when you are taken out: no reload", async ({ page }) => {
+  test.setTimeout(120_000);
+  const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
+  const owner = await person(RELAY!, secret("owner"));
+  await owner.publish({ kind: 9030, tags: [["p", alice]] });
+  const stamp = Date.now().toString(36);
+  const make = async (id: string, name: string) => {
+    expect((await owner.publish({ kind: 9007, tags: [["h", id], ["name", `${name} ${stamp}`], ["visibility", "private"], ["channel_type", "stream"]] })).ok).toBe(true);
+  };
+  // one room alice is in before she opens Rooms
+  const porch = crypto.randomUUID();
+  await make(porch, "Porch");
+  expect((await owner.publish({ kind: 9000, tags: [["h", porch], ["p", alice]] })).ok).toBe(true);
+  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
+  const made = await installApplet("rooms", { relay: RELAY!, uni: owner.pubkey });
+  const list = () => frame(page).getByRole("region", { name: "Your rooms" });
+  const row = (name: string) => list().getByRole("button", { name: new RegExp(`${name} ${stamp}`) });
+  try {
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(row("Porch")).toBeVisible({ timeout: 30_000 });
+    // a mark in the applet's page: a reload (of the app or the frame) would lose it
+    const applet = () => page.frames().find((f) => f.url() !== page.url() && f.parentFrame() === page.mainFrame())!;
+    await applet().evaluate(() => { (window as unknown as { __stays: number }).__stays = 1; });
+
+    // made elsewhere, after the list was read: a line in it, then alice put in it
+    const shed = crypto.randomUUID();
+    await make(shed, "Shed");
+    expect((await owner.publish({ kind: 9, content: `The shed door sticks ${stamp}.`, tags: [["h", shed]] })).ok).toBe(true);
+    expect((await owner.publish({ kind: 9000, tags: [["h", shed], ["p", alice]] })).ok).toBe(true);
+    await expect(row("Shed")).toContainText(`The shed door sticks ${stamp}.`, { timeout: 5_000 });
+    // and it is live: a new line shows in its row, a new name too
+    expect((await owner.publish({ kind: 9, content: `Oiled it ${stamp}.`, tags: [["h", shed]] })).ok).toBe(true);
+    await expect(row("Shed")).toContainText(`Oiled it ${stamp}.`, { timeout: 5_000 });
+    expect((await owner.publish({ kind: 9002, tags: [["h", shed], ["name", `Tool shed ${stamp}`]] })).ok).toBe(true);
+    await expect(row("Tool shed")).toBeVisible({ timeout: 5_000 });
+
+    // taken out of a room: it goes from the list (the one from the first read, and the one that came later)
+    expect((await owner.publish({ kind: 9001, tags: [["h", porch], ["p", alice]] })).ok).toBe(true);
+    await expect(row("Porch")).toHaveCount(0, { timeout: 5_000 });
+    expect((await owner.publish({ kind: 9001, tags: [["h", shed], ["p", alice]] })).ok).toBe(true);
+    await expect(row("Tool shed")).toHaveCount(0, { timeout: 5_000 });
+    // put back in: it shows again
+    expect((await owner.publish({ kind: 9000, tags: [["h", porch], ["p", alice]] })).ok).toBe(true);
+    await expect(row("Porch")).toBeVisible({ timeout: 5_000 });
+    expect(await applet().evaluate(() => (window as unknown as { __stays?: number }).__stays)).toBe(1);
+  } finally {
+    await made.remove();
+    owner.close();
+  }
+});
