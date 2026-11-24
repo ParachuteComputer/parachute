@@ -1,7 +1,7 @@
 // People applet (applets/people.json + people.tsx, docs/PEOPLE.md): runs in the sealed frame against a real hub.
 // Exercises: Allow, Contacts list (favorites, A-Z sections, letter index, upcoming birthday), search as you type,
-// filters (relation/group/tag), Birthdays & Reconnect tabs, person card with linked notes ("Everything that mentions
-// them"), editing details and body in place, adding a person, importing a .vcf (deduping an existing contact by email
+// filters (relation/group/tag/last in touch), sort by most recently in touch, Birthdays & In touch tabs (keep-in-touch
+// cadence), person card with its timeline and "We talked", editing details and body in place, adding a person, importing a .vcf (deduping an existing contact by email
 // and creating a new contact with an attached photo rendered via vault.file), and Daylight mode.
 // Set PEOPLE_SHOTS=<dir> to also capture 390x844 phone screenshots (Paper + Daylight) for the walkthrough.
 import { execFileSync } from "node:child_process";
@@ -43,7 +43,7 @@ async function shot(page: Page, name: string) {
 }
 
 test("People applet: open, search, filter, view links, add, edit, import vCard with photo, and Daylight", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
   if (SHOTS) await page.setViewportSize({ width: 390, height: 844 });
 
   const r = appletRecord("people");
@@ -82,6 +82,8 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
         groups: ["Close friends", "Climbing"],
         ways_of_working: ["Prefers voice notes over long emails"],
         source: "Pottery studio open house",
+        how_we_met: "At the pottery studio open house",
+        met: "2023-06-10",
         favorite: true,
       },
     );
@@ -100,6 +102,7 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
         tags: ["hardware", "audio"],
         groups: ["Techne"],
         source: "Local synth meetup",
+        keep_in_touch: "every month",
       },
     );
 
@@ -133,7 +136,7 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
       },
     );
 
-    // Seed linked notes mentioning Maya Lin (so "Everything that mentions them" has real vault links)
+    // Seed linked notes mentioning Maya Lin (so her timeline and last connection come from real vault links)
     await seed("Meetings/2026-11-20 Coffee with Maya", "Caught up with [[People/Maya Lin]] about the winter kiln firing.", ["meeting"]);
     await seed("Journal/2026/11-21/08-30", "Morning trail run with [[People/Maya Lin]] up Sanitas.", ["journal"]);
 
@@ -169,14 +172,32 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
     await expect(f.getByRole("button", { name: "Devon Park" })).toHaveCount(0);
     await f.getByRole("button", { name: "Clear", exact: true }).click();
 
-    // 4. Birthdays & Reconnect tabs
+    // 3b. Sort by most recently in touch, and filter by it
+    await f.getByRole("button", { name: "Recent", exact: true }).click();
+    const recent = f.getByRole("region", { name: /Most recently in touch · 4/ });
+    await expect(recent.getByRole("button").first()).toContainText("Maya Lin");
+    await expect(recent).toContainText("Journal: 2026 / 11-21 / 08-30");
+    await shot(page, "02b-recent-sort");
+    await f.getByRole("button", { name: "Filters" }).click();
+    await f.getByRole("dialog", { name: "Filter people" }).getByRole("button", { name: "Never", exact: true }).click();
+    await f.getByRole("dialog", { name: "Filter people" }).getByRole("button", { name: /Show 3/ }).click();
+    await expect(f.getByRole("button", { name: "In touch: Never ×" })).toBeVisible();
+    await expect(f.getByRole("button", { name: "Maya Lin" })).toHaveCount(0);
+    await f.getByRole("button", { name: "Clear", exact: true }).click();
+    await f.getByRole("button", { name: "A–Z", exact: true }).click();
+    await expect(f.getByRole("navigation", { name: "Letter index" })).toBeVisible();
+
+    // 4. Birthdays & In touch tabs
     await f.getByRole("button", { name: /Birthdays/ }).click();
     await expect(f.getByRole("region", { name: /Next 60 days/ })).toContainText("Maya Lin");
     await shot(page, "03-birthdays-tab");
 
-    await f.getByRole("button", { name: /Reconnect/ }).click();
-    await expect(f.getByRole("region", { name: /No linked notes yet/ })).toContainText("Devon Park");
-    await shot(page, "04-reconnect-tab");
+    await f.getByRole("button", { name: "In touch", exact: true }).click();
+    // Devon is kept in touch with every month and never has been: time to reach out; he isn't listed again below
+    await expect(f.getByRole("region", { name: "Time to reach out" })).toContainText("Devon Park");
+    await expect(f.getByRole("region", { name: /No connection yet · 2/ })).toContainText("Tessa Cho");
+    await expect(f.getByRole("region", { name: /No connection yet/ })).not.toContainText("Devon Park");
+    await shot(page, "04-in-touch-tab");
 
     await f.getByRole("button", { name: /Contacts/ }).click();
 
@@ -187,12 +208,48 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
     await expect(f.getByText("+1 303-555-0142")).toBeVisible();
     await expect(f.getByText("maya@example.test")).toBeVisible();
     await expect(f.getByText("Hiked Green Mountain together")).toBeVisible();
-    await expect(f.getByRole("region", { name: /Everything that mentions them · 2/ })).toContainText("2026-11-20 Coffee with Maya");
-    await expect(f.getByRole("region", { name: /Everything that mentions them · 2/ })).toContainText("2026 / 11-21 / 08-30");
+    await expect(f.getByText("How we met: At the pottery studio open house")).toBeVisible();
+    await expect(f.getByText(/Last in touch .* · 2026 \/ 11-21 \/ 08-30/)).toBeVisible();
+    const timeline = f.getByRole("region", { name: /Timeline · 3/ });
+    await expect(timeline.getByRole("button").first()).toContainText("2026 / 11-21 / 08-30");
+    await expect(timeline).toContainText("2026-11-20 Coffee with Maya");
+    await expect(timeline.getByRole("listitem").last()).toContainText("At the pottery studio open house");
     await f.locator("body").evaluate(() => window.scrollTo(0, 0));
     await shot(page, "05-person-card-paper");
-    await f.getByRole("region", { name: /Everything that mentions them ·/ }).scrollIntoViewIfNeeded();
-    await shot(page, "05b-person-card-notes-links");
+    await timeline.scrollIntoViewIfNeeded();
+    await shot(page, "05b-person-card-timeline");
+
+    // 5b. We talked: a line in her timeline, kept on her card in the vault
+    await f.getByRole("button", { name: "We talked" }).click();
+    const talk = f.getByRole("dialog", { name: "In touch with Maya Lin" });
+    await talk.getByLabel("What about (optional)").fill("Tea at the studio; she'll send the glaze notes");
+    await shot(page, "05c-we-talked");
+    await talk.getByRole("button", { name: "Save" }).click();
+    await expect(f.getByText("Noted: in touch today.")).toBeVisible();
+    await expect(f.getByRole("region", { name: /Timeline · 4/ }).getByRole("listitem").first()).toContainText("Tea at the studio; she'll send the glaze notes");
+    await expect(f.getByText("Last in touch today · Tea at the studio; she'll send the glaze notes")).toBeVisible();
+    const talked = (await api(hub, "GET", `notes?id=${encodeURIComponent("People/Maya Lin")}&include_metadata=true`));
+    const talkedRow = Array.isArray(talked) ? talked[0] : talked;
+    expect(talkedRow.metadata.talked).toEqual([expect.stringMatching(/^\d{4}-\d{2}-\d{2}: Tea at the studio; she'll send the glaze notes$/)]);
+    // put it right: tap the talk on the timeline; the entry is replaced, not added to
+    await f.getByRole("region", { name: /Timeline · 4/ }).getByRole("button", { name: /Tea at the studio/ }).click();
+    const fix = f.getByRole("dialog", { name: "Put this right" });
+    await expect(fix.getByLabel("What about (optional)")).toHaveValue("Tea at the studio; she'll send the glaze notes");
+    await fix.getByLabel("What about (optional)").fill("Tea at the studio; glaze notes coming");
+    await fix.getByRole("button", { name: "Save" }).click();
+    await expect(f.getByRole("region", { name: /Timeline · 4/ }).getByRole("listitem").first()).toContainText("glaze notes coming");
+    const fixed = await api(hub, "GET", `notes?id=${encodeURIComponent("People/Maya Lin")}&include_metadata=true`);
+    expect((Array.isArray(fixed) ? fixed[0] : fixed).metadata.talked).toEqual([expect.stringMatching(/^\d{4}-\d{2}-\d{2}: Tea at the studio; glaze notes coming$/)]);
+    // a half-written talk doesn't follow you to the next card: Back with the drawer open, then open someone else
+    await f.getByRole("button", { name: "We talked" }).click();
+    await f.getByRole("dialog", { name: "In touch with Maya Lin" }).getByLabel("What about (optional)").fill("meant for Maya");
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(f.getByRole("heading", { name: "People" })).toBeVisible();
+    await f.getByRole("button", { name: "Devon Park" }).first().click();
+    await expect(f.locator("header").getByRole("heading", { name: "Devon Park" })).toBeVisible();
+    await expect(f.getByRole("dialog")).toHaveCount(0);
+    await f.getByRole("button", { name: "← People" }).click();
+    await f.getByRole("region", { name: /Favorites/ }).getByRole("button", { name: "Maya Lin" }).click();
 
     // 6. Edit details in place & edit notes in place
     await f.getByRole("button", { name: "Edit details" }).click();
