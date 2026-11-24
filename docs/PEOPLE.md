@@ -155,6 +155,6 @@ facts and keeps the rest; a name changed on the phone doesn't rename the note. I
 | `uid` | `string` | The card's UID, for a person made on the phone (one made in the vault uses its record id) |
 | `href` | `string` | The card's file name on the phone, kept only when it isn't the UID |
 | `vcard_extra` | `string[]` | Raw vCard lines the phone sent that People has no field for (`ORG`, `TITLE`, `NICKNAME`, `X-…`), sent back as they came |
-| `on_phone` | `boolean` | `false` keeps the person off the phone (deleting a contact on the phone sets it); remove it or set `true` to bring them back |
+| `on_phone` | `boolean` | `false` keeps the person off the phone (deleting a contact on the phone sets it); **On my phone** in Edit details turns it back on (People removes the field) |
 
 How to run it, what maps to what and why: [services/carddav/README.md](../services/carddav/README.md).

@@ -55,8 +55,8 @@ the summary. `tags` don't cross.
   and the phone shows that name again after its next sync. Rename a person in People.
 - **A person added on the phone** becomes `People/<Name>` (`People/<Name> 2` if the name is taken, as the applet does)
   with the `person` type, `status: active`, `source: phone`, and its UID kept.
-- **A person deleted on the phone** stays in the vault with `on_phone: false`. To put them back on the phone, remove
-  that field or set it to `true`, in People or through MCP (`update-record`). The phone gets them at its next sync.
+- **A person deleted on the phone** stays in the vault with `on_phone: false`. To put them back on the phone, turn on
+  **On my phone** in their card in People (Edit details), or remove the field through MCP (`update-record`). The phone gets them at its next sync.
 - **Photos:** the vault's photo is sent to the phone. A photo set on the phone is taken only when the person has no
   photo in the vault. Android re-encodes every photo and sends its own copy back with each edit (DAVx5 `PhotoHandler.kt`
   reads the stored display photo, and nothing skips an unchanged one). Taking that copy would replace the vault's
