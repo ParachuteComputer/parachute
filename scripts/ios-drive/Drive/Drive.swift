@@ -53,10 +53,24 @@ final class Drive: XCTestCase {
         e.tap()
     }
 
+    /// Presses until what it opens shows (a disclosure tapped while the page re-renders can close again).
+    private func press(_ name: String, until shown: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        for _ in 0..<3 {
+            press(name, file: file, line: line)
+            if shown.waitForExistence(timeout: 5) { return }
+        }
+        shot("failed")
+        XCTFail("pressing \"\(name)\" didn't open it. On screen:\n\(app.debugDescription)", file: file, line: line)
+    }
+
+    private func field(_ name: String) -> XCUIElement {
+        let kinds = [XCUIElement.ElementType.textField, .secureTextField, .textView].map { $0.rawValue }
+        return app.descendants(matching: .any).matching(NSPredicate(format: "elementType IN %@ AND (label == %@ OR placeholderValue == %@)", kinds, name, name)).firstMatch
+    }
+
     /// Types into the field with this label or placeholder.
     private func type(_ field: String, _ text: String, file: StaticString = #filePath, line: UInt = #line) {
-        let kinds = [XCUIElement.ElementType.textField, .secureTextField, .textView].map { $0.rawValue }
-        let f = app.descendants(matching: .any).matching(NSPredicate(format: "elementType IN %@ AND (label == %@ OR placeholderValue == %@)", kinds, field, field)).firstMatch
+        let f = self.field(field)
         guard f.waitForExistence(timeout: 20) else {
             shot("failed")
             return XCTFail("no field \"\(field)\". On screen:\n\(app.debugDescription)", file: file, line: line)
@@ -88,7 +102,7 @@ final class Drive: XCTestCase {
         wait("Make a new key", 60)
         shot("01-first-screen")
 
-        press("Advanced: paste a secret key")
+        press("Advanced: paste a secret key", until: field("nsec1…"))
         type("nsec1…", key)
         press("Keep this key")
         answerSystem(2)
