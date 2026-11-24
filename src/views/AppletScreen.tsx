@@ -470,7 +470,7 @@ export default function AppletScreen() {
   const sheetsRef = useRef(sheets);
   sheetsRef.current = sheets;
   // the recorder and the file picker (docs/design/KEYRING.md "Voice, files, links, storage"): stable, as the router keeps them
-  const device = useDeviceSheets(entry?.manifest.name ?? "This applet");
+  const device = useDeviceSheets(entry?.manifest.name ?? "This applet", kept.shown, subject);
   const servicesWhy = useRef<string | null>(null);
   const sessionRef = useRef<Session | null>(null);
   // Back, held by the applet while it has screens of its own open (the kit's onBack, modules/back.ts). It gets one Back for
@@ -601,7 +601,7 @@ export default function AppletScreen() {
   // (no imports from one, no embeds), and no note handed to it
   const keepable = granted && started && !!page && !handed && !sized && !!rec && isMine(rec) && loaded.state === "ok" && loaded.imports.every((i) => i.own && i.whose === "mine");
   useEffect(() => { kept.keepable(keepable); }, [keepable]); // eslint-disable-line react-hooks/exhaustive-deps
-  // hidden: it is told, and a sheet or recorder open for it closes; shown again: told, and its note read again
+  // hidden: it is told, and a picker open for it closes (a recorder stops and keeps what it heard); shown again: told, and its note read again
   const shownBefore = useRef(kept.shown);
   useEffect(() => {
     if (shownBefore.current === kept.shown) return;
@@ -609,7 +609,7 @@ export default function AppletScreen() {
     sessionNow.current?.sendEvent("shown", { shown: kept.shown });
     // shown again: its note and what it was judged on are asked of the hub again now, whenever they were last asked
     // hidden: what it was managing ends (vault/manage.ts), as when it is left
-    if (!kept.shown) { device.cancel(); sheets.cancel(); setMenu(false); if (rec && entry) endManageFor(subjectOf(rec.key, entry.noteId)); } else {
+    if (!kept.shown) { device.leave(); sheets.cancel(); setMenu(false); if (rec && entry) endManageFor(subjectOf(rec.key, entry.noteId)); } else {
       if (rec) askAgain(rec.key);
       const h = homeVault(); if (h && h.key !== rec?.key) askAgain(h.key, (read) => /Parachute%2FApprovals%2F|[?&]tag=parachute-(?:pointer|keys)(?:&|$)/.test(read));
       setRecheck((n) => n + 1);

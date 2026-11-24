@@ -6,8 +6,13 @@
 // can still be read and scrolled while it records. Beside useShellSheets (ShellSheets.tsx), which draws the approvals'.
 // Every word is the app's. Nothing pulses or loops: the recorder says what it is doing in words, a running time, and
 // the shape of what it has heard so far.
-import { useEffect, useRef, useState } from "react";
-import { ContractError, ERROR_CODES } from "../applet/contract";
+//
+// Leaving the screen while it records never throws the recording away (T-476), however the person leaves (the top bar's
+// Back, a tab on the bar, the phone's Back): the recorder's own screen going out of sight is the one place that says so.
+// A screen kept running (shell/kept.tsx) only hides: the recorder stops there and waits, with Send, for the way back. A
+// screen that goes (or whose frame is made again) leaves the recording in `held`, which this applet's screen shows on
+// coming back: the frame that asked for it is gone, so it can't be sent, but it can be saved or let go.
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { bareName, FILE_MAX, mediaType, PICK_MAX } from "../applet/files";
 import type { PickedFile } from "../applet/modules/app";
 import type { Recording } from "../applet/modules/voice";
@@ -28,12 +33,24 @@ const canRecord = () => typeof navigator !== "undefined" && typeof navigator.med
 type Phase = "starting" | "recording" | "stopped" | "failed";
 /** Why a recording stopped before Send: the app went to the background (the screen locked, another app came to the
  *  front), it reached the most it may be, or the microphone went (a call took it, say). What was recorded is kept. */
-type Stopped = "away" | "max" | "mic";
+type Stopped = "away" | "max" | "mic" | "left";
 const STOPPED: Record<Stopped, string> = {
   away: "Stopped when Parachute went to the background.",
   max: "Stopped at the most it may be.",
   mic: "The microphone stopped.",
+  // left for another screen: the recording waits here, as it was
+  left: "Your recording is kept.",
 };
+
+/** What was recorded when its screen went, with no frame left to send it to: kept per applet's screen until it is saved
+ *  or let go. In memory, like the recorder's own: it is for the way back, not for a restart. */
+type Held = { blob: Blob; type: string; duration: number };
+const held = new Map<string, Held>();
+const heldWatchers = new Set<() => void>();
+const heldChanged = () => heldWatchers.forEach((f) => f());
+const useHeld = (key: string): Held | null => useSyncExternalStore((f) => { heldWatchers.add(f); return () => { heldWatchers.delete(f); }; }, () => held.get(key) ?? null);
+/** Test hook: what is held for a screen. */
+export const heldFor = (key: string): Held | null => held.get(key) ?? null;
 /** How long after the sheet opens Send waits: a quick second tap on the applet's button can't send a blink of sound. */
 export const SEND_ARM_MS = 400;
 /** The shape drawn while it records: one bar per tenth of a second, the newest at the right. */
@@ -47,7 +64,7 @@ export function levelOf(samples: Float32Array): number {
   return Math.min(1, Math.sqrt(rms * 4));
 }
 
-function RecorderSheet({ name, max, done }: { name: string; max: number; done: (r: Recording | null) => void }) {
+function RecorderSheet({ name, max, away: left, keep, done }: { name: string; max: number; away: boolean; keep: (h: Held) => void; done: (r: Recording | null) => void }) {
   const [phase, setPhase] = useState<Phase>(canRecord() ? "starting" : "failed");
   const [why, setWhy] = useState(canRecord() ? "" : "This device can't record here: the microphone isn't open to Parachute on it.");
   const [stopped, setStopped] = useState<Stopped | null>(null);
@@ -58,6 +75,9 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
   // Send pressed while it records: it sends the moment the recorder has handed over its last part
   const sendOnStop = useRef(false);
   const over = useRef(false);
+  // the person answered it (Send, Cancel): what is left of it is theirs to have thrown away. Else its screen went
+  const answered = useRef(false);
+  const rescue = useRef(false);
   const release = () => {
     const r = rec.current;
     if (!r) return;
@@ -69,6 +89,7 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
     const r = result.current;
     if (!r || over.current) return;
     over.current = true;
+    answered.current = true;
     done({ bytes: await r.blob.arrayBuffer(), type: r.type, duration: Math.round(r.duration * 10) / 10 });
   };
   const stop = (reason: Stopped | null) => {
@@ -83,6 +104,7 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
   useEffect(() => {
     if (!canRecord()) return;
     over.current = false;
+    rescue.current = false;
     let live = true;
     void (async () => {
       let stream: MediaStream;
@@ -110,6 +132,8 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
         const type = mediaType(recorder.mimeType || mime) ?? "audio/webm";
         const duration = Math.min(max, ((r.stoppedAt ?? performance.now()) - r.started) / 1000);
         result.current = { blob: new Blob(chunks, { type }), type, duration };
+        // its screen went while it recorded: what was heard goes to `held`
+        if (rescue.current) { keep(result.current); return; }
         if (over.current) return;
         setSecs(duration);
         setPhase("stopped");
@@ -136,7 +160,11 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
       setPhase("recording");
     })();
     // the microphone is let go whenever the sheet goes (Send, Cancel, the applet's screen closing)
-    return () => { live = false; over.current = true; release(); };
+    return () => {
+      live = false; over.current = true; release();
+      // its screen went (not answered): keep what was heard, now or as the recorder hands over its last part
+      if (!answered.current) { if (result.current) keep(result.current); else rescue.current = true; }
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // away from the app (the screen locked, another app in front): stop and keep it, for Send or Cancel on coming back
@@ -149,6 +177,12 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
     addEventListener("pagehide", gone);
     return () => { document.removeEventListener("visibilitychange", away); removeEventListener("pagehide", gone); };
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // its screen out of sight (the person went to another: Back, a tab): stop and keep it, for Send on coming back
+  useEffect(() => {
+    if (!left) return;
+    if (phase === "recording") stop("left"); else if (phase === "stopped") setStopped("left");
+  }, [left, phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the running time and the shape, a bar each tenth of a second; and the stop at the most it may be
   useEffect(() => {
@@ -165,7 +199,7 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
     return () => clearInterval(t);
   }, [phase, max]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cancel = () => { over.current = true; release(); done(null); };
+  const cancel = () => { over.current = true; answered.current = true; release(); done(null); };
   const [sending, setSending] = useState(false);
   const send = () => {
     setSending(true);
@@ -202,8 +236,35 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
             {levels.map((l, i) => { const h = Math.max(1.5, l * 24); return <rect key={i} x={(BARS - levels.length + i) * 3} y={(24 - h) / 2} width="2" height={h} rx="1" />; })}
           </svg>
         )}
-        {phase === "stopped" && stopped && <p className="quiet small" role="status">{STOPPED[stopped]} What was recorded is here.</p>}
+        {phase === "stopped" && stopped && <p className="quiet small" role="status">{stopped === "left" ? STOPPED.left : `${STOPPED[stopped]} What was recorded is here.`}</p>}
         {phase !== "failed" && <p className="quiet small">{name} gets it only when you press Send.</p>}
+      </section>
+    </div>
+  );
+}
+
+/** A recording whose screen went before it was sent: the applet that asked for it isn't waiting any more, so it can be
+ *  kept as a file or let go, not sent. At the foot of the applet's screen, as the recorder is. */
+function HeldSheet({ name, held: h, onGone }: { name: string; held: Held; onGone: () => void }) {
+  const save = () => {
+    const url = URL.createObjectURL(h.blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Recording for ${name} ${new Date().toISOString().slice(0, 16).replace("T", " ")}.${/ogg/.test(h.type) ? "ogg" : /mp4/.test(h.type) ? "m4a" : "webm"}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
+  return (
+    <div className="recorder-dock">
+      <section className="sheet device-sheet recorder" role="dialog" aria-modal="false" aria-label={`Kept recording for ${name}`}>
+        <div className="record-head">
+          <p className="record-time" role="timer" aria-label="Recorded time"><strong>Recorded</strong> {clock(h.duration)}</p>
+          <div className="grant-actions">
+            <button type="button" className="quiet-button" onClick={onGone}>Discard</button>
+            <button type="button" className="primary" onClick={save}>Save a copy</button>
+          </div>
+        </div>
+        <p className="quiet small" role="status">Your recording is kept. {name} had closed before you sent it, so save a copy, or discard it.</p>
       </section>
     </div>
   );
@@ -245,25 +306,33 @@ function PickSheet({ name, accept, multiple, max, note, done }: { name: string; 
 /** The shell's recorder and picker for one applet's screen. `record` and `pick` are stable (the frame's router keeps
  *  them); one sheet at a time, and an open one answers "none" when the screen goes or `cancel` is called (its frame's
  *  session ended). `ui` goes last in the applet's screen: the recorder rests at its foot, the picker over the frame. */
-export function useDeviceSheets(name: string) {
+export function useDeviceSheets(name: string, shown = true, screen: string | null = null) {
+  const key = screen ?? name;
   const [asking, setAsking] = useState<Asking | null>(null);
+  const keptHere = useHeld(key);
   const open = useRef<Asking | null>(null);
   useEffect(() => () => api.current?.cancel(), []);
-  const api = useRef<{ record(max: number): Promise<Recording | null>; pick(accept: string[], multiple: boolean, max?: number, note?: string): Promise<PickedFile[]>; cancel(): void } | null>(null);
+  const api = useRef<{ record(max: number): Promise<Recording | null>; pick(accept: string[], multiple: boolean, max?: number, note?: string): Promise<PickedFile[]>; cancel(): void; leave(): void } | null>(null);
   if (!api.current) {
-    const ask = <T,>(make: (done: (x: T) => void) => Asking) => new Promise<T>((resolve, reject) => {
-      if (open.current) { reject(new ContractError(ERROR_CODES.failed, "the app is already asking you something")); return; }
+    // one sheet at a time. A tap on another mic or attach control while one is open changes nothing: it answers "none"
+    // (no recording, no files) and the open one stays as it is
+    const ask = <T,>(none: T, make: (done: (x: T) => void) => Asking) => new Promise<T>((resolve) => {
+      if (open.current) { resolve(none); return; }
       const a = make((x) => { if (open.current !== a) return; open.current = null; setAsking(null); resolve(x); });
       open.current = a;
       setAsking(a);
     });
     api.current = {
-      record: (max) => ask<Recording | null>((done) => ({ kind: "record", id: ++asks, max, done })),
-      pick: (accept, multiple, max = FILE_MAX, note?: string) => ask<PickedFile[]>((done) => ({ kind: "pick", id: ++asks, accept, multiple, max, ...(note ? { note } : {}), done })),
+      record: (max) => ask<Recording | null>(null, (done) => ({ kind: "record", id: ++asks, max, done })),
+      pick: (accept, multiple, max = FILE_MAX, note?: string) => ask<PickedFile[]>([], (done) => ({ kind: "pick", id: ++asks, accept, multiple, max, ...(note ? { note } : {}), done })),
       cancel: () => { const a = open.current; if (a?.kind === "record") a.done(null); else if (a?.kind === "pick") a.done([]); },
+      // its screen is out of sight but kept: an open picker closes (nothing chosen); a recorder stops and waits, for Send
+      leave: () => { if (open.current?.kind === "pick") api.current?.cancel(); },
     };
   }
-  const ui = asking?.kind === "record" ? <RecorderSheet key={asking.id} name={name} max={asking.max} done={asking.done} />
-    : asking?.kind === "pick" ? <PickSheet key={asking.id} name={name} accept={asking.accept} multiple={asking.multiple} max={asking.max} note={asking.note} done={asking.done} /> : null;
-  return { record: api.current.record, pick: api.current.pick, cancel: api.current.cancel, ui };
+  const keep = (h: Held) => { held.set(key, h); heldChanged(); };
+  const ui = asking?.kind === "record" ? <RecorderSheet key={asking.id} name={name} max={asking.max} away={!shown} keep={keep} done={asking.done} />
+    : asking?.kind === "pick" ? <PickSheet key={asking.id} name={name} accept={asking.accept} multiple={asking.multiple} max={asking.max} note={asking.note} done={asking.done} />
+    : keptHere ? <HeldSheet name={name} held={keptHere} onGone={() => { held.delete(key); heldChanged(); }} /> : null;
+  return { record: api.current.record, pick: api.current.pick, cancel: api.current.cancel, leave: api.current.leave, ui };
 }
