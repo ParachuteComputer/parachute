@@ -306,7 +306,7 @@ export function refWhy(ref: Pick<VaultRec, "fields">): string {
   return str(f.why) || str(f.why_it_fits) || str(f.reason) || str(f.note);
 }
 
-const VAULT_URL = /\/vault\/[^/?#]+\/|\/(?:view|n)\/[0-9][0-9A-Za-z]{11,63}(?:[/?#]|$)/;
+const VAULT_URL = /\/vault\/[^/?#]+\/|\/v\/[^/?#]+\/n\/[^/?#]+|\/(?:view|n)\/[0-9][0-9A-Za-z]{11,63}(?:[/?#]|$)/;
 const WEB = /^(https?:|mailto:)/i;
 /** A host only a device or a private network reaches: loopback, private and tailnet ranges, .local/.internal/.ts.net. */
 function privateHost(host: string): boolean {
@@ -328,7 +328,7 @@ export function vaultAddress(raw: string): boolean {
   // citation's own scheme (doi:, isbn:) or words (Thoreau:Walden)
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(u) && !WEB.test(u)) return true;
   if (/^(file|vault|obsidian|parachute):/i.test(u)) return true;
-  const short = /^([a-z0-9][a-z0-9_-]{0,39}):([0-9][0-9A-Za-z_-]{7,63})$/i.exec(u);
+  const short = /^([a-z0-9][a-z0-9_-]{0,63}):([0-9][0-9A-Za-z_-]{7,63})$/i.exec(u);
   if (short && !/^(doi|isbn|issn|arxiv|pmid|oclc|lccn|urn|tel)$/i.test(short[1]) && /[a-z]/i.test(short[2])) return true;
   if (!WEB.test(u)) return false;
   if (VAULT_URL.test(u)) return true;

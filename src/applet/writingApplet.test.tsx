@@ -434,6 +434,8 @@ describe("insert-as-quote formatting & cursor splicing", () => {
       { source: "vault://uni/Notes/X" },
       { source: "Fieldcraft", source_url: "http://uni.tail1234.ts.net:1940/api/notes/x" },
       { source: "Fieldcraft", source_url: "http://192.168.1.5/notes" },
+      { source: "Fieldcraft", source_url: "https://hub.example/v/uni/n/legacy-id-abc" },
+      { source: `${"a".repeat(45)}:01JABCDEFGHJKMNPQRSTVWXYZ0` },
     ]) expect(formatQuoteMarkdown({ ...bare, fields: { quote: "Q.", ...fields } }), JSON.stringify(fields)).toMatch(/^> Q\.(\n> — Fieldcraft)?$/);
     expect(formatQuoteMarkdown({ ...bare, fields: { quote: "See [the note](https://hub.example/vault/uni/n/01J8ABCDEFGHJKMN) and <http://localhost:1939/x>." } }))
       .toBe("> See the note and .");

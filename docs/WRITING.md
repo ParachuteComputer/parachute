@@ -36,7 +36,7 @@ These fields are additive on an existing `reference` type. Applying them adds on
 | Field | Kind | Meaning |
 |---|---|---|
 | `piece` | `string` | The piece this reference serves, by name: its path inside `Writing/Pieces/` (Ask Uni writes this). An id, a whole path or a `[[link]]` to it also match. Uni already writes `piece` this way on the research it prepares for a piece. Not `for`: in a vault, `for` names the person a thing is for (as on Uni's drafts and research). |
-| `used_in` | `string` (`cardinality: "many"`) | Pieces, by name, where this reference was inserted as a quote. |
+| `used_in` | `array` (of strings, as the Library pack's `quote.used_in`) | Pieces, by name, where this reference was inserted as a quote. |
 | `state` | `string` (`asked \| ready \| kept \| let go`) | Workflow state: `asked` (requested via Ask Uni), `ready` (prepared for review), `kept` (accepted for the piece), or `let go` (set aside). |
 | `quote` | `string` | Optional explicit quote text (falls back to a blockquote or the record body). |
 | `source` | `string` | Where the quote came from (title, book, or publication). |
@@ -88,8 +88,7 @@ Not shipped: Writing needs no pack, since `piece` and `reference` are already in
           "description": "The piece this reference serves, by name (its path inside Writing/Pieces/), or its id, path or link."
         },
         "used_in": {
-          "type": "string",
-          "cardinality": "many",
+          "type": "array",
           "description": "Pieces, by name, where this reference has been quoted."
         },
         "state": {
