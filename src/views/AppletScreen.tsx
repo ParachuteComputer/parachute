@@ -605,11 +605,16 @@ export default function AppletScreen() {
   const [pinBusy, setPinBusy] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const pinId = entry?.noteId ?? appletId ?? "";
-  const pinnedHere = !!rec && barHere.pins.some((p) => p.vault === rec.key && p.noteId === pinId);
+  // Parachute's own are pinned in the home, as the bar finds them, also when Journal or Capture runs in a vault picked
+  // for its notes
+  const pinVault = officialOf(pinId) ? homeVault()?.key : rec?.key;
+  const pinnedHere = !!pinVault && barHere.pins.some((p) => p.vault === pinVault && p.noteId === pinId);
+  // another applet on this screen: the last one's error doesn't carry over
+  useEffect(() => { setPinError(null); }, [rec?.key, appletId]);
   const togglePin = () => {
-    if (!rec || !pinId || pinBusy) return;
+    if (!pinVault || !pinId || pinBusy) return;
     setPinBusy(true); setPinError(null);
-    pinApplet(rec.key, pinId, !pinnedHere).then(() => setPinBusy(false), (e: unknown) => { setPinError(e instanceof Error ? e.message : "That couldn't be saved."); setPinBusy(false); });
+    pinApplet(pinVault, pinId, !pinnedHere).then(() => setPinBusy(false), (e: unknown) => { setPinError(e instanceof Error ? e.message : "That couldn't be saved."); setPinBusy(false); });
   };
   // a notification's tap opens the applet at a room and message (services/notifyLink.ts)
   const launch: { room: string; event?: string } | { vault: string; record?: string; show?: "changes" | "sharing" } | null = launchOf(params) ?? (entry?.app.includes("vaults") ? vaultLaunchOf(params) : null);
@@ -740,7 +745,7 @@ export default function AppletScreen() {
   const plainNote = note ? <Link to={`${noteHref(rec.key, note.id)}?with=vault`}>Open {titleOf(note)} in the vault view</Link> : null;
   const theirsLabel = notMine ? ` · ${rec.vault}'s` : "";
   // (none on a bar someone else offers, nor for one of Parachute's own the bundle places on the bar itself)
-  const canPin = !bundleHere.live && !(rec.key === homeVault()?.key && barOwnIds(barHere.entries, bundleHere.look).includes(pinId));
+  const canPin = !!pinVault && !bundleHere.live && !(pinVault === homeVault()?.key && barOwnIds(barHere.entries, bundleHere.look).includes(pinId));
   const pinName = !canPin ? null : entry ? name : loaded.state === "newer" ? loaded.entry.manifest.name : null;
   const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : loaded.state === "newer" ? `${loaded.entry.manifest.glyph} ${loaded.entry.manifest.name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu}>
     {pinName && <PinButton name={pinName} pinned={pinnedHere} busy={pinBusy} onToggle={togglePin} />}

@@ -35,13 +35,20 @@ export default function BottomBar() {
   const wayHome = bar.entries.some((e) => "screen" in e && e.screen === "home");
   const nav = useRef<HTMLElement>(null);
   const places = bar.entries.map((e) => ("href" in e ? e.href : JSON.stringify(e))).join(" ");
+  // (the app's own places on the bar lead into the home vault, once it is read)
+  const homeKey = homeVault(useVaults())?.key;
   useEffect(() => {
     const show = () => {
       const el = nav.current;
-      if (!el || el.scrollWidth <= el.clientWidth) return;
+      // a sidebar (a Mac) doesn't scroll sideways
+      if (!el || getComputedStyle(el).flexDirection !== "row") return;
+      const held = el.querySelector<HTMLElement>(".home-bar-held")?.offsetWidth ?? 0;
+      // a place reached with Tab scrolls clear of them too
+      el.style.scrollPaddingInlineEnd = `${held + 8}px`;
+      if (el.scrollWidth <= el.clientWidth) return;
       const cur = el.querySelector<HTMLElement>('.home-bar-place[aria-current="page"]');
       if (!cur || cur.closest(".home-bar-held")) return;
-      const view = el.clientWidth - (el.querySelector<HTMLElement>(".home-bar-held")?.offsetWidth ?? 0);
+      const view = el.clientWidth - held;
       const left = cur.offsetLeft, right = left + cur.offsetWidth;
       if (left < el.scrollLeft) el.scrollLeft = left - 6;
       else if (right > el.scrollLeft + view) el.scrollLeft = right - view + 6;
@@ -50,8 +57,8 @@ export default function BottomBar() {
     // a turn of the phone or a narrower window moves it under them again
     addEventListener("resize", show);
     return () => removeEventListener("resize", show);
-  }, [pathname, places, wayHome]);
-    return (
+  }, [pathname, places, wayHome, homeKey]);
+  return (
     <>
       <nav ref={nav} className="home-bar" aria-label="Bar" onClickCapture={(e) => { const tab = (e.target as Element).closest(".home-bar-place"); if (tab && e.detail > 0) fromTab(tab); }}>
         {bar.entries.map((e) => ("href" in e

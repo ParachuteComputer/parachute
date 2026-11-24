@@ -32,7 +32,7 @@ test("a bundle record offers only its sources; its bar is its own; a pin in it g
 
   // a pin made here is the record's; the settings note's bar is untouched
   await start(page);
-  await entries.getByRole("button", { name: "Unpin Recipe box from the bar" }).click();
+  await entries.getByRole("button", { name: "Pin Recipe box to the bar" }).click();
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toHaveCount(0);
   const [app] = await tagged("parachute-bundle");
   expect(app.metadata.bundle.bar).toEqual([]);
@@ -152,7 +152,7 @@ test("an older record (Parachute/Apps, parachute-app, fields.app) still opens, a
 
   // a change is written as the record is, under its older names, which the builds before 11-20 read (a device of the
   // person's may run one); scripts/migrate-bundles.ts moves it later
-  await entries.getByRole("button", { name: "Unpin Recipe box from the bar" }).click();
+  await entries.getByRole("button", { name: "Pin Recipe box to the bar" }).click();
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toHaveCount(0);
   await expect.poll(async () => (await tagged("parachute-app")).map((n) => [n.path.replace(/\.md$/, ""), n.metadata.app?.bar])).toEqual([["Parachute/Apps/kitchen-table", []]]);
   expect(await tagged("parachute-bundle")).toEqual([]);

@@ -23,8 +23,8 @@ test("the list: each applet's Pin pins it to the bar and unpins it, written to t
   await pin.click();
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await expect.poll(pinsOfRecord).toEqual(["Applets/Recipes"]);
-  // the same button, pressed now: a tap unpins
-  const unpin = list.getByRole("button", { name: "Unpin Recipe box from the bar" });
+  // the same button, pressed now (one name whatever its state, as a toggle has): a tap unpins
+  const unpin = list.getByRole("button", { name: "Pin Recipe box to the bar" });
   await expect(unpin).toHaveAttribute("aria-pressed", "true");
   await expect(unpin).toHaveText(/Pinned/);
   await unpin.click();
@@ -46,7 +46,7 @@ test("an applet's own screen: the same Pin in its top bar, before it runs and wh
   await expect.poll(pinsOfRecord).toEqual(["Applets/Recipes"]);
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(appletFrame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
-  const unpin = top.getByRole("button", { name: "Unpin Recipe box from the bar" });
+  const unpin = top.getByRole("button", { name: "Pin Recipe box to the bar" });
   await expect(unpin).toHaveAttribute("aria-pressed", "true");
   await unpin.click();
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toHaveCount(0);
@@ -58,8 +58,8 @@ test("an applet's own screen: the same Pin in its top bar, before it runs and wh
   await expect.poll(pinsOfRecord).toEqual(["parachute:journal"]);
 });
 
-test("a full bar keeps Applets in reach beside Settings on a phone, with no sideways scroll", async ({ page }) => {
-  await writeBundle({ bar: ["Recipes", "Cook mode", "Recipes", "Cook mode"].map((a) => ({ vault: VAULT, applet: `Applets/${a}` }))
+test("a full bar keeps Applets in reach beside Settings on a phone, and brings the place you are in into view", async ({ page }) => {
+  await writeBundle({ bar: ["Recipes", "Cook mode"].map((a) => ({ vault: VAULT, applet: `Applets/${a}` }))
     .concat([{ vault: VAULT, applet: "parachute:journal" }, { vault: VAULT, applet: "parachute:capture" }, { vault: VAULT, applet: "parachute:vault" }, { vault: VAULT, applet: "parachute:notes" }]) });
   await start(page);
   await expect(bar(page).getByRole("link", { name: /Capture/ })).toBeAttached();
@@ -92,15 +92,15 @@ test("no Pin where a tap couldn't pin: a bar someone else offers, and one of Par
     await start(page);
     const list = ui(page).getByRole("list", { name: "Applets" });
     await expect(list.getByRole("link", { name: /Recipe box/ })).toBeVisible();
-    await expect(list.getByRole("button", { name: /to the bar|from the bar/ })).toHaveCount(0);
+    await expect(list.getByRole("button", { name: /to the bar/ })).toHaveCount(0);
     await list.getByRole("link", { name: /Recipe box/ }).click();
     await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible();
-    await expect(page.locator("header.bar").getByRole("button", { name: /to the bar|from the bar/ })).toHaveCount(0);
-    // Parachute Simplified: Journal is the bundle's own place on its bar, not a pin, so it offers none; Vault isn't there
+    await expect(page.locator("header.bar").getByRole("button", { name: /to the bar/ })).toHaveCount(0);
+    // Parachute Simplified: Journal is the bundle's own place on its bar, not a pin, so it offers none; Home isn't on it
     await api(hubState(), "PATCH", `notes/${settings.id}`, { metadata: { parachute: { bundle: "simple" } }, if_updated_at: (await api(hubState(), "GET", `notes/${settings.id}`)).updatedAt });
     await page.goto(`/v/${VAULT}/a/parachute%3Ajournal`);
     await expect(bar(page).getByRole("link", { name: /Journal/ })).toHaveAttribute("aria-current", "page");
-    await expect(page.locator("header.bar").getByRole("button", { name: /to the bar|from the bar/ })).toHaveCount(0);
+    await expect(page.locator("header.bar").getByRole("button", { name: /to the bar/ })).toHaveCount(0);
     await page.goto(`/v/${VAULT}/a/parachute%3Ahome`);
     await expect(page.locator("header.bar").getByRole("button", { name: "Pin Home to the bar" })).toBeVisible();
   } finally { await api(hubState(), "DELETE", `notes/${theirs.id}`).catch(() => {}); }

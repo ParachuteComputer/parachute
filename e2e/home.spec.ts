@@ -52,7 +52,7 @@ test("Pin on the list's row pins an applet to the bar; the pin is the bundle rec
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await expect.poll(async () => (await bundleOf())?.body.bar).toEqual([{ vault: VAULT, applet: "Applets/Recipes" }]);
   expect(await settingsNotes()).toEqual([]);
-  await expect(ui(page).getByRole("button", { name: "Unpin Recipe box from the bar" })).toHaveAttribute("aria-pressed", "true");
+  await expect(ui(page).getByRole("button", { name: "Pin Recipe box to the bar" })).toHaveAttribute("aria-pressed", "true");
   // a restart: still there
   await start(page);
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
@@ -189,7 +189,7 @@ test("a full bar: its first place and Applets stay in reach on a phone, and a th
     await writeBundle({ bar: [{ vault: VAULT, applet: "Applets/Recipes" }, ...Array.from({ length: 11 }, (_, i) => ({ vault: VAULT, applet: `Applets/Extra ${i + 1}` }))] });
     await start(page);
     await expect(bar(page).getByRole("link")).toHaveCount(14);
-    // the first place can be reached: it starts at the bar's left edge, not off screen; Applets, before Settings, scrolls into reach
+    // the first place can be reached: it starts at the bar's left edge, not off screen; Applets is held beside Settings, in reach
     expect((await bar(page).getByRole("link").first().boundingBox())!.x).toBeGreaterThanOrEqual(0);
     await bar(page).getByRole("link", { name: /Applets/ }).scrollIntoViewIfNeeded();
     await expect(bar(page).getByRole("link", { name: /Applets/ })).toBeInViewport();

@@ -272,7 +272,7 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
    none: held together at the right edge, on screen however full the bar is (T-476: with five pins, Applets scrolled out
    of sight on a phone). The places before them pass under; the desk's colour closes the gaps beside them, starting under
    the bar's top line */
-.home-bar-held { position: sticky; right: 0; flex: none; display: flex; align-items: start; gap: 4px; box-shadow: -4px 2px 0 var(--desk), calc(12px + env(safe-area-inset-right)) 2px 0 var(--desk); background: var(--desk); }
+.home-bar-held { position: sticky; right: 0; flex: none; display: flex; align-items: start; gap: 4px; box-shadow: -4px 2px 0 var(--desk), calc(12px + env(safe-area-inset-right)) 2px 0 var(--desk); background: linear-gradient(transparent 2px, var(--desk) 2px); }
 .home-bar .home-bar-settings { flex: none; }
 /* pressed, it stays opaque: the places passing under it don't show through */
 .home-bar .home-bar-settings:active { background: color-mix(in srgb, var(--text) 8%, var(--bg)); }
