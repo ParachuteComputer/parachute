@@ -203,6 +203,7 @@ test.describe(`on a phone 390 by ${height}, while recording`, () => {
     owner.close();
     // more than a screen of talk: the first line is the one being answered, far above the newest
     expect((await bob.publish({ kind: 9, content: `The question about the pear trees ${stamp}`, tags: [["h", g]] })).ok).toBe(true);
+    await new Promise((r) => setTimeout(r, 1100)); // a second older than the rest: posts in one second come in any order
     for (let i = 1; i <= 24; i++) expect((await bob.publish({ kind: 9, content: `Line ${i} of the orchard talk, long enough to wrap on a phone ${stamp}`, tags: [["h", g]] })).ok).toBe(true);
     await new Promise((r) => setTimeout(r, 1100));
     expect((await bob.publish({ kind: 9, content: `The newest line ${stamp}`, tags: [["h", g]] })).ok).toBe(true);
@@ -259,7 +260,7 @@ test.describe(`on a phone 390 by ${height}, while recording`, () => {
       // a swipe up shows what is below (again if a swipe was taken as a tap; before the fix none ever moved it)
       await expect(async () => {
         await swipeDown(page, 195, await talk(), -160);
-        expect(await scroller.evaluate((e) => e.scrollTop), "the talk moved under the finger, stopped").toBeGreaterThan(was + 60);
+        expect(await scroller.evaluate((e) => e.scrollTop), `the talk moved under the finger, stopped (from ${was}; ${await scroller.evaluate((e) => `${e.scrollHeight} tall, ${e.clientHeight} shown`)}; finger at ${await talk()})`).toBeGreaterThan(was + 60);
       }).toPass({ intervals: [300, 600], timeout: 8000 });
       await sheet.getByRole("button", { name: "Send" }).click();
       await expect(sheet).toBeHidden();
