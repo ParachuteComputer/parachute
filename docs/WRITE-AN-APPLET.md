@@ -418,9 +418,10 @@ person has, without telling the applet which those are:
 | The link | What the person sees | A tap |
 |---|---|---|
 | a note in a vault they have | a link | opens the note in the app: in the applet whose `opens` takes its kind, else the plain note view |
+| a note in the applet's own vault whose Parachute can't be read now (off the network or the tailnet, say) | a link | opens the note's screen, which says why plainly, with Try again |
 | an address of a vault they haven't added | a link | the app's link screen, which says so and offers to add that Parachute |
 | an address in a vault they have whose note part isn't an id, or whose note isn't there | a link | the app's link screen, which opens what the vault has at that address, or says it isn't there |
-| a `<vault>:<ULID>` of a vault they don't have, or of a note that isn't there; a `[[wikilink]]` to nothing | plain text | nothing: no guess |
+| a `<vault>:<ULID>` of a vault they don't have, or of a note that isn't there (or, in another vault, that can't be asked now); a `[[wikilink]]` to nothing | plain text, asked again when they come back to the applet (at most once a minute) | nothing: no guess |
 | any other web address | a link | the browser (with `links`) |
 
 The app looks a note up by its id only: an address or short form that names a path or a title is never asked for, and

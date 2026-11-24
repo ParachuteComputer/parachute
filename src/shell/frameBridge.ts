@@ -48,8 +48,8 @@ export type HostDeps = {
   /** Whose each vault is (vault/whose.ts), and the home vault's key. */
   whose?(r: VaultRecord): FrameVault["whose"];
   homeKey?(): string | null;
-  /** For errors from the vault: a message for the person. */
-  message(e: unknown): string;
+  /** For errors from the vault: a message for the person (`vault`: the vault the call named, by this device's key). */
+  message(e: unknown, vault?: string): string;
   now?: () => number;
 };
 
@@ -141,7 +141,7 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       pending++;
       run(req.method, req.params).finally(() => { pending--; }).then(
         (result) => post({ pf: PF, id: req.id, result: result ?? null }),
-        (e: unknown) => post({ pf: PF, id: req.id, error: e instanceof Error && e.message === "not_allowed" ? "not_allowed" : deps.message(e) }),
+        (e: unknown) => post({ pf: PF, id: req.id, error: e instanceof Error && e.message === "not_allowed" ? "not_allowed" : deps.message(e, typeof (req.params as { vault?: unknown } | undefined)?.vault === "string" ? (req.params as { vault: string }).vault : undefined) }),
       );
     },
     event<E extends keyof Events>(event: E, data: Events[E]) { post({ pf: PF, event, data }); },

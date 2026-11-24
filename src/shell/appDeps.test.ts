@@ -1,7 +1,7 @@
 // What an applet's note links cost: the same for every link, whatever it names, so the read budget can't tell an
 // applet which vault names the person holds.
 import { describe, expect, it, vi } from "vitest";
-import { MISS_MS, appDeps, noteFinder } from "./appDeps";
+import { MISS_MS, READ_MS, TAP_READ_MS, appDeps, noteFinder } from "./appDeps";
 
 describe("app.links", () => {
   it("charges each link the same, read or not", async () => {
@@ -37,8 +37,8 @@ describe("app.links through a real session", () => {
 describe("app.follow", () => {
   // the hub is the network: faked, answering when the test says
   const ID = "01KA3Z9V6B2W8XQJ4M7N5P0R1S";
-  async function setup() {
-    const { saveVault } = await import("../vault/store");
+  async function setup(own = false) {
+    const { saveVault, listVaults } = await import("../vault/store");
     saveVault({ issuer: "https://hub.example", vault: "kitchen", tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", accessToken: "t", scope: "vault:kitchen:read", addedAt: "" } as never);
     let answer: () => void = () => {};
     const gate = new Promise<void>((r) => { answer = r; });
@@ -51,8 +51,10 @@ describe("app.follow", () => {
     let active = true;
     Object.defineProperty(navigator, "userActivation", { configurable: true, get: () => ({ isActive: active }) });
     const went: string[] = [];
-    const d = appDeps((h) => went.push(h), () => frame, { pick: async () => [] });
-    return { d, went, answer, wearOff: () => { active = false; }, done: () => { globalThis.fetch = realFetch; frame.remove(); } };
+    const kitchen = () => listVaults().find((v) => v.vault === "kitchen") ?? null;
+    const d = appDeps((h) => went.push(h), () => frame, { pick: async () => [] }, own ? kitchen : () => null);
+    const other = appDeps((h) => went.push(h), () => frame, { pick: async () => [] });
+    return { d, other, went, answer, wearOff: () => { active = false; }, done: () => { globalThis.fetch = realFetch; frame.remove(); } };
   }
   it("a tap whose note answers at once opens it", async () => {
     const s = await setup();
@@ -62,6 +64,21 @@ describe("app.follow", () => {
       expect(await p).toBe(true);
       expect(s.went).toEqual([`/v/kitchen/n/${ID}`]);
     } finally { s.done(); }
+  });
+  it("a tap while the hub doesn't answer (off the tailnet) still opens the note's screen in the applet's own vault, before the tap wears off; another vault's goes nowhere (T-476)", async () => {
+    vi.useFakeTimers();
+    const s = await setup(true);
+    try {
+      const p = s.d.follow(`kitchen:${"01KA3Z9V6B2W8XQJ4M7N5P0R1V"}`, undefined, false);
+      await vi.advanceTimersByTimeAsync(TAP_READ_MS + 1);
+      expect(await p).toBe(true);
+      expect(s.went).toEqual([`/v/kitchen/n/01KA3Z9V6B2W8XQJ4M7N5P0R1V`]);
+      // a vault held but not the applet's: a guessed name must not move the person (it would say the name is held)
+      const q = s.other.follow(`kitchen:${"01KA3Z9V6B2W8XQJ4M7N5P0R1W"}`, undefined, false);
+      await vi.advanceTimersByTimeAsync(TAP_READ_MS + 1);
+      expect(await q).toBe(false);
+      expect(s.went).toHaveLength(1);
+    } finally { s.answer(); s.done(); vi.useRealTimers(); }
   });
   it("a slow answer moves no one once the tap has worn off", async () => {
     const s = await setup();
@@ -75,7 +92,35 @@ describe("app.follow", () => {
   });
 });
 
+describe("app.links while a hub can't be reached (T-476)", () => {
+  it("a note in the applet's own vault is a link; one in another vault held stays nothing, so no vault name is told", async () => {
+    const { saveVault, listVaults } = await import("../vault/store");
+    for (const vault of ["uni", "library"]) saveVault({ issuer: "https://hub.example", vault, tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", accessToken: "t", scope: `vault:${vault}:read`, addedAt: "" } as never);
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => { throw new TypeError("Failed to fetch"); }) as typeof fetch;
+    try {
+      const uni = listVaults().find((v) => v.vault === "uni")!;
+      const d = appDeps(() => {}, () => null, { pick: async () => [] }, () => uni, [], () => true);
+      expect(await d.links(["uni:01KA3Z9V6B2W8XQJ4M7N5P0R2A", "library:01KA3Z9V6B2W8XQJ4M7N5P0R2B"], undefined, () => {})).toEqual(["note", null]);
+    } finally { globalThis.fetch = realFetch; }
+  });
+});
+
 describe("noteFinder", () => {
+  it("a read the hub leaves hanging counts as not asked after READ_MS, and is asked again next time", async () => {
+    vi.useFakeTimers();
+    try {
+      let reads = 0;
+      const find = noteFinder(() => { reads++; return new Promise(() => {}); });
+      const asked = find({ key: "uni" } as never, "01KA3Z9V6B2W8XQJ4M7N5P0R1S");
+      const failed = expect(asked).rejects.toThrow(/in time/);
+      await vi.advanceTimersByTimeAsync(READ_MS + 1);
+      await failed;
+      void find({ key: "uni" } as never, "01KA3Z9V6B2W8XQJ4M7N5P0R1S").catch(() => {});
+      expect(reads).toBe(2);
+    } finally { vi.useRealTimers(); }
+  });
+
   it("a note the lookup doesn't take is kept no longer than a miss, so a later answer's speed can't say it is there", async () => {
     vi.useFakeTimers();
     try {
