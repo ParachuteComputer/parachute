@@ -20,8 +20,9 @@ const kitApp = (): { picture?: (url: string) => Promise<Got> } => ((globalThis a
 /** The root's own CSS, under the mail's (which may override any of it but the root itself). */
 const BASE = `
 :host { display: block; position: relative; contain: paint; }
-.pa-mail-fit { color: var(--text); font: var(--fs-body)/1.5 var(--sans); overflow-wrap: break-word; }
-:host(.pa-mail-paper) .pa-mail-fit { background: #ffffff; color: #1d1d1f; color-scheme: light; border-radius: var(--radius-card, 10px); padding: 12px; }
+:host(.pa-mail-paper) { background: #ffffff; color-scheme: light; border-radius: var(--radius-card, 10px); padding: 12px; }
+.pa-mail-fit { color: var(--text); font: var(--fs-body)/1.55 var(--serif); overflow-wrap: break-word; }
+:host(.pa-mail-paper) .pa-mail-fit { color: #1d1d1f; font-family: var(--sans); }
 a { color: var(--accent); }
 :host(.pa-mail-paper) a { color: #0b57d0; }
 img { max-width: 100%; height: auto; }
@@ -147,7 +148,7 @@ function HtmlMail({ html, pictures, onShowPictures, inline }: { html: string; pi
     root.replaceChildren(style(BASE), style(clean.css), fit);
     const size = () => {
       fit.style.removeProperty("zoom");
-      const wide = fit.scrollWidth, room = el.clientWidth;
+      const wide = fit.scrollWidth, room = fit.clientWidth;
       if (room > 0 && wide > room + 1) fit.style.setProperty("zoom", String(Math.max(0.4, room / wide)));
     };
     size();
@@ -183,7 +184,7 @@ function HtmlMail({ html, pictures, onShowPictures, inline }: { html: string; pi
 
   return <div className="pa-mail">
     {!pictures && clean.hidden > 0 && onShowPictures && <div className="pa-mail-pictures">
-      <span>Pictures are hidden, so the sender can't tell when you read this.</span>
+      <span title="So the sender can't tell when you read it">Pictures from the web are hidden.</span>
       <Button small onClick={onShowPictures}>Show pictures</Button>
     </div>}
     {pictures && failed > 0 && <p className="pa-mail-note">{failed === 1 ? "A picture" : `${failed} pictures`} couldn't load.</p>}

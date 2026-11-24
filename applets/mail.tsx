@@ -86,9 +86,7 @@ const CSS = `
 .held .body { white-space: pre-wrap; font: var(--fs-body)/1.55 var(--serif); }
 .msg + .msg { margin-top: 18px; }
 .msg.folded + .msg, .msg + .msg.folded { margin-top: 6px; }
-.msg .fold { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; width: 100%; text-align: left; align-items: baseline; border-top: 1px solid var(--line); border-radius: 0; padding: 8px 0; }
-.msg .fold .who { color: var(--text); font-weight: 600; }
-.msg .fold .pre { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg.folded .pre { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .files { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; } .files span { border: 1px solid var(--line); border-radius: var(--radius-field); padding: 2px 8px; font-size: var(--fs-small); }
 .compose .pa-write-box { min-height: 14em; }
 .review { border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); padding: 12px 14px; margin: 12px 0; background: var(--card-fill); box-shadow: var(--shadow-card); }
@@ -209,7 +207,7 @@ export default function Mail() {
     </> : list === null ? <Loading /> : !list.length ? <p className="quiet">{searched ? "Nothing found." : place === "later" ? "Nothing put off for later." : "Nothing here."}</p> :
       <List label={searched ? "Found" : placeName(place)} hideLabel rows={list.map((e) => ({
         key: e.id, strong: !e.keywords?.$seen, onPress: () => setView({ at: "read", id: e.id }), aside: when.short(e.receivedAt),
-        title: <>{place === "sent" || place === "drafts" ? `To ${who(e.to)}` : who(e.from)}{(sizes[e.threadId] ?? 1) > 1 && <span className="quiet"> {sizes[e.threadId]}</span>}{e.keywords?.$flagged && place !== "later" && <span className="flag" aria-label="in Later">⚑</span>}</>,
+        title: <>{place === "sent" || place === "drafts" ? `To ${who(e.to)}` : who(e.from)}{(sizes[e.threadId] ?? 1) > 1 && <span className="quiet"> ({sizes[e.threadId]})</span>}{e.keywords?.$flagged && place !== "later" && <span className="flag" aria-label="in Later">⚑</span>}</>,
         meta: lines(`${e.subject || "(no subject)"}${e.hasAttachment ? " · 📎" : ""}`, e.preview ?? ""),
       }))} />}
   </Page>;
@@ -318,9 +316,7 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
     {!emails ? (err ? null : <Loading />) : emails.map((e) => {
       const from = e.from?.[0];
       if (!opened.has(e.id)) return <article className="msg folded" key={e.id} aria-label={e.subject || "a message"}>
-        <Button kind="quiet" className="fold" onClick={() => setOpened((o) => new Set(o).add(e.id))}>
-          <span className="who">{who(e.from)}</span><span className="quiet">{when.short(e.receivedAt)}</span><span className="pre">{e.preview ?? ""}</span>
-        </Button>
+        <List label="An earlier message" hideLabel rows={[{ key: e.id, title: who(e.from), aside: when.short(e.receivedAt), meta: <span className="pre">{e.preview ?? ""}</span>, onPress: () => setOpened((o) => new Set(o).add(e.id)) }]} />
       </article>;
       const body = bodyOf(e);
       // pictures inline in its HTML are drawn there, not listed again as files

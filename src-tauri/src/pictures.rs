@@ -192,4 +192,15 @@ mod tests {
         assert!(reqwest::dns::Resolve::resolve(&r, name).await.is_err());
         assert!(fetch("http://127.0.0.1:9/x.png").await.is_err());
     }
+
+    /// Over the network (run by hand: `cargo test --lib pictures -- --ignored`): a real public PNG comes, checked; a
+    /// public page that isn't a picture is refused; a redirect to this device is refused.
+    #[tokio::test]
+    #[ignore]
+    async fn the_real_web() {
+        let png = fetch("https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png").await.expect("a public PNG");
+        assert_eq!(sniff(&png), Some("image/png"));
+        assert!(fetch("https://www.wikipedia.org/").await.is_err());
+        assert!(fetch("https://httpbin.org/redirect-to?url=http%3A%2F%2F127.0.0.1%2Fx.png").await.is_err());
+    }
 }

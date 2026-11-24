@@ -51,7 +51,7 @@ room reaches both.
 | Feature | State | Tested |
 |---|---|---|
 | Inbox, Drafts, Sent, Archive, Junk; unread count on Inbox | built | e2e/mail.spec.ts, real mail |
-| Reading a thread (text, or the words of an HTML message; never its HTML), marked seen | built | mail.spec: bob's message read, then shown as seen |
+| Reading a thread, marked seen: HTML mail drawn as HTML, safely (the kit's `MailBody`, [design/MAIL-READING.md](design/MAIL-READING.md)): links open, web pictures on **Show pictures** per sender (tracking pixels never), inline pictures at once, quoted replies folded; plain text with its links; older messages in a thread folded | built | mail.spec: bob's message read, then shown as seen; e2e/mailread.spec.ts, real mail: Apple and Google invites, a Stripe receipt, a Substack newsletter, a forwarded thread, plain text, inline pictures, a hostile mail; src/kit/mailClean.test.ts, each rule mutation-proved (scripts/mutate-mail.ts) |
 | Search | built (JMAP text search) | mail.spec |
 | Write, reply: save the draft, review exactly what will go, send | built | mail.spec: the reply reaches bob's inbox and is in Sent |
 | Open and send a draft; discard | built | not in a spec |
