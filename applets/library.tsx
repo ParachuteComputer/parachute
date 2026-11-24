@@ -810,13 +810,17 @@ function collectReadableBlocks(root: HTMLElement): DomBlock[] {
   // each block holds its own words: a list item with a list inside keeps "Rule one", its sub-items are blocks of their own
   const blocks: DomBlock[] = [];
   for (const el of candidates) {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    // a block inside this one is skipped whole: its words are its own block
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => n.nodeType === Node.ELEMENT_NODE
+        ? ((n as Element).matches(BLOCK_SELECTOR) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP)
+        : NodeFilter.FILTER_ACCEPT,
+    });
     const nodes: { node: Text; start: number; end: number }[] = [];
     let text = "";
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
       const t = n as Text;
       if (!t.nodeValue || isFootnoteMarker(t)) continue;
-      if (t.parentElement?.closest(BLOCK_SELECTOR) !== el) continue;
       const start = text.length;
       text += t.nodeValue;
       nodes.push({ node: t, start, end: text.length });
@@ -981,6 +985,13 @@ const ChapterProse = memo(function ChapterProse({
   const onBlockRef = useRef(onActiveBlock);
   onBlockRef.current = onActiveBlock;
   const scrolledKey = useRef("");
+  // a new body is a new Note (never redrawn under the marks); the marks effect runs on the same change
+  const bodyKey = useMemo(() => {
+    const b = chapter.body ?? "";
+    let h = 5381;
+    for (let i = 0; i < b.length; i++) h = ((h * 33) ^ b.charCodeAt(i)) >>> 0;
+    return `${chapter.id}|${b.length}|${h}`;
+  }, [chapter.id, chapter.body]);
 
   const quotesSig = useMemo(
     () => quotes.map((q) => `${q.record.id}:${q.text}:${q.block ?? ""}:${q.before}:${q.after}`).join("\n"),
@@ -1097,7 +1108,7 @@ const ChapterProse = memo(function ChapterProse({
       }}
     >
       <Note
-        key={`${chapter.id}|${chapter.updatedAt ?? ""}|${(chapter.body ?? "").length}`}
+        key={bodyKey}
         id={chapter.id}
         body={chapter.body ?? ""}
         path={chapter.path}
@@ -1501,7 +1512,9 @@ export default function Library() {
           const [booksRes, quotesRes, bookBodies] = await Promise.all([
             readFolder(q, { pathPrefix: BOOKS_FOLDER, includeFields: true }),
             readFolder(q, { pathPrefix: QUOTES_FOLDER, includeFields: true, includeBody: true }),
-            readFolder(q, { pathPrefix: BOOKS_FOLDER, tag: "book", includeFields: true, includeBody: true }),
+            // without them the covers show as words: not a reason to show nothing
+            readFolder(q, { pathPrefix: BOOKS_FOLDER, tag: "book", includeFields: true, includeBody: true })
+              .catch(() => ({ rows: [] as LibraryRecord[], capped: false })),
           ]);
           const merged = new Map<string, LibraryRecord>();
           for (const r of [...booksRes.rows, ...bookBodies.rows, ...quotesRes.rows]) {
@@ -1515,14 +1528,12 @@ export default function Library() {
             const depth = clean.slice(BOOKS_FOLDER.length).split("/").filter(Boolean).length;
             return depth === 1 && r.body === undefined && !str(r.fields?.cover);
           });
-          for (let i = 0; i < needsCoverBody.length; i += 6) {
-            await Promise.all(needsCoverBody.slice(i, i + 6).map(async (b) => {
-              try {
-                const full = await vault.getRecord(b.id) as LibraryRecord | null;
-                if (full) merged.set(full.id, { ...b, ...full });
-              } catch { /* its cover shows as words */ }
-            }));
-          }
+          await Promise.all(needsCoverBody.slice(0, 12).map(async (b) => {
+            try {
+              const full = await vault.getRecord(b.id) as LibraryRecord | null;
+              if (full) merged.set(full.id, { ...b, ...full });
+            } catch { /* its cover shows as words */ }
+          }));
           setCapped(booksRes.capped || quotesRes.capped);
           summaryAsked.current.clear(); // a refresh reads the summaries again too
           if (!mounted.current) return;
@@ -1553,7 +1564,7 @@ export default function Library() {
         const fresh = await vault.getRecord(bookId) as LibraryRecord | null;
         base = fresh?.updatedAt ?? null;
       }
-      if (!base) throw new Error("this book isn't in your library any more");
+      if (!base) throw new Error("the hub gave no version of this book to save against");
       const apply = async (ifUpdatedAt: string) =>
         await vault.updateRecord(bookId, { if_updated_at: ifUpdatedAt, fields: patch }) as LibraryRecord;
 
@@ -1731,12 +1742,15 @@ export default function Library() {
 
   // Load summary bodies on demand (the summary drawer, a book's contents and Summaries): a book's in one folder read,
   // any left one at a time; each asked once, so one that fails isn't asked again in a loop
-  const recordsRef = useRef(records);
-  recordsRef.current = records;
+  const bodyById = useMemo(() => new Set((records ?? []).filter((r) => r.body !== undefined).map((r) => r.id)), [records]);
+  const bodyByIdRef = useRef(bodyById);
+  bodyByIdRef.current = bodyById;
+  const [summaryFailed, setSummaryFailed] = useState<ReadonlySet<string>>(new Set());
   const ensureSummaryBodies = useCallback(async (ids: readonly string[], folder?: string) => {
-    const missing = ids.filter((id) => !summaryAsked.current.has(id) && recordsRef.current?.find((r) => r.id === id)?.body === undefined);
+    const missing = ids.filter((id) => !summaryAsked.current.has(id) && !bodyByIdRef.current.has(id));
     if (!missing.length) return;
     for (const id of missing) summaryAsked.current.add(id);
+    setSummaryFailed((prev) => (missing.some((id) => prev.has(id)) ? new Set([...prev].filter((id) => !missing.includes(id))) : prev));
     const got = new Map<string, LibraryRecord>();
     if (folder && missing.length > 1) {
       try {
@@ -1751,11 +1765,13 @@ export default function Library() {
         try {
           const r = await vault.getRecord(id) as LibraryRecord | null;
           if (r) got.set(r.id, r);
-        } catch { /* stays "Opening summary…"; asked again on the next load */ }
+        } catch { /* said in place, with Try again */ }
       }));
     }
     if (!mounted.current) return;
-    for (const id of missing) if (!got.has(id)) summaryAsked.current.delete(id);
+    const failed = missing.filter((id) => !got.has(id));
+    for (const id of failed) summaryAsked.current.delete(id);
+    if (failed.length) setSummaryFailed((prev) => new Set([...prev, ...failed]));
     if (!got.size) return;
     setSummaryBodies((prev) => {
       const next = { ...prev };
@@ -2179,7 +2195,9 @@ export default function Library() {
                   )}
                   {rec.body !== undefined
                     ? <Note id={rec.id} body={rec.body} path={rec.path} tags={rec.tags} fields={rec.fields} onLink={handleChapterLink} />
-                    : <Loading>Opening summary…</Loading>}
+                    : summaryFailed.has(rec.id)
+                      ? <Problem error={null} onRetry={() => void ensureSummaryBodies([rec.id])}>Could not open this summary.</Problem>
+                      : <Loading>Opening summary…</Loading>}
                 </div>
               );
             })}
@@ -2354,7 +2372,9 @@ export default function Library() {
                     )}
                     {full.body !== undefined
                       ? <Note id={full.id} body={full.body} path={full.path} tags={full.tags} fields={full.fields} onLink={handleChapterLink} />
-                      : <Loading>Opening summary…</Loading>}
+                      : summaryFailed.has(full.id)
+                        ? <Problem error={null} onRetry={() => void ensureSummaryBodies([full.id])}>Could not open this summary.</Problem>
+                        : <Loading>Opening summary…</Loading>}
                   </div>
                 );
               })
@@ -2420,7 +2440,9 @@ export default function Library() {
                 <div key={sid} className="lib-summary-block">
                   {rec.body !== undefined
                     ? <Note id={rec.id} body={rec.body} path={rec.path} tags={rec.tags} fields={rec.fields} onLink={handleChapterLink} />
-                    : <Loading>Opening summary…</Loading>}
+                    : summaryFailed.has(rec.id)
+                      ? <Problem error={null} onRetry={() => void ensureSummaryBodies([rec.id])}>Could not open this summary.</Problem>
+                      : <Loading>Opening summary…</Loading>}
                 </div>
               );
             })}
