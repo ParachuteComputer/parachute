@@ -169,6 +169,8 @@ declare module "parachute" {
     follow(link: string, opts?: { from?: string; choose?: boolean }): Promise<boolean>;
     address(noteId: string): Promise<string | null>;
     openLink(url: string): Promise<boolean>;
+    /** With `pictures`: a web picture the shell fetched (public addresses only, 10 MB, PNG/JPEG/GIF/WebP). MailBody asks it. */
+    picture(url: string): Promise<{ type: string; bytes: ArrayBuffer }>;
     save(name: string, bytes: ArrayBuffer | ArrayBufferView, type: string): Promise<{ saved: string }>;
     pick(opts?: { accept?: string; multiple?: boolean }): Promise<{ name: string; type: string; bytes: ArrayBuffer }[]>;
   };
@@ -252,6 +254,10 @@ declare module "parachute" {
   /** `id`: the record's, in its own vault: the pictures attached to it are drawn. `fetchBlob`: a picture's bytes, in place
    *  of `id`'s (Vault's, for a record of any vault). */
   export function Note(props: { id?: string; body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void; fetchBlob?: (src: string) => Promise<Blob> }): ReactNode;
+  /** A message's body as a good mail app draws it: `html` (cleaned, in a shadow root of its own; web pictures only with
+   *  `pictures`, which needs the app's `pictures`; its links open with `links`) or else `text` (its addresses links, a
+   *  quoted reply folded). `inline(cid)`: one of the message's own parts, for an inline picture. Level 9. */
+  export function MailBody(props: { html?: string | null; text?: string | null; pictures?: boolean; onShowPictures?: () => void; inline?: (cid: string) => Promise<Blob | null> }): ReactNode;
   export function Link(props: { to: string; from?: string; children?: ReactNode }): ReactNode;
   export function Linked(props: { text: string; web?: boolean }): ReactNode;
   export const link: {

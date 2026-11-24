@@ -6,6 +6,7 @@ export { Button, Loading, Page, Pages, Problem, Record, Search, still, Tabs, toa
 export { when } from "../../../src/kit/when.ts";
 export { Fields, Table } from "../../../src/kit/parts-data.tsx";
 export { Note } from "../../../src/kit/parts-note.tsx";
+export { MailBody } from "../../../src/kit/parts-mail.tsx";
 export { useTheme } from "../../../src/kit/useTheme.ts";
 export { Drawer } from "../../../src/kit/drawer.tsx";
 export { Link, Linked, link } from "../../../src/kit/links.tsx";

@@ -1,7 +1,7 @@
 // The shell's answers to an applet's `app` calls (applet/modules/app.ts), from what the shell holds.
 import type { Note } from "@openparachute/surface-client";
 import { notTapped, type AppDeps, type PickedFile, type RecentNote } from "../applet/modules/app";
-import { openLinkOut, saveFileOut } from "./device";
+import { openLinkOut, pictureOut, saveFileOut } from "./device";
 import { markTap } from "../open/mark";
 import { clientFor, keptClientFor } from "../vault/client";
 import { isAppOwn, noteHref, titleOnly } from "../vault/notes";
@@ -168,6 +168,7 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
       await openLinkOut(url);
       return true;
     },
+    picture: (url) => pictureOut(url),
     async save(name, bytes, type) {
       if (!tappingInApplet()) throw notTapped();
       return saveFileOut(name, bytes, type);

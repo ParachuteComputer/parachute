@@ -38,7 +38,11 @@ const shown = (l: Locator) => l.evaluate((root) => {
   const walk = (n: Node): string => {
     let out = "";
     for (const c of Array.from(n.childNodes)) {
-      if (c.nodeType === Node.TEXT_NODE) { const p = c.parentElement; if (p && p.checkVisibility({ visibilityProperty: true, opacityProperty: true })) out += (c as Text).data; }
+      if (c.nodeType === Node.TEXT_NODE) {
+        // drawn: its element is visible, and it isn't folded away in a closed <details> (but its summary)
+        const p = c.parentElement, fold = p?.closest("details");
+        if (p && p.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && !(fold && !fold.open && !p.closest("summary"))) out += (c as Text).data;
+      }
       else if (c instanceof Element) {
         if (c.shadowRoot) out += ` ${walk(c.shadowRoot)} `;
         if (!["STYLE", "SCRIPT", "TEMPLATE", "NOSCRIPT"].includes(c.tagName)) out += ` ${walk(c)} `;
@@ -48,6 +52,8 @@ const shown = (l: Locator) => l.evaluate((root) => {
   };
   return walk(root).replace(/\s+/g, " ").trim();
 });
+/** A message's body: its words without the sender's name and the date above them. */
+const bodyIn = (article: Locator) => article.locator(".body");
 /** CSS, tags or entities shown as words: what raw HTML drawn as text looks like. */
 const RAW = /[{}]|@media|@import|font-family|!important|mso-|<\/?[a-z][a-z0-9]*[\s>/]|&(?:nbsp|amp|lt|gt|quot);/i;
 const inOrder = (text: string, words: string[]) => { const at = words.map((w) => text.indexOf(w)); expect(at.every((i) => i >= 0), `all of ${JSON.stringify(words)} in: ${text.slice(0, 400)}`).toBe(true); expect(at, "in the sender's order").toEqual([...at].sort((a, b) => a - b)); };
@@ -60,9 +66,11 @@ async function openMail(page: Page) {
   const fetched: string[] = [];
   // the made-up senders' own hosts: any request to one is recorded, and a picture is answered with a small PNG
   await page.context().route(/^https?:\/\/[^/]*example(-apple)?\.test\//, (route) => {
-    fetched.push(route.request().url());
+    // a link opened in a new tab is the browser going there, not the mail loading something
+    if (!route.request().isNavigationRequest()) fetched.push(route.request().url());
     return route.fulfill({ status: 200, headers: { "content-type": "image/png", "access-control-allow-origin": "*" }, body: PNG });
   });
+  if (process.env.MAIL_DEBUG) page.on("console", (m) => console.log(`[console ${m.type()}] ${m.text()}`));
   const dialogs: string[] = [];
   page.on("dialog", (d) => { dialogs.push(d.message()); void d.dismiss(); });
   const note = await record(hubState(), "create", appletRecord("mail", { mail: `${proxy.url}/mail/` }));
@@ -88,6 +96,8 @@ async function openMail(page: Page) {
 async function opens(page: Page, app: FrameLocator | Locator, name: string | RegExp, href: string) {
   const link = app.getByRole("link", { name });
   await expect(link).toBeVisible();
+  // the shell opens one link a second (applet/files.ts LINK_GAP_MS); a person's taps are further apart than a test's
+  await page.waitForTimeout(1100);
   const tab = page.context().waitForEvent("page");
   await link.click();
   const opened = await tab;
@@ -101,7 +111,7 @@ test("an Apple invite with no plain text is drawn as HTML: no CSS shows, Accept 
   try {
     const a = await m.read("apple-invite.eml");
     await expect(a.getByText("Garden Supper", { exact: true })).toBeVisible();
-    const text = await shown(a);
+    const text = await shown(bodyIn(a));
     expect(text).not.toMatch(RAW);
     inOrder(text, ["Garden Supper", "Saturday, 28 November", "Bring a dish to share", "Accept Invitation", "Can't make it", "View in Apple Invites", "Apple Invites"]);
     // the hidden preheader stays hidden
@@ -130,7 +140,7 @@ test("a Stripe receipt, a Substack newsletter and a Google invite: words in orde
   const m = await openMail(page);
   try {
     const r = await m.read("stripe-receipt.eml");
-    let text = await shown(r);
+    let text = await shown(bodyIn(r));
     expect(text).not.toMatch(RAW);
     inOrder(text, ["Receipt from Fern & Fig Nursery", "Receipt #2291-4471", "Amount paid", "$42.50", "Basil seedlings × 6", "$18.00", "Terracotta pot (large)", "our help page", "Download receipt"]);
     await opens(page, r, "our help page", "https://fernandfig.example.test/help");
@@ -138,7 +148,7 @@ test("a Stripe receipt, a Substack newsletter and a Google invite: words in orde
     await m.back();
 
     const n = await m.read("substack-newsletter.eml");
-    text = await shown(n);
+    text = await shown(bodyIn(n));
     expect(text).not.toMatch(RAW);
     inOrder(text, ["View in browser", "Winter sowing, and why it works", "Milk jugs, a sharp knife, and patience", "Here is the method I use every January", "The cold does the work", "Patience is the main ingredient", "Leave a comment", "Unsubscribe"]);
     await opens(page, n, "Leave a comment", "https://substack.example.test/redirect/3/eyJlIjoiaHR0cHM6Ly9zbG93Z2FyZGVuL2NvbW1lbnRzIn0");
@@ -152,7 +162,7 @@ test("a Stripe receipt, a Substack newsletter and a Google invite: words in orde
     await m.back();
 
     const g = await m.read("google-invite.eml");
-    text = await shown(g);
+    text = await shown(bodyIn(g));
     expect(text).not.toMatch(RAW);
     inOrder(text, ["Seed swap planning", "When", "Tuesday 1 Dec 2026", "Join with Google Meet", "Going (alice@test.test)?", "Yes", "No", "Maybe", "more options"]);
     await opens(page, g, "Join with Google Meet", "https://meet.example.test/abc-defg-hij");
@@ -171,24 +181,25 @@ test("plain text and a forwarded thread: links are links, long lines wrap, quote
     // the long address wraps inside the screen
     const wide = await p.evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
     expect(wide).toBe(true);
-    let text = await shown(p);
+    let text = await shown(bodyIn(p));
     inOrder(text, ["Yes, Saturday works", "I'll bring the long thermos", "Ruth"]);
     expect(text).not.toContain("Does Saturday still work for the mesa loop?");
-    await p.getByRole("button", { name: /quoted text/i }).click();
+    await p.getByText("Quoted text").click();
     await expect(p.getByText("Does Saturday still work for the mesa loop?")).toBeVisible();
     await m.back();
 
     const f = await m.read("forwarded-thread.eml");
-    text = await shown(f);
+    text = await shown(bodyIn(f));
     expect(text).not.toMatch(RAW);
     inOrder(text, ["Alice, see below. Can you take this one?", "Forwarded message", "Dan Ortiz", "The shutoff is behind the shed"]);
     // the forwarded message is what was sent, so it shows; the reply it quotes folds
     expect(text).not.toContain("the line to plot 14 froze again");
-    await opens(page, f, "dan@ortiz.example.test", "mailto:dan@ortiz.example.test");
+    // a mail address is a link too (the browser hands mailto: to the mail program, so no tab opens to check)
+    await expect(f.getByRole("link", { name: "dan@ortiz.example.test" })).toHaveAttribute("href", "mailto:dan@ortiz.example.test");
     await m.back();
 
     const c = await m.read("calendar-invite.eml");
-    inOrder(await shown(c), ["Jordan Lee has invited you to Compost workday", "Bring gloves"]);
+    inOrder(await shown(bodyIn(c)), ["Jordan Lee has invited you to Compost workday", "Bring gloves"]);
     await expect(m.app.getByRole("button", { name: /Save Compost workday\.ics/ })).toBeVisible();
   } finally { await m.done(); }
 });

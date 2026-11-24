@@ -5,13 +5,15 @@
 // keyword (the Inbox leaves a Later thread out until something new comes in on it); Waiting is the sends from Uni's
 // account its outbound rules hold for the owner, each approved (signed with the approval key) or declined here.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { app, Button, Field, Linked, List, Loading, Page, Problem, ready, Search, services, signal, Tabs, toast, useSaved, when, Write } from "parachute";
+import { app, Button, Field, Linked, List, Loading, MailBody, Page, Problem, ready, Search, services, signal, Tabs, toast, useSaved, when, Write } from "parachute";
 
 type Addr = { name?: string | null; email: string };
 type Email = { id: string; threadId: string; mailboxIds: Record<string, boolean>; keywords: Record<string, boolean>; from?: Addr[]; to?: Addr[]; replyTo?: Addr[]; cc?: Addr[]; subject?: string; receivedAt: string; preview?: string; hasAttachment?: boolean;
-  textBody?: { partId: string }[]; htmlBody?: { partId: string }[]; bodyValues?: Record<string, { value: string }>; attachments?: File[] };
-/** A file that came with a message (JMAP's EmailBodyPart): its bytes are the gateway's `raw` of its blob. */
-type File = { blobId?: string; name?: string | null; type?: string; size?: number };
+  textBody?: Part[]; htmlBody?: Part[]; bodyValues?: Record<string, { value: string; isTruncated?: boolean }>; attachments?: File[] };
+type Part = { partId: string; type?: string };
+/** A file that came with a message (JMAP's EmailBodyPart): its bytes are the gateway's `raw` of its blob. An inline
+ *  picture has the Content-ID its HTML names it by (`cid:`). */
+type File = { blobId?: string; name?: string | null; type?: string; size?: number; cid?: string | null; disposition?: string | null };
 type Box = { id: string; name: string; role: string | null; unreadEmails?: number; totalEmails?: number };
 type Session = { account: string; primaryAccounts: Record<string, string>; accounts: Record<string, { name: string }>; roles: Record<string, string>; operations: Record<string, string[]> };
 type View = { at: "list" } | { at: "read"; id: string } | { at: "compose"; draft?: Draft; reply?: Email } | { at: "held"; opId: string };
@@ -54,8 +56,20 @@ const LIST_PROPS = ["threadId", "mailboxIds", "keywords", "from", "to", "replyTo
 const who = (a?: Addr[]) => (a ?? []).map((x) => x.name || x.email).join(", ") || "(nobody)";
 const addrs = (s: string): Addr[] => s.split(/[,;]/).map((x) => x.trim()).filter(Boolean).map((x) => { const m = /^(.*)<([^>]+)>$/.exec(x); return m ? { name: m[1].trim().replace(/^"|"$/g, "") || undefined, email: m[2].trim() } : { email: x }; });
 const addrLine = (a: Addr[]) => a.map((x) => (x.name ? `${x.name} <${x.email}>` : x.email)).join(", ");
-/** The text of an HTML body, never the HTML: drawn as words only. */
-const htmlText = (html: string) => { const d = new DOMParser().parseFromString(html, "text/html"); d.querySelectorAll("script,style").forEach((n) => n.remove()); return (d.body.innerText || d.body.textContent || "").replace(/\n{3,}/g, "\n\n").trim(); };
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+/** A message's body as the kit's MailBody takes it: its HTML when it has an HTML part (JMAP lists an HTML-only
+ *  message's one part in textBody too, so the parts' types decide, not the list), else its text. A plain part among
+ *  HTML ones keeps its place, as text. */
+function bodyOf(e: Email): { html?: string; text?: string; cut: boolean } {
+  const value = (p: Part) => e.bodyValues?.[p.partId]?.value ?? "";
+  const cut = Object.values(e.bodyValues ?? {}).some((v) => v.isTruncated);
+  const html = e.htmlBody ?? [];
+  if (html.some((p) => p.type === "text/html")) return { html: html.map((p) => (p.type === "text/html" ? value(p) : `<pre>${esc(value(p))}</pre>`)).join("\n"), cut };
+  return { text: (e.textBody ?? []).filter((p) => p.type !== "text/html").map(value).join("\n").trim(), cut };
+}
+const sender = (e: Email) => (e.from?.[0]?.email ?? "").toLowerCase();
+/** The Content-ID a part's HTML names it by, without its angle brackets. */
+const cidOf = (f: File) => (f.cid ?? "").trim().replace(/^<|>$/g, "");
 
 const CSS = `
 .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
@@ -65,10 +79,16 @@ const CSS = `
 .mail .subj { color: var(--text); }
 .mail .pa-strong .subj { font-weight: 700; }
 .flag { margin-left: 6px; }
-.msg h2 { font: var(--title-weight) var(--fs-head)/1.2 var(--serif); margin: 6px 0; }
-.msg .meta { color: var(--muted); font-size: var(--fs-small); margin-bottom: 10px; }
-.msg .body { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-body)/1.55 var(--serif); border-top: 1px solid var(--line); padding-top: 12px; }
-.msg + .msg { margin-top: 26px; }
+.msg h2, .thread-subject { font: var(--title-weight) var(--fs-head)/1.2 var(--serif); margin: 6px 0 12px; overflow-wrap: anywhere; }
+.msg .meta { color: var(--muted); font-size: var(--fs-small); margin-bottom: 10px; overflow-wrap: anywhere; }
+.msg .meta .who { color: var(--text); font-weight: 600; }
+.msg .body { overflow-wrap: anywhere; border-top: 1px solid var(--line); padding-top: 12px; }
+.held .body { white-space: pre-wrap; font: var(--fs-body)/1.55 var(--serif); }
+.msg + .msg { margin-top: 18px; }
+.msg.folded + .msg, .msg + .msg.folded { margin-top: 6px; }
+.msg .fold { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; width: 100%; text-align: left; align-items: baseline; border-top: 1px solid var(--line); border-radius: 0; padding: 8px 0; }
+.msg .fold .who { color: var(--text); font-weight: 600; }
+.msg .fold .pre { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .files { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; } .files span { border: 1px solid var(--line); border-radius: var(--radius-field); padding: 2px 8px; font-size: var(--fs-small); }
 .compose .pa-write-box { min-height: 14em; }
 .review { border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); padding: 12px 14px; margin: 12px 0; background: var(--card-fill); box-shadow: var(--shadow-card); }
@@ -86,6 +106,8 @@ export default function Mail() {
   // which box it was on is kept, so Mail opens there again
   const [place, setPlace] = useSaved("place", "inbox");
   const [list, setList] = useState<Email[] | null>(null);
+  // how many messages each listed thread has (a thread is one row in the Inbox, Archive and Later)
+  const [sizes, setSizes] = useState<Record<string, number>>({});
   const [q, setQ] = useState("");
   const [searched, setSearched] = useState<string | null>(null);
   const [view, setView] = useState<View>({ at: "list" });
@@ -127,10 +149,13 @@ export default function Mail() {
         : place === "later" ? { operator: "AND", conditions: [{ someInThreadHaveKeyword: "$flagged", ...(away.length ? { inMailboxOtherThan: away } : {}) }, { notKeyword: "$draft" }] }
         : place === "inbox" ? { operator: "AND", conditions: [{ inMailbox: box!.id }, NOT_LATER] }
         : { inMailbox: box!.id };
+      const threads = !searched && ["inbox", "archive", "later"].includes(place);
       const res = await jmap([
-        ["Email/query", { accountId: account, filter, sort: [{ property: "receivedAt", isAscending: false }], ...(place === "later" && !searched ? { collapseThreads: true } : {}), limit: 60 }, "q"],
+        ["Email/query", { accountId: account, filter, sort: [{ property: "receivedAt", isAscending: false }], ...(threads ? { collapseThreads: true } : {}), limit: 60 }, "q"],
         ["Email/get", { accountId: account, "#ids": { resultOf: "q", name: "Email/query", path: "/ids" }, properties: LIST_PROPS }, "g"],
+        ...(threads ? [["Thread/get", { accountId: account, "#ids": { resultOf: "g", name: "Email/get", path: "/list/*/threadId" } }, "t"]] : []),
       ]);
+      setSizes(Object.fromEntries(((res.find((x) => x[0] === "Thread/get")?.[1].list ?? []) as { id: string; emailIds: string[] }[]).map((t) => [t.id, t.emailIds.length])));
       setList((res.find((x) => x[0] === "Email/get")?.[1].list ?? []) as Email[]);
     } catch (e: any) { setErr({ lead: `Couldn't read ${searched ? "the search" : placeName(place) ?? place}`, e, retry: () => void load() }); setList([]); }
   };
@@ -184,7 +209,7 @@ export default function Mail() {
     </> : list === null ? <Loading /> : !list.length ? <p className="quiet">{searched ? "Nothing found." : place === "later" ? "Nothing put off for later." : "Nothing here."}</p> :
       <List label={searched ? "Found" : placeName(place)} hideLabel rows={list.map((e) => ({
         key: e.id, strong: !e.keywords?.$seen, onPress: () => setView({ at: "read", id: e.id }), aside: when.short(e.receivedAt),
-        title: <>{place === "sent" || place === "drafts" ? `To ${who(e.to)}` : who(e.from)}{e.keywords?.$flagged && place !== "later" && <span className="flag" aria-label="in Later">⚑</span>}</>,
+        title: <>{place === "sent" || place === "drafts" ? `To ${who(e.to)}` : who(e.from)}{(sizes[e.threadId] ?? 1) > 1 && <span className="quiet"> {sizes[e.threadId]}</span>}{e.keywords?.$flagged && place !== "later" && <span className="flag" aria-label="in Later">⚑</span>}</>,
         meta: lines(`${e.subject || "(no subject)"}${e.hasAttachment ? " · 📎" : ""}`, e.preview ?? ""),
       }))} />}
   </Page>;
@@ -241,17 +266,22 @@ function HeldSend({ h, name, ops, decided, back }: { h: Held; name: string; ops:
 function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: string; account: string; me: string; can: (o: string) => boolean; back: () => void; reply: (e: Email) => void; edit: (d: Draft) => void; inDrafts: boolean }) {
   const [emails, setEmails] = useState<Email[] | null>(null);
   const [err, setErr] = useState<unknown>(null);
+  // the senders whose web pictures the person showed: they show at once from then on (on this device)
+  const [pictured, setPictured] = useSaved<string[]>("pictures", []);
+  // the messages open: the newest, and any not read yet; an older one opens on a tap
+  const [opened, setOpened] = useState<Set<string>>(new Set());
   useEffect(() => {
     (async () => {
       try {
         const res = await jmap([
           ["Email/get", { accountId: account, ids: [id], properties: ["threadId"] }, "a"],
           ["Thread/get", { accountId: account, "#ids": { resultOf: "a", name: "Email/get", path: "/list/*/threadId" } }, "t"],
-          ["Email/get", { accountId: account, "#ids": { resultOf: "t", name: "Thread/get", path: "/list/*/emailIds" }, properties: [...LIST_PROPS, "cc", "textBody", "htmlBody", "bodyValues", "attachments"], fetchTextBodyValues: true, fetchHTMLBodyValues: true, maxBodyValueBytes: 200000 }, "g"],
+          ["Email/get", { accountId: account, "#ids": { resultOf: "t", name: "Thread/get", path: "/list/*/emailIds" }, properties: [...LIST_PROPS, "cc", "textBody", "htmlBody", "bodyValues", "attachments"], fetchTextBodyValues: true, fetchHTMLBodyValues: true, maxBodyValueBytes: 500000 }, "g"],
         ]);
         const list = (res.find((x) => x[2] === "g")?.[1].list ?? []) as Email[];
         list.sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
         setEmails(list);
+        setOpened(new Set(list.filter((e, i) => i === list.length - 1 || !e.keywords?.$seen).map((e) => e.id)));
         const unseen = list.filter((e) => !e.keywords?.$seen && !e.keywords?.$draft).map((e) => e.id);
         if (unseen.length && can("mark_seen")) await op("mark_seen", account, { emailIds: unseen, seen: true }).catch(() => {});
       } catch (e: any) { setErr(e); }
@@ -261,11 +291,6 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
   // a reply answers the newest message someone else sent; in a thread of only mine, it goes to whom mine went
   const mine = (e: Email) => (e.from ?? []).some((a) => a.email.toLowerCase() === me.toLowerCase());
   const answering = emails ? [...emails].reverse().find((e) => !e.keywords?.$draft && !mine(e)) ?? (last ? { ...last, replyTo: last.to } : undefined) : undefined;
-  const bodyOf = (e: Email) => {
-    const t = (e.textBody ?? []).map((p) => e.bodyValues?.[p.partId]?.value ?? "").join("\n").trim();
-    if (t) return t;
-    return htmlText((e.htmlBody ?? []).map((p) => e.bodyValues?.[p.partId]?.value ?? "").join("\n"));
-  };
   // what an action said stays on screen until the next one (a toast says it too)
   const [said, setSaid] = useState<string | null>(null);
   const act = async (name: string, args: Record<string, unknown>, words: string) => { setSaid(null); try { await op(name, account, args); toast(words); return true; } catch (e: any) { const t = `${words.split(" ")[0]} didn't happen: ${e?.message ?? e}`; toast(t, { error: true }); setSaid(t); return false; } };
@@ -279,14 +304,36 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
     if (!ids.length || !(await act("flag", { emailIds: ids, flagged: on }, on ? "Put off for later." : "Not later any more."))) return;
     setEmails((es) => es && es.map((e) => (ids.includes(e.id) ? { ...e, keywords: { ...e.keywords, $flagged: on } } : e)));
   };
+  /** One of a message's own parts (an inline picture), from the gateway. */
+  const part = (e: Email) => async (cid: string) => {
+    const f = (e.attachments ?? []).find((a) => cidOf(a) === cid && a.blobId && /^image\//i.test(a.type ?? ""));
+    if (!f) return null;
+    const r: any = await services.fetch("mail", "raw", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountId: account, blobId: f.blobId }), as: "bytes" });
+    return r.status < 300 ? new Blob([r.body], { type: f.type }) : null;
+  };
+  const subject = emails?.[0]?.subject || last?.subject || "(no subject)";
   return <Page back={{ label: "Mail", onPress: back }}>
     {err ? <Problem error={err}>Couldn't read it</Problem> : null}
-    {!emails ? (err ? null : <Loading />) : emails.map((e) => <article className="msg" key={e.id} aria-label={e.subject || "a message"}>
-      <h2>{e.subject || "(no subject)"}</h2>
-      <div className="meta">From {who(e.from)} · to {who(e.to)}{e.cc?.length ? ` · cc ${who(e.cc)}` : ""} · {when.full(e.receivedAt)}</div>
-      <div className="body"><Linked text={bodyOf(e)} /></div>
-      {!!e.attachments?.length && <div className="files">{e.attachments.map((a, i) => <SaveFile key={a.blobId ?? i} account={account} file={a} />)}</div>}
-    </article>)}
+    {emails && <h2 className="thread-subject">{subject}</h2>}
+    {!emails ? (err ? null : <Loading />) : emails.map((e) => {
+      const from = e.from?.[0];
+      if (!opened.has(e.id)) return <article className="msg folded" key={e.id} aria-label={e.subject || "a message"}>
+        <Button kind="quiet" className="fold" onClick={() => setOpened((o) => new Set(o).add(e.id))}>
+          <span className="who">{who(e.from)}</span><span className="quiet">{when.short(e.receivedAt)}</span><span className="pre">{e.preview ?? ""}</span>
+        </Button>
+      </article>;
+      const body = bodyOf(e);
+      // pictures inline in its HTML are drawn there, not listed again as files
+      const files = (e.attachments ?? []).filter((a) => !(body.html && cidOf(a) && a.disposition !== "attachment" && body.html.includes(`cid:${cidOf(a)}`)));
+      const s = sender(e);
+      return <article className="msg" key={e.id} aria-label={e.subject || "a message"}>
+        <div className="meta"><b className="who">{from?.name || from?.email || "(nobody)"}</b>{from?.name && <span className="quiet"> {from.email}</span>}<span className="quiet"> · {when.full(e.receivedAt)}</span>
+          <div className="quiet">to {who(e.to)}{e.cc?.length ? ` · cc ${who(e.cc)}` : ""}</div></div>
+        <div className="body"><MailBody html={body.html} text={body.text} inline={part(e)} pictures={!!s && pictured.includes(s)} onShowPictures={s ? () => setPictured([...pictured.filter((x) => x !== s), s].slice(-500)) : undefined} /></div>
+        {body.cut && <p className="quiet">This message is long: its end isn't shown here.</p>}
+        {!!files.length && <div className="files">{files.map((a, i) => <SaveFile key={a.blobId ?? i} account={account} file={a} />)}</div>}
+      </article>;
+    })}
     {last && <div className="bar" style={{ marginTop: 16 }}>
       {inDrafts && last.keywords?.$draft && can("draft.save") ? <Button kind="primary" onClick={async () => { const r = await op("draft.review", account, { draftId: last.id }); edit({ draftId: last.id, fingerprint: r.fingerprint, fields: { to: r.fields.to ?? [], cc: r.fields.cc ?? [], bcc: r.fields.bcc ?? [], subject: r.fields.subject ?? "", text: r.fields.text ?? "" } }); }}>Open the draft</Button>
         : can("draft.save") && answering && <Button kind="primary" onClick={() => reply(answering)}>Reply</Button>}

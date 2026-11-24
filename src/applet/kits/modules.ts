@@ -16,6 +16,8 @@ export const PART_LEVEL = {
   Drawer: 4,
   // the look (T-476, docs/LOOK.md): whether nothing should move now
   still: 7, Pages: 7,
+  // reading mail (T-476): a message's body, its HTML drawn safely in a shadow root of its own
+  MailBody: 9,
 } as const;
 export type PartName = keyof typeof PART_LEVEL;
 export const PART_NAMES = Object.keys(PART_LEVEL) as PartName[];

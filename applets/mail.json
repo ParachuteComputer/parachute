@@ -11,7 +11,8 @@
       "note": "your mail, through your mail gateway",
       "access": []
     },
-    "app": ["open", "save"],
+    "needs": 9,
+    "app": ["open", "links", "pictures", "save"],
     "services": [{ "id": "mail", "kind": "http", "url": "{{mail}}", "auth": "nip98", "approve": { "field": "op", "ops": ["send.approve"] } }],
     "signals": [{ "id": "unread", "name": "unread mail", "from": { "service": "mail", "feed": "unread" }, "via": "{{push?}}" }]
   }
