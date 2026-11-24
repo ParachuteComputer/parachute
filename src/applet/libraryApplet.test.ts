@@ -289,6 +289,19 @@ describe("Quote body, reading position (`at`), cover extraction, and library org
     expect(walden.quotes[0].note).toBe("Core thesis.");
     expect(api.markdownPreview("# Heading\n\nShelter, **food**, and [[Books/Walden|cost]].")).toBe("Shelter, food, and cost.");
   });
+
+  it("keeps chapters outside any part where the book has them: an epilogue after the last part stays at the end", () => {
+    const ch = (id: string, order: number, part?: string): LibraryRecord => ({ id, path: `Books/Garden/${String(order).padStart(2, "0")} ${id}`, updatedAt: "2026-11-23T09:00:00Z", tags: ["chapter"], fields: { book: "Books/Garden", order, ...(part ? { part: `Books/Garden/${part}` } : {}) } });
+    const recs: LibraryRecord[] = [
+      { id: "b", path: "Books/Garden", updatedAt: "2026-11-23T10:00:00Z", tags: ["book"], fields: {}, body: "" },
+      ch("front", 0), ch("intro", 1), ch("partone", 2), ch("seeds", 3, "02 partone"), ch("water", 4, "02 partone"),
+      ch("parttwo", 5), ch("picking", 6, "05 parttwo"), ch("epilogue", 7), ch("thanks", 8),
+    ];
+    const g = api.organizeLibrary(recs).books[0].groups;
+    expect(g.map((x) => [x.part?.id ?? null, x.chapters.map((c) => c.id)])).toEqual([
+      [null, ["front", "intro"]], ["partone", ["seeds", "water"]], ["parttwo", ["picking"]], [null, ["epilogue", "thanks"]],
+    ]);
+  });
 });
 
 describe("applets/library record validation and TypeScript check", () => {

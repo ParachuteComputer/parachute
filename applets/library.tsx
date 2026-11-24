@@ -672,7 +672,11 @@ function organizeLibrary(records: readonly LibraryRecord[]): OrganizedLibrary {
         const g = ensureGroup(key, partHit?.chapter ?? null, title);
         g.chapters.push(ch);
       } else {
-        const g = ensureGroup("__front__", null, "");
+        // outside any part: with the loose chapters just before it, else a group of its own where it falls (an
+        // introduction before the first part, an epilogue after the last)
+        const last = orderedGroups[orderedGroups.length - 1];
+        const g = last && !last.part && byPart.get(`__loose__${orderedGroups.length - 1}`) === last
+          ? last : ensureGroup(`__loose__${orderedGroups.length}`, null, "");
         g.chapters.push(ch);
       }
     }
@@ -2320,8 +2324,8 @@ export default function Library() {
                 return (
                   <List
                     key={grp.part?.id ?? `g-${gi}`}
-                    label={grp.title || "Contents"}
-                    hideLabel={!grp.title && currentBook.groups.length === 1}
+                    label={grp.title || (gi === 0 ? "Contents" : "Contents, continued")}
+                    hideLabel={!grp.title && (currentBook.groups.length === 1 || gi > 0)}
                     rows={groupChapters.map((ch) => {
                       const isPart = grp.part?.id === ch.id;
                       const chKey = stripMd(ch.path).toLowerCase();
