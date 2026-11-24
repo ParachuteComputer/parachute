@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { isVaultName } from "../vault/address";
+import { HubRefused } from "../vault/parachute";
 import type { FirstVault as First } from "../vault/signInFlow";
 
 /** A person new to Parachute Cloud names their first vault here, in the app, right after the email that made their
@@ -9,14 +10,23 @@ export default function FirstVault({ first, onError, onCancel }: { first: First;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const clean = name.trim().toLowerCase();
+  // the sign-in's token can make vaults: ended when the person leaves however they leave (Not now, the bar's back, closing
+  // the app). The unmount waits a tick, so React's StrictMode remount in development doesn't end it.
+  const here = useRef(false);
+  useEffect(() => {
+    here.current = true;
+    const gone = () => void first.end();
+    window.addEventListener("pagehide", gone);
+    return () => { here.current = false; window.removeEventListener("pagehide", gone); setTimeout(() => { if (!here.current) gone(); }, 0); };
+  }, [first]);
   async function make(e: FormEvent) {
     e.preventDefault();
     if (!isVaultName(clean) || clean.length < 2) { setError("Use letters, numbers and hyphens, starting with a letter or number."); return; }
     setBusy(true); setError(null);
     try { window.location.assign(await first.make(clean)); } catch (err) {
       setBusy(false);
-      // a refusal the person can answer (a name taken) stays here; a sign-in that ended goes back to the screen
-      if (err instanceof Error && !/ended/.test(err.message)) setError(err.message); else onError(err);
+      // a refusal the person can answer (a name taken) stays here; anything else ends this step (the screen says it)
+      if (err instanceof HubRefused) setError(err.message); else onError(err);
     }
   }
   return (

@@ -6,7 +6,7 @@
 // Parachute, the sign-in's return, the launcher's Open, an applet's Allow, a change that needs write) call these.
 import { beginSignIn, completeSignIn, dropPending, revoke, type AllowAfter, type Pending, type Why } from "./oauth";
 import { endUnheld, holdManage } from "./manage";
-import { canCreate, createWithToken, describe, homeFrom, homeWithToken, levelIn, listWithToken, reachesEvery, vaultUrlFrom, type Level, type Listed, type Parachute } from "./parachute";
+import { canCreate, createWithToken, describe, HubRefused, homeFrom, homeWithToken, levelIn, listWithToken, reachesEvery, vaultUrlFrom, type Level, type Listed, type Parachute } from "./parachute";
 import { limitedFetch } from "./limited";
 import { MAX_VAULTS } from "./address";
 import { listVaults, originOf, saveVault, vaultUrlOf, type VaultRecord } from "./store";
@@ -148,15 +148,26 @@ export async function askManage(rec: Pick<VaultRecord, "issuer" | "vault">, back
   return beginSignIn({ ...b, how: "page" });
 }
 
+/** The first-vault step can't go on (its token is ended): the screen says so and offers to sign in again. */
+export class SignInEnded extends Error {}
+
 /** The first vault, made with the listing sign-in's token, then read as the home like any sign-in's only vault. */
 function firstVault(p: Parachute, how: Pending["how"], accessToken: string, end: () => Promise<void>, f: typeof fetch): FirstVault {
   let ended = false;
   const endOnce = async () => { if (!ended) { ended = true; await end(); } };
   return { hub: p.hub, end: endOnce,
     make: async (name) => {
-      if (ended) throw new Error("This sign-in has ended. Sign in again.");
-      const made = await createWithToken(p.accountMcp, accessToken, name, f);
+      if (ended) throw new SignInEnded("This sign-in has ended. Sign in again.");
+      let made: string;
+      try { made = await createWithToken(p.accountMcp, accessToken, name, f); } catch (e) {
+        // the hub said no in its words (a name taken): the person answers and tries again with the same sign-in
+        if (e instanceof HubRefused) throw e;
+        // anything else (the hub may have made it and its answer got lost): end the token; signing in again finds it
+        await endOnce();
+        throw new SignInEnded("Parachute couldn't tell whether your vault was made. Sign in again: if it was, it will be there.");
+      }
       await endOnce();
+      // write, home or not (a device that already has a home elsewhere): the person made this vault just now, for this
       const next = readFirst(p, { vaults: [made], all: false }, "mine", (v, home, marks) => beginSignIn({ parachute: p, step: "open", vault: v, level: "write", why: "signin", whose: "mine", how, home, marks }, f));
       return "go" in next ? next.go : next.pick.go([made], made);
     } };
@@ -194,7 +205,7 @@ export async function finishStep(code: string, state: string, iss?: string | nul
     // (strictly: a list cut at MAX_VAULTS is taken as every vault for the pick, never here)
     noteEvery(p.hub, listed.all && listed.vaults.length < MAX_VAULTS);
     if (!listed.vaults.length) throw new Error(p.door === "cloud"
-      ? "You're signed in, but you have no vault there yet, and Parachute wasn't let make one. Make one on Parachute Cloud's website, then sign in again."
+      ? "You're signed in, but you have no vault there yet. Make one on Parachute Cloud's website, then sign in again."
       : "You're signed in there, but no vault is yours yet. Ask the hub's owner to give you one.");
     // the hub's session is still in place: its consent for the one vault comes next
     const whose = pending.whose ?? "theirs";

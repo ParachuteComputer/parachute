@@ -222,8 +222,11 @@ export const canList = (scope: string | undefined) => (scope ?? "").split(/\s+/)
  *  leaves "Create new vaults" ticked on its page (a person with no vault yet is offered it there, T-476). */
 export const canCreate = (scope: string | undefined) => (scope ?? "").split(/\s+/).some((w) => /^account:[^:\s]+:vault-create$/.test(w));
 
+/** The hub said no, in its own words (a name taken, the plan's limit): the person can answer it and try again. */
+export class HubRefused extends Error {}
+
 /** Make a vault with the sign-in's account token (the account door's `create-vault`). Resolves to its name as the hub
- *  made it; throws an Error in the hub's own words when it refuses (a name taken, the plan's limit). */
+ *  made it; throws HubRefused in the hub's own words when it refuses, a plain Error when its answer can't be read. */
 export async function createWithToken(accountMcp: string, token: string, name: string, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<string> {
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create-vault", arguments: { name } } });
   const res = await postAccount(accountMcp, token, body, fetchImpl);
@@ -231,9 +234,9 @@ export async function createWithToken(accountMcp: string, token: string, name: s
   let a: { error?: { message?: unknown }; result?: { isError?: boolean; content?: { text?: unknown }[] } };
   try { a = rpcAnswer(await res.text()) as typeof a; } catch { throw new Error("The hub's answer couldn't be read."); }
   const said = (m: unknown) => (typeof m === "string" && m.trim() ? m.replace(/^Error:\s*/, "").slice(0, 200) : "The hub didn't make the vault.");
-  if (a?.error) throw new Error(said(a.error.message));
+  if (a?.error) throw new HubRefused(said(a.error.message));
   const text = a?.result?.content?.[0]?.text;
-  if (a?.result?.isError) throw new Error(said(text));
+  if (a?.result?.isError) throw new HubRefused(said(text));
   let made: unknown;
   try { made = (JSON.parse(String(text)) as { name?: unknown }).name; } catch { made = null; }
   if (!isVaultName(made)) throw new Error("The hub's answer couldn't be read.");
