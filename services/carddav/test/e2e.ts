@@ -43,6 +43,14 @@ try {
   const password = addDevice(devices, "pixel");
   const logs: string[] = [];
   const token = hub.mint("vault:home:write", { scoped_tags: ["person"] });
+  // the wall: with the bridge's token a note that isn't a person (a journal entry) can't be read, listed or found
+  step("the bridge's token reaches no note without the person type: a journal entry can't be read or listed");
+  const journal = await owner.create({ path: "Journal/2026-11-20", body: "PRIVATE-JOURNAL: a hard day.", fields: {}, types: [] });
+  const scoped = vaultClient(`${hub.origin}/vault/home`, token);
+  const read = await scoped.get(journal.id).then((p) => (p ? JSON.stringify(p) : "null"), (e) => `refused ${(e as { status?: number }).status ?? e}`);
+  assert.ok(!read.includes("PRIVATE-JOURNAL") && (read === "null" || read.startsWith("refused")), `the scoped token read the journal: ${read.slice(0, 120)}`);
+  const listed = await scoped.list("Journal/").then((rows) => rows.length, () => 0);
+  assert.equal(listed, 0);
   bridge = createBridge({ vault: vaultClient(`${hub.origin}/vault/home`, token), devices, log: (l) => logs.push(l) });
   await new Promise<void>((r) => bridge!.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${(bridge.address() as AddressInfo).port}`;
