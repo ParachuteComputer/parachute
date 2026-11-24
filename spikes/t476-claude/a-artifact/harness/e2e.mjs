@@ -37,6 +37,13 @@ await page.waitForTimeout(800);
 ok((await byPath("Tasks/Draft the brand rules")).body === "Voice, colours, character sheets. Ask Tala for the sheet.", "note edit wrote the body");
 await page.screenshot({ path: `${shots}/a3-after-edits.png` });
 
+// two edits in a row on one row (the date input keeps focus, so the redraw waits): both land, no false conflict
+const due = f.locator("#open li", { hasText: "Draft the brand rules" }).locator("input.due");
+await due.fill("2026-12-03"); await page.waitForTimeout(700);
+await due.fill("2026-12-04"); await page.waitForTimeout(700);
+ok((await byPath("Tasks/Draft the brand rules")).fields.due === "2026-12-04" && !(await f.locator("#note").textContent()).includes("changed somewhere else"), "two edits in a row on one row both land");
+await due.blur();
+
 // a refresh while the person is typing a note doesn't throw the typing away
 const typing = f.locator("#open li", { hasText: "Send Jonah the shop mockups" }).locator(".sub");
 await typing.click(); await typing.press("End"); await typing.type(" Mention the kiln.");

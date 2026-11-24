@@ -124,7 +124,9 @@ async function change(li, r, patch) {
   li.classList.add("busy");
   say("");
   try {
-    await mcp.callTool(SERVER, "update-record", { id: r.id, ...patch, if_updated_at: r.updatedAt });
+    const done = await mcp.callTool(SERVER, "update-record", { id: r.id, ...patch, if_updated_at: r.updatedAt });
+    // the row now holds what was written (its new updatedAt too), so a next edit before the redraw isn't a false conflict
+    if (done.payload && done.payload.updatedAt) Object.assign(r, done.payload);
   } catch (e) {
     const t = plain(e);
     say(/conflict|changed since|updated_at/i.test(t) ? `“${nameOf(r)}” changed somewhere else, so I reloaded it. Try again.` : t);
