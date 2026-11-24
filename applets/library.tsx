@@ -742,10 +742,12 @@ async function readFolder(
   const byId = new Map<string, LibraryRecord>();
   let capped = false;
 
+  let read = false; // a page came back: a later failure is a real one, not an older hub's
   const pull = async (extra: Record<string, unknown>) => {
     let offset = 0;
     while (offset <= MAX_OFFSET) {
       const page = await query({ ...base, ...extra, limit: PAGE, offset });
+      read = true;
       for (const r of page) {
         const prev = byId.get(r.id);
         if (!prev || (r.updatedAt ?? "") >= (prev.updatedAt ?? "")) byId.set(r.id, r);
@@ -759,7 +761,9 @@ async function readFolder(
   try {
     await pull({ orderBy: "created_at", sort: "asc" });
   } catch (e) {
-    if ((e as { status?: number })?.status !== 400) throw e;
+    // a hub that can't order by when a record was made (0.8) refuses the first page; the folder door's error
+    // carries no status, so any failure there means: read it in the hub's own order
+    if (read) throw e;
     byId.clear();
     capped = false;
     await pull({});
