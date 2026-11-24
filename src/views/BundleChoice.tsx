@@ -3,6 +3,7 @@
 // of theirs opens the same one; their agent can change that note too (`bundle` and `app` alike until 2026-12-20).
 // Under it, what the open bundle opens on (its `start`): the list, or one of the applets on its bar. A tap here is the
 // person's choice on this device, as the bar's long-press "Open on start" is (shell/start.ts).
+import BarSettings from "./BarSettings";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { bundlesIn, chooseBundle, chooseBundleIn, effective, find, readSettings, setStart, useSettings, type Pin, type Settings, MAX_PLACES } from "../shell/homeSettings";
 import { chooseStart, forgetStart } from "../shell/start";
@@ -82,6 +83,8 @@ export default function BundleChoice() {
           <label key={`${p.vault}/${p.noteId}`} className="line"><span><input type="radio" name="opens-on" checked={now === keyOf(p)} onChange={(e) => opensOn(e, p)} /> <span aria-hidden="true">{p.glyph}</span> <b>{p.name}</b></span></label>
         ))}
       </fieldset>}
+      {/* what is on the open bundle's bar: move, unpin, pin another (BarSettings.tsx) */}
+      <BarSettings />
       {/* where each is, only when they are on more than one Parachute */}
       {mine.length > 1 && (
         <fieldset className="plain">
