@@ -32,7 +32,7 @@ name. Elsewhere than the home, the address goes to the home's. Their saved state
 applet's, under that address. They start without a tap (the person's own code waits for one), and whatever the
 sandbox self-test found (it guards against code the person hasn't trusted), but not while it runs: its probes' escapes
 would stop any frame beside them, so a device's first start waits those few seconds. The Everything list shows them
-first, in the home; a vault's own list doesn't (they aren't in it).
+first, in the home (all but Connect, a setting: Settings → Your AI); a vault's own list doesn't (they aren't in it).
 
 ## Updates
 

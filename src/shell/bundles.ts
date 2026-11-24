@@ -20,7 +20,7 @@ import { plain, stripExt } from "../applet/contract";
 import { APP_LEVEL, tooNew } from "../applet/level";
 import { askedOf, stricterAsked, type Asked } from "./levelRules";
 import defaults from "./default-bundles.json";
-import { PARACHUTE_PUBLISHER } from "../applet/parachuteSource";
+import { officialFace, PARACHUTE_PUBLISHER } from "../applet/parachuteSource";
 
 export const BUNDLE_TAG = "parachute-bundle";
 export const BUNDLE_FOLDER = "Parachute/Bundles/";
@@ -215,4 +215,17 @@ export function followed(own: Bundle, raw: unknown, theirs: Record<string, unkno
   // a later contract of theirs stays as it is, so this app sees it as made for a newer Parachute (newerBundle), not as 1
   return { ...theirs, contract: typeof theirs.contract === "number" && theirs.contract > 1 ? theirs.contract : 1, id: own.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: own.live,
     ...(Object.keys(own.security).length || theirs.security !== undefined ? { security: stricterAsked(own.security, askedOf(theirs.security)) } : {}) };
+}
+
+/** What a bundle puts on the bar, by name, in its order (Settings → Your bundle says it in a line), as the bar draws it
+ *  (homeSettings `effective`, BottomBar.tsx): its own bar, or where it has none its default's places and then the
+ *  person's pins (`pins`, the settings note's); each applet by `nameOf` (its name as listed) or its note's path; and
+ *  its home screen (Notes or Applets) where it names none. Settings, always last on every bar, isn't said. */
+export function barNames(b: Bundle, pins: readonly BarEntry[] = [], nameOf: (p: Place) => string | null = () => null): string[] {
+  const home = b.look === "notes" ? "Notes" : "Applets";
+  const entries = b.bar ?? [...b.base, ...pins];
+  const names = entries.map((e) => (!isAppPlace(e) ? nameOf(e) ?? stripExt(e.applet.split("/").pop() ?? e.applet)
+    : "shipped" in e ? officialFace(e.shipped).name : e.screen === "connect" ? officialFace("connect").name : home));
+  const wayHome = entries.some((e) => isAppPlace(e) && "screen" in e && e.screen === "home");
+  return [...new Set(wayHome ? names : [...names, home])];
 }

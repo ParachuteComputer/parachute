@@ -1,7 +1,8 @@
 name: Release
 # A `v*` tag builds the Android APK (arm64) and the Mac dmg, writes SHA256SUMS, and makes a GitHub pre-release with
 # RELEASE-NOTES.md as its notes. Run by hand (workflow_dispatch) it is a dry run: the same build, a *draft* release
-# that nobody sees until it is published or deleted. docs/LAUNCH.md says what a public launch still needs.
+# that nobody sees until it is published or deleted. It also builds the bundle for Google Play (play.yml), kept as the
+# run's artifact. docs/STORES.md says how the app reaches the stores; docs/LAUNCH.md what a public launch still needs.
 #
 # The APK is signed with the play-test key, from four repository secrets (names in docs/LAUNCH.md):
 # PLAYTEST_KEYSTORE_BASE64, PLAYTEST_KEYSTORE_PASSWORD, PLAYTEST_KEY_ALIAS, PLAYTEST_KEY_PASSWORD. A tag without them
@@ -48,6 +49,16 @@ jobs:
       APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
       APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+
+  # the bundle for Google Play: the run's artifact `play-bundle`, not a file of the release (docs/STORES.md)
+  play:
+    needs: check
+    uses: ./.github/workflows/play.yml
+    secrets:
+      PLAY_UPLOAD_KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+      PLAY_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
+      PLAY_UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+      PLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
 
   android:
     needs: check

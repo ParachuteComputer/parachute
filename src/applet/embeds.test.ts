@@ -3,7 +3,7 @@ import { embedKey, embedSubject, embedSubjectParts, embedTokens, grantInVault, i
 import { subjectOf } from "./grants";
 import { grantKey, type Grant } from "./grant";
 import { grow } from "../views/AppletScreen";
-import { failureOf } from "../views/Embeds";
+import { failureOf } from "../vault/failure";
 import { VaultAuthError, VaultPermissionError, VaultUnreachableError } from "@openparachute/surface-client";
 import { DEFAULT_LOOK, DEFAULT_THEME, LOOKS, tokensOf } from "../theme/theme";
 
