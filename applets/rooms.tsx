@@ -257,7 +257,7 @@ export default function Rooms() {
     /** Word from the relay that you were put in a room (44100) or taken out (44101). The word decides, when the relay
      *  signed it (the key its rooms' descriptions and member lists are signed with): its member list may still be the
      *  old one a moment after. Put in, the room comes with its name, its last lines and a live subscription. A read the
-     *  relay didn't answer (it went away) throws: the word waits for it to be back. */
+     *  relay didn't answer (it went away, or put in a room it didn't describe: busy) throws, and the word waits. */
     const reread = async (id: string, word: Ev) => {
       const from = now() - 5;
       const m = ((await relay.query([{ kinds: [39000], "#d": [id] }])) as Ev[]).sort((a, b) => b.created_at - a.created_at)[0];
@@ -265,7 +265,8 @@ export default function Rooms() {
       if (!on || (word.pubkey !== relayKey && word.pubkey !== m?.pubkey)) return;
       relayKey ||= word.pubkey;
       if (word.kind === 44101) { if (drop(id)) changed(); return; }
-      const meta = m ? metaOf(m) : null;
+      if (!m) throw new Error("not described");
+      const meta = metaOf(m);
       if (!meta) return;
       if (!s.rooms.has(id)) {
         const history = (await relay.query([{ kinds: [9], "#h": [id], limit: 40 }]).catch(() => [])) as Ev[];
@@ -275,14 +276,16 @@ export default function Rooms() {
         history.forEach(st.add); endings.forEach(st.add);
         void names(history.map((e) => e.pubkey));
       }
-      if (!s.rooms.has(id) || (described.get(id) ?? 0) <= m!.created_at) { described.set(id, m!.created_at); s.rooms.set(id, meta); }
+      if (!s.rooms.has(id) || (described.get(id) ?? 0) <= m.created_at) { described.set(id, m.created_at); s.rooms.set(id, meta); }
       if (!first.has(id) && !live.has(id) && held + live.size < LIVE_ROOMS) live.set(id, relay.subscribeMany([roomFilters(id, from)], onEvents));
       changed();
     };
     // the newest word on each room waiting to be read again, read one room at a time; and the words done with (the relay
     // sends them all again when it is back), with each room's newest, so an older word never undoes a newer one
     const heard = new Map<string, Ev>(), done = new Set<string>(), newest = new Map<string, number>();
-    let reading = Promise.resolve();
+    // a word whose read failed goes again when the relay is back, or (it was busy) a little later, three times at most
+    const tries = new Map<string, number>();
+    let reading = Promise.resolve(), retry: ReturnType<typeof setTimeout> | null = null;
     const onWord = (evs: Ev[]) => {
       for (const n of evs) {
         const id = tag(n, "h");
@@ -294,7 +297,11 @@ export default function Rooms() {
           if (down) return;
           heard.delete(id);
           try { await reread(id, n); done.add(n.id); newest.set(id, Math.max(newest.get(id) ?? 0, n.created_at)); }
-          catch { if (!heard.has(id)) heard.set(id, n); }
+          catch {
+            if (!heard.has(id)) heard.set(id, n);
+            const k = (tries.get(n.id) ?? 0) + 1; tries.set(n.id, k);
+            if (k <= 3 && !down && !retry) retry = setTimeout(() => { retry = null; if (on) onWord([]); }, 2000 * k);
+          }
         }
       });
     };
@@ -311,6 +318,8 @@ export default function Rooms() {
       if (syncing) { again = true; return; }
       syncing = true;
       try {
+        // what comes after starts now: anything posted (or any room you are put in) while the rest is read still arrives
+        const since = now() - 5;
         const [members, read] = await Promise.all([relay.query([{ kinds: [39002], "#p": [s.me], limit: 500 }]), loadRead(relay)]);
         const ids = [...new Set(members.map((e: Ev) => tag(e, "d")).filter(Boolean))] as string[];
         relayKey = (members[0] as Ev | undefined)?.pubkey ?? "";
@@ -323,9 +332,7 @@ export default function Rooms() {
         // no rooms at all, over a list it painted: more likely a read cut short than every room left at once (so the
         // rare person who did leave every room keeps seeing the old list, with no live updates, until they are in a room
         // again)
-        if (painted && !synced && !ids.length) { setStatus({ k: "note", t: "This is what you last saw: the relay didn't list your rooms just now." }); listen(now() - 5); return; }
-        // what comes after starts now: anything posted while the history below is read still arrives
-        const since = now() - 5;
+        if (painted && !synced && !ids.length) { setStatus({ k: "note", t: "This is what you last saw: the relay didn't list your rooms just now." }); listen(since); return; }
         // side by side, but at most a few calls at a time: the shell holds 8 of an applet's calls waiting at once
         const [metas, history] = await Promise.all([
           // a call for each hundred rooms: one naming every room is over a frame's request budget past about two hundred
@@ -338,11 +345,14 @@ export default function Rooms() {
         // rooms listed but none of them described: a read cut short, not every room gone (what is painted stays)
         if (painted && !synced && ids.length && !(metas as Ev[]).length) { setStatus({ k: "note", t: "This is what you last saw: the relay didn't describe your rooms just now." }); listen(since); return; }
         // what was read now takes the snapshot's place: rooms left and messages gone since go with it
+        // (a room that came by word meanwhile stays: the relay's member lists may not say so yet)
+        const came = [...live.keys()].flatMap((id) => s.rooms.get(id) ?? []);
         s.rooms.clear();
         for (const m of metas as Ev[]) {
           const meta = metaOf(m); if (!meta) continue;
           s.rooms.set(meta.id, meta); described.set(meta.id, m.created_at);
         }
+        for (const r of came) if (!s.rooms.has(r.id)) s.rooms.set(r.id, r);
         for (const id of ids) s.msgs.set(id, new Map());
         for (const id of [...s.msgs.keys()]) if (!s.rooms.has(id)) s.msgs.delete(id);
         history.flat().forEach(st.add);
@@ -384,7 +394,7 @@ export default function Rooms() {
       if (painted && painted !== s.me) { painted = null; forget(); setStatus({ k: "reading" }); }
       await sync();
     })();
-    return () => { on = false; stop?.(); stopWord?.(); live.forEach((f) => f()); off(); const k = keep.current; if (k?.timer) { clearTimeout(k.timer); k.timer = null; } };
+    return () => { on = false; stop?.(); stopWord?.(); live.forEach((f) => f()); if (retry) clearTimeout(retry); off(); const k = keep.current; if (k?.timer) { clearTimeout(k.timer); k.timer = null; } };
   }, []);
 
   // opening a room: drawn at once from what the list holds, and where you left it (each room's place, and the list's)

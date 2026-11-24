@@ -706,9 +706,12 @@ test("a room you are put in after the list loaded shows at once, with its name a
     await expect(row("Porch")).toHaveCount(0, { timeout: 5_000 });
     expect((await owner.publish({ kind: 9001, tags: [["h", shed], ["p", alice]] })).ok).toBe(true);
     await expect(row("Tool shed")).toHaveCount(0, { timeout: 5_000 });
-    // put back in: it shows again
+    // put back in: it shows again, and is live again
     expect((await owner.publish({ kind: 9000, tags: [["h", porch], ["p", alice]] })).ok).toBe(true);
     await expect(row("Porch")).toBeVisible({ timeout: 5_000 });
+    await new Promise((r) => setTimeout(r, 1100));
+    expect((await owner.publish({ kind: 9, content: `Swept it ${stamp}.`, tags: [["h", porch]] })).ok).toBe(true);
+    await expect(row("Porch")).toContainText(`Swept it ${stamp}.`, { timeout: 10_000 });
     expect(await applet().evaluate(() => (window as unknown as { __stays?: number }).__stays)).toBe(1);
   } finally {
     await made.remove();
