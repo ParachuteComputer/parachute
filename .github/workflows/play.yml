@@ -1,0 +1,104 @@
+name: Play
+# The app bundle for Google Play (scripts/android-build.sh --play, docs/STORES.md): arm64, no in-app update (no right to
+# install apps, no update feed), signed with the upload key from four repository secrets: PLAY_UPLOAD_KEYSTORE_BASE64,
+# PLAY_UPLOAD_KEYSTORE_PASSWORD, PLAY_UPLOAD_KEY_ALIAS, PLAY_UPLOAD_KEY_PASSWORD (no backslash in the passwords: the
+# properties file reads it as an escape). Without them, and on every pull request, it signs with a key made for this run,
+# and the file name says so: the build and its checks still run, but Play wouldn't take that file. The
+# bundle is this run's artifact `play-bundle`; nothing here uploads it to Play. A change to the Android build runs it; a
+# release tag runs it through release.yml.
+permissions:
+  contents: read
+on:
+  pull_request:
+    paths:
+      - "src-tauri/gen/android/**"
+      - "src-tauri/build.rs"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/tauri.conf.json"
+      - "scripts/android-build.sh"
+      - ".github/workflows/play.yml"
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      PLAY_UPLOAD_KEYSTORE_BASE64:
+        required: false
+      PLAY_UPLOAD_KEYSTORE_PASSWORD:
+        required: false
+      PLAY_UPLOAD_KEY_ALIAS:
+        required: false
+      PLAY_UPLOAD_KEY_PASSWORD:
+        required: false
+
+defaults:
+  run:
+    shell: bash  # -eo pipefail: a failed build piped into tee still fails the step
+
+jobs:
+  play:
+    name: play bundle (arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NDK_VERSION: 29.0.14206865
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle  # fewer downloads from Maven Central, which rate-limits runners
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36 build-tools;36.1.0 ndk;29.0.14206865"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: android
+      # never on a pull request: its code is unreviewed, and a bundle signed with the upload key is one Play would take
+      - name: The upload key
+        env:
+          KEYSTORE_BASE64: ${{ github.event_name != 'pull_request' && secrets.PLAY_UPLOAD_KEYSTORE_BASE64 || '' }}
+          KEYSTORE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD || '' }}
+          KEY_ALIAS: ${{ github.event_name != 'pull_request' && secrets.PLAY_UPLOAD_KEY_ALIAS || '' }}
+          KEY_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.PLAY_UPLOAD_KEY_PASSWORD || '' }}
+        run: |
+          dir="$RUNNER_TEMP/upload" && mkdir -p "$dir" && chmod 700 "$dir"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$dir/keystore.jks"
+            printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$dir/keystore.jks" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > "$dir/keystore.properties"
+            echo "AAB_SUFFIX=" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No upload key in this repository's secrets: this bundle is signed with a key made for this run, and Play wouldn't take it (docs/STORES.md)."
+            pw=$(openssl rand -hex 24)
+            KEYPASS=$pw keytool -genkeypair -keystore "$dir/keystore.jks" -alias throwaway -keyalg RSA -keysize 2048 -validity 2 \
+              -dname "CN=Parachute throwaway upload key" -storepass:env KEYPASS -keypass:env KEYPASS >/dev/null
+            printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=throwaway\nkeyPassword=%s\n' "$dir/keystore.jks" "$pw" "$pw" > "$dir/keystore.properties"
+            echo "AAB_SUFFIX=-throwaway-key" >> "$GITHUB_ENV"
+          fi
+          chmod 600 "$dir"/*
+          echo "PARACHUTE_KEYSTORE_PROPERTIES=$dir/keystore.properties" >> "$GITHUB_ENV"
+      - name: Build the bundle (scripts/android-build.sh checks its signature and that it can't install apps)
+        run: |
+          export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          unset PARACHUTE_UPDATE_FEED
+          scripts/android-build.sh --play --target aarch64 | tee "$RUNNER_TEMP/play-build.log"
+          aab=$(grep '\.aab$' "$RUNNER_TEMP/play-build.log" | tail -1)
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          mkdir -p out && cp "$aab" "out/Parachute_${version}_$(git log -1 --format=%ct)_play${AAB_SUFFIX}.aab"
+          ls -l out
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/upload"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: play-bundle
+          path: out/*.aab
+          retention-days: 30

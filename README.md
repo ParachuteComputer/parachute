@@ -166,11 +166,14 @@ copies of wry's templates that keep the bridge to native code out of applet fram
 npm run tauri dev                       # desktop, against the dev server
 scripts/android-build.sh                # release APK for arm64, signed with the play-test key
 scripts/android-build.sh --debug --target x86_64   # a debug build for the emulator
+scripts/android-build.sh --play         # the Google Play bundle (.aab): no in-app update, signed with the upload key
 ```
 
 The Android build needs `ANDROID_HOME`, `NDK_HOME` and Java 17, and a signing key described in
 `~/.config/parachute-playtest/keystore.properties` (or `PARACHUTE_KEYSTORE_PROPERTIES`): `storeFile`, `storePassword`,
-`keyAlias`, `keyPassword`. The script checks the APK's signature against it. Keys never go in the repo.
+`keyAlias`, `keyPassword`. The script checks the APK's signature against it. The Play bundle's upload key is described
+the same way in `~/.config/parachute-play-upload/keystore.properties` ([docs/STORES.md](docs/STORES.md)). Keys never go
+in the repo.
 
 **Signing in from the shell.** The app registers on a hub as "Parachute" with the redirect
 `http://127.0.0.1:47219/oauth/callback`. A hub keeps that name for redirects only the person's own device can receive,

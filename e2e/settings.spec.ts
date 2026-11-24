@@ -45,6 +45,8 @@ test("a newcomer (no key on this device, no frame of their own) sees none of the
   await staysInside(page);
   for (const s of SECTIONS) await expect(heading(page, s)).toHaveCount(0);
   await expect(page.locator("main")).not.toContainText(NAMES);
+  // the privacy policy is reachable from inside the app (Google Play and Apple ask it)
+  await expect(page.getByRole("link", { name: "Privacy", exact: true })).toHaveAttribute("href", "https://parachute.computer/privacy/");
 });
 
 test("with the person's key here, an applet to approve and a frame of theirs, the sections show, in plain words", async ({ browser }) => {

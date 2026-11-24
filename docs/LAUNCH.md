@@ -18,12 +18,8 @@ in CI it comes from four repository secrets, which are **not set yet**:
 Without these secrets a tag's release fails, and a dry run signs with a key made for that run (the file is named
 `-dry-run-key`). The passwords must not contain a backslash (`\`): the properties file reads it as an escape.
 
-**Recommendation:** register as an *organisation* on Google Play (a new personal account must first run a closed test
-with 12 testers for 14 days; an organisation needs a D-U-N-S number instead). Use Play App Signing: Google keeps the
-app's signing key, we keep only an *upload* key, made new for Play and stored like the play-test key. People who
-installed a play-test APK reinstall once when they move to the Play version (a different signature can't update it).
-Play also needs a privacy policy URL and the Data safety form, and each upload a higher `versionCode` (now fixed at 1
-in `src-tauri/tauri.conf.json`: derive it from the version before the second release).
+**Google Play:** the plan, the Play build (an app bundle with no in-app update, signed with an upload key) and what is
+left are in [STORES.md](STORES.md).
 
 ## 2. Apple notarisation
 
@@ -58,8 +54,8 @@ of next installs over the one before. Mac builds of next get the feed from the r
 **Recommendation for launch:** on the Mac (and later Windows and Linux), Tauri's updater plugin, reading a signed
 `latest.json` that the release workflow attaches to each GitHub release; its signing key is one more secret
 (`TAURI_SIGNING_PRIVATE_KEY`). It should wait for notarisation, so an update doesn't bring back the Gatekeeper step. On
-Android, Google Play once the app is there; its build will have to drop `REQUEST_INSTALL_PACKAGES` (only the in-app
-install needs it, and Play's policy refuses it otherwise), which nothing does yet. The feed above is for builds made by
+Android, Google Play once the app is there; its build drops `REQUEST_INSTALL_PACKAGES` and has no feed
+([STORES.md](STORES.md)). The feed above is for builds made by
 hand or from next (the release workflow passes none, and GitHub's release downloads answer with a redirect, which the
 app doesn't follow); until then testers can point Obtainium at this repository's releases.
 
@@ -75,6 +71,6 @@ more than launch needs, a "Copy a crash report" button that people paste into an
 ## Smaller things before launch
 
 - **Identifiers are for good.** `computer.parachute.app` (Android package, Mac bundle id, Keychain service) and the
-  `parachute://` scheme can't change once in a store. Confirm them.
+  `parachute://` scheme can't change once in a store. Kept, for the reasons in [STORES.md](STORES.md).
 - **Other platforms.** iPhone and iPad need the Apple account above and an iOS shell (key store, pairing scan).
   Windows builds are untested.
