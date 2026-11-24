@@ -2,7 +2,7 @@
   "parachute_pack": 1,
   "id": "library",
   "name": "Library",
-  "version": 1,
+  "version": 2,
   "source": "https://parachute.computer/docs/build/packs/library",
   "summary": "Books you own, chapter by chapter, with the words you mark in them and summaries beside each chapter, and the jobs that add a book from a file. Its book is the Reading list's, with every field it has.",
   "types": {

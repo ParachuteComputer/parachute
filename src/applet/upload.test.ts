@@ -155,6 +155,16 @@ describe("uploadInParts", () => {
     expect(now.parts[0].sha256).toBe(await sha256Hex(other.slice(0, PART).buffer as ArrayBuffer));
   });
 
+  it("doesn't wait for ever on a device that says it is offline while it isn't", async () => {
+    const h = hub();
+    let looks = 0;
+    h.io.online = () => false;
+    h.io.whenOnline = async () => { looks++; };
+    const m = await uploadInParts(blob(bytes(10)), "a.epub", "application/epub+zip", h.io);
+    expect(m.parts).toHaveLength(1);
+    expect(looks).toBe(120);
+  });
+
   it("refuses a record that holds another file's upload", async () => {
     const h = hub();
     await uploadInParts(blob(bytes(10)), "One.epub", "application/epub+zip", h.io);

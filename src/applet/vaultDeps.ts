@@ -83,7 +83,11 @@ export function vaultDeps(c: VaultClient, kept?: VaultClient): VaultDeps {
           const stop = new AbortController();
           let still: ReturnType<typeof setTimeout> = setTimeout(() => stop.abort(), STALL_MS);
           const moved = () => { clearTimeout(still); still = setTimeout(() => stop.abort(), STALL_MS); };
-          c.uploadStorageFile(new File([piece], name, { type }), { signal: stop.signal, onProgress: ({ loaded }) => { moved(); onSent(loaded); } })
+          // all of it sent: the hub is storing it, which may take a while; it is cut off only after five minutes
+          c.uploadStorageFile(new File([piece], name, { type }), { signal: stop.signal, onProgress: ({ loaded, total }) => {
+            if (loaded >= total) { clearTimeout(still); still = setTimeout(() => stop.abort(), 5 * STALL_MS); } else moved();
+            onSent(loaded);
+          } })
             .then((r) => resolve({ path: r.path }), (e: unknown) => reject(stop.signal.aborted ? Object.assign(new Error("the connection stalled"), { status: 0 }) : e))
             .finally(() => clearTimeout(still));
         }),

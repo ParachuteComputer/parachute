@@ -159,7 +159,7 @@ with it.**
   For a file the person picks to store, the handle plus `vault.upload` replaces it.
 - The parts transport goes once §6.1 ships. `vault.upload` keeps its shape; the importer keeps reading parts, so old
   jobs still import.
-- The importer's copy on Aaron's machine (uni-ops) is replaced by `tools/library-import/` here once this merges.
+- The importer's copy on Aaron's machine (uni-ops) is replaced by `tools/library-import/` here. It goes by 2026-12-01 (owner: Uni); until then it lacks `--job` and the plain-tag fix, so run this one.
 - The Notion import (`vaults.importNotion`, a 200 MB zip held whole) could move onto the same upload later. It is
   not moved in this slice.
 

@@ -45,6 +45,9 @@ export type UploadIo = {
 };
 
 /** Waits between tries of one step, about two minutes in all; time offline doesn't count. */
+/** How many times an offline device is waited on (each a few seconds, about ten minutes) before a piece is tried
+ *  anyway, and the tries count. */
+const OFFLINE_LOOKS = 120;
 export const WAITS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000];
 
 /** The hub's answer's status on an error, or 0 for none (the network). surface-client says most refusals only in its
@@ -85,10 +88,13 @@ export async function uploadInParts(file: Blob, name: string, type: string, io: 
   if (size > UPLOAD_MAX) throw new UploadError("the file is over 2 GB");
   const n = pieces(size);
   const piece = (i: number) => file.slice(i * PART, Math.min(size, (i + 1) * PART));
+  // looks at an offline device, for the whole upload: once it has been waited out, its word isn't taken again
+  let waited = 0;
   const step = async <T,>(what: string, run: () => Promise<T>): Promise<T> => {
     for (let tries = 0; ; ) {
       if (io.closed()) throw new UploadError("the applet's screen closed");
-      if (!io.online()) { await io.whenOnline(); continue; }
+      // offline: wait for it, but not for ever on the device's word (a webview can say offline while it isn't)
+      if (!io.online() && waited++ < OFFLINE_LOOKS) { await io.whenOnline(); continue; }
       try { return await run(); } catch (e) {
         if (e instanceof UploadError || !again(e) || tries >= WAITS.length) throw new UploadError(`${what}: ${e instanceof Error ? e.message.slice(0, 200) : "it failed"}`);
         await io.sleep(WAITS[tries++]);
@@ -117,9 +123,12 @@ export async function uploadInParts(file: Blob, name: string, type: string, io: 
 
   for (let i = m.parts.length; i < n; i++) {
     const b = piece(i);
-    const sha = await io.hash(await b.arrayBuffer());
+    // read once: hashed, and sent from the same bytes
+    const bytes = await b.arrayBuffer();
+    const sha = await io.hash(bytes);
+    const body = new Blob([bytes]);
     const one = n === 1;
-    const stored = await step(`piece ${i + 1} of ${n}`, () => io.put(b, one ? name : `${String(i + 1).padStart(4, "0")}.part`, one ? m.type : "application/octet-stream", (loaded) => say(done + Math.min(loaded, b.size))));
+    const stored = await step(`piece ${i + 1} of ${n}`, () => io.put(body, one ? name : `${String(i + 1).padStart(4, "0")}.part`, one ? m.type : "application/octet-stream", (loaded) => say(done + Math.min(loaded, b.size))));
     let tried = false;
     const att = await step(`attaching piece ${i + 1}`, async () => {
       // tried before: it may have landed with its answer lost

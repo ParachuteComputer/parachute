@@ -138,8 +138,10 @@ function jobLine(job: LibraryRecord, sending: Sending | undefined): string {
 }
 
 /** A job's place: the day and time, and the file's name without its ending. */
-function jobPath(name: string, now: Date): string {
-  return `${JOBS_FOLDER}${when.stamp(now)} ${cleanPathSegment(name.replace(/\.[a-z0-9]{1,5}$/i, "")) || "book"}`;
+function jobPath(name: string, now: Date, n = 1): string {
+  // its ending in words ("Walden (epub)"): an epub and a PDF of one book, added in one minute, are two jobs
+  const named = cleanPathSegment(name.replace(/\.([a-z0-9]{1,5})$/i, " ($1)"), 80) || "book";
+  return `${JOBS_FOLDER}${when.stamp(now)} ${named}${n > 1 ? ` ${n}` : ""}`;
 }
 
 type HighlightSlice = {
@@ -2010,6 +2012,14 @@ export default function Library() {
   }, [lib, openChapter, setRoute, setBookTab]);
 
   // ── Add a book ──
+  /** The jobs alone, read again (an upload or a retry changed only them). */
+  const loadJobs = useCallback(async () => {
+    try {
+      const q = (params: Record<string, unknown>) => vault.queryRecords(params) as Promise<LibraryRecord[]>;
+      const { rows } = await readFolder(q, { pathPrefix: JOBS_FOLDER, includeFields: true });
+      if (mounted.current) setJobs(rows.filter((j) => hasRecordKind(j, "job")));
+    } catch { /* the list stays as it was; the next refresh reads it */ }
+  }, []);
   const canAdd = typeof vault.upload === "function" && typeof app?.pick === "function";
   /** The file onto job `job`, with its progress shown; then the job waits for an AI. */
   const sendFile = useCallback(async (job: LibraryRecord, file: PickedFile) => {
@@ -2024,36 +2034,39 @@ export default function Library() {
       toast(`${file.name} didn't finish: ${e instanceof Error ? e.message : String(e)}. Pick it again to go on.`, { error: true });
     } finally {
       if (mounted.current) setSending((m) => { const n = { ...m }; delete n[job.id]; return n; });
-      void load();
+      void loadJobs();
     }
-  }, [load]);
+  }, [loadJobs]);
 
   const addBook = useCallback(async () => {
     let picked: PickedFile[];
     try { picked = await app.pick({ accept: BOOK_FILES, bytes: false }); } catch (e) { toast(`Could not open the picker: ${e instanceof Error ? e.message : String(e)}`, { error: true }); return; }
     const f = picked[0];
     if (!f) return;
-    let job: LibraryRecord;
+    let job: LibraryRecord | null = null;
+    const now = new Date();
     try {
-      job = await vault.createRecord({
-        path: jobPath(f.name, new Date()),
+      // the same file added twice in a minute: the second is "… 2"
+      for (let n = 1; !job; n++) job = await vault.createRecord({
+        path: jobPath(f.name, now, n),
         body: `Add *${f.name.replace(/[*_[\]]/g, "")}* to the library.\n\nThe file is attached to this record. Its \`upload\` field lists its pieces in order, each with its SHA-256: join them in that order.\n`,
         // its `job` type comes from the folder (the manifest opens job in Jobs/Library/), as a quote's does
         fields: { do: JOB_DO, kind: "import-book", status: "uploading" },
-      }) as LibraryRecord;
+      }).catch((e: unknown) => { if (n < 4 && (e as { status?: number })?.status === 409) return null; throw e; }) as LibraryRecord | null;
     } catch (e) {
       toast(`Could not add ${f.name}: ${e instanceof Error ? e.message : String(e)}`, { error: true });
       return;
     }
-    setJobs((js) => [job, ...js]);
-    await sendFile(job, f);
+    const made = job;
+    setJobs((js) => [made, ...js]);
+    await sendFile(made, f);
   }, [sendFile]);
 
   /** An unfinished upload: the same file picked again goes on from the pieces already there. */
   const resumeJob = useCallback(async (job: LibraryRecord) => {
     const was = jobUpload(job);
     let picked: PickedFile[];
-    try { picked = await app.pick({ accept: BOOK_FILES, bytes: false }); } catch { return; }
+    try { picked = await app.pick({ accept: BOOK_FILES, bytes: false }); } catch (e) { toast(`Could not open the picker: ${e instanceof Error ? e.message : String(e)}`, { error: true }); return; }
     const f = picked[0];
     if (!f) return;
     if (was && (f.name !== was.name || f.size !== was.size)) { toast(`That's another file. Pick ${was.name} to go on.`, { error: true }); return; }
@@ -2069,8 +2082,8 @@ export default function Library() {
     } catch (e) {
       toast(`Could not ask again: ${e instanceof Error ? e.message : String(e)}`, { error: true });
     }
-    void load();
-  }, [load]);
+    void loadJobs();
+  }, [loadJobs]);
 
   // one upload at a time: each holds one of the frame's few open calls while it goes
   const busy = Object.keys(sending).length > 0;

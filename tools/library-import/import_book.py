@@ -1096,7 +1096,11 @@ def stale(f):
 
 def waiting_jobs(hub):
     """The waiting import-book jobs in the vault, oldest first (by path: Library names a job by its day and time)."""
-    rows = hub.req("GET", "/notes?tag=job&include_metadata=true&limit=200") or []
+    rows, off = [], 0
+    while True:  # every job, a page at a time: done ones stay in the folder, so a vault gathers many
+        page = hub.req("GET", f"/notes?tag=job&include_metadata=true&limit=200&offset={off}") or []
+        rows += page; off += len(page)
+        if len(page) < 200: break
     mine = [r for r in rows if (r.get("metadata") or {}).get("kind") == JOB_KIND
             and ((r.get("metadata") or {}).get("status") == "waiting" or stale(r.get("metadata") or {}))]
     return sorted(mine, key=lambda r: r.get("path") or "")
