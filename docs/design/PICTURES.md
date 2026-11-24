@@ -121,7 +121,7 @@ there a picture's name shows in its place, as before.
 
 - 25 MB a file (the vault's own `FILE_MAX`). The hub's list gives no size, so a bigger one is refused after it is read,
   and never handed over. A file listed as a video or a document is refused before it is read, and so is a sound
-  except by `vault.file` (Sounds, below), 2 MB at most: a note draws none of them, and a voice memo's bytes are more
+  except by `vault.file` (Sounds, below), 512 KB at most: a note draws none of them, and a voice memo's bytes are more
   than drawing pictures needs. The listed type is what the attacher
   wrote, so a big file listed as a picture is still read (up to the hub's own upload limit) before it is refused.
 - A call costs 1 of the frame's read budget, 1 more when it reads the record's list, and for `vault.file` 1 more when
@@ -136,7 +136,7 @@ there a picture's name shows in its place, as before.
 `vault.file` (and the website's, packages/applet-kit) also hands over a short sound attached to the record, for an
 applet to play in an `<audio>` (the frame allows `media-src blob:`): a word's pronunciation in Languages. The hub must
 list it as `audio/mpeg`, `audio/ogg`, `audio/webm` or `audio/mp4` and serve it as the same, its first bytes must be that
-container's (an ID3 tag or an MPEG frame, `OggS`, the WebM header, `ftyp`), and it is 2 MB at most
+container's (an ID3 tag or an MPEG frame, `OggS`, the WebM header, `ftyp`), and it is 512 KB at most
 (`attachedMedia`, src/applet/files.ts; tested in src/applet/vault.test.ts). A recording from `voice.record` is WebM.
 `vaults.file` (Vault's) and the Note still take pictures only: nothing there plays a sound.
 

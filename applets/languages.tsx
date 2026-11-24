@@ -67,6 +67,9 @@ export function parseIsoDay(day: string): number {
   return ms;
 }
 
+/** A real calendar day (a hand-edited 2026-02-30 is not). */
+const validDay = (day: string) => { try { parseIsoDay(day); return true; } catch { return false; } };
+
 export function addDays(day: string, days: number): string {
   const d = new Date(parseIsoDay(day) + Math.round(days) * DAY_MS);
   return `${String(d.getUTCFullYear()).padStart(4, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
@@ -88,7 +91,8 @@ export function sm2FromFields(fields: Record<string, unknown> | undefined, today
   const interval = Math.max(0, Math.round(num("interval") ?? 0));
   const s = f.state;
   const state: CardState = s === "new" || s === "learning" || s === "review" || s === "relearning" ? s : interval > 0 ? "review" : "new";
-  const due = typeof f.due === "string" && ISO_DAY.test(f.due.trim().slice(0, 10)) ? f.due.trim().slice(0, 10) : today;
+  const day = typeof f.due === "string" ? f.due.trim().slice(0, 10) : "";
+  const due = validDay(day) ? day : today;
   const ease = num("ease");
   const reps = num("reps");
   const lapses = num("lapses");
@@ -533,7 +537,7 @@ async function readAll(pathPrefix: string, includeBody: boolean): Promise<{ rows
   return { rows: all, whole: false };
 }
 
-const conflict = (e: unknown) => (e as { status?: number })?.status === 409 || /conflict|exist/i.test(String((e as Error)?.message ?? e));
+const conflict = (e: unknown) => (e as { status?: number })?.status === 409 || /conflict|already exists/i.test(String((e as Error)?.message ?? e));
 
 const today = () => when.stamp(Date.now()).slice(0, 10);
 const storage = (p: string) => (p.startsWith("/api/storage/") ? p : `/api/storage/${p.replace(/^\/+/, "")}`);

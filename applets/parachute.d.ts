@@ -109,7 +109,7 @@ declare module "parachute" {
     updateNote(id: string, change: { if_updated_at?: string; content?: string; metadata?: Record<string, unknown>; types?: { add?: string[]; remove?: string[] }; tags?: { add?: string[]; remove?: string[] } }): Promise<AppletRecord>;
     attach(noteId: string, bytes: ArrayBuffer | ArrayBufferView, type: string, opts?: { transcribe?: boolean }): Promise<{ id: string | null; path: string; type: string; transcribe: boolean }>;
     /** A picture attached to a record in its folders, as its words link it (`/api/storage/…`), or a short sound (audio/mpeg,
-     *  ogg, webm or mp4 by its first bytes, 2 MB at most). The Note asks for pictures by itself when given the record's id.
+     *  ogg, webm or mp4 by its first bytes, 512 KB at most). The Note asks for pictures by itself when given the record's id.
      *  Absent in an app before 11-23. */
     file?(id: string, path: string): Promise<Blob>;
     /** A picture attached to record `fromId` (one it reads) attached to `noteId` (one it may change) too, with no new bytes:

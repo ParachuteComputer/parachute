@@ -75,8 +75,9 @@ export function asJson(x: unknown): unknown {
 
 /** What a note draws: a picture (a sound, a video or a document is opened, not drawn). */
 const DRAWN = /^image\//;
-/** A sound `vault.file` hands over, to play (PICTURES.md "Sounds"): 2 MB at most, its first bytes its container's. */
-export const AUDIO_MAX = 2 * 1024 * 1024;
+/** A sound `vault.file` hands over, to play (PICTURES.md "Sounds"): 512 KB at most (half a minute; a
+ *  voice memo is longer, and a note doesn't need its bytes), its first bytes its container's. */
+export const AUDIO_MAX = 512 * 1024;
 const PLAYED = new Set(["audio/mpeg", "audio/ogg", "audio/webm", "audio/mp4"]);
 /** The sound type its first bytes say, of the four played; null for anything else (a page dressed up as a sound). */
 export function audioMagicType(bytes: ArrayBuffer): string | null {
@@ -127,11 +128,11 @@ export function attachmentLists(read: (key: string) => Promise<unknown>) {
 
 type Kind = { is: (type: string) => boolean; max: number; tooLarge: string; magic?: (bytes: ArrayBuffer) => string | null };
 const PICTURE: Kind = { is: (t) => DRAWN.test(t), max: FILE_MAX, tooLarge: "too_large: a file over 25 MB isn't handed over" };
-const SOUND: Kind = { is: (t) => PLAYED.has(t), max: AUDIO_MAX, tooLarge: "too_large: a sound over 2 MB isn't handed over", magic: audioMagicType };
+const SOUND: Kind = { is: (t) => PLAYED.has(t), max: AUDIO_MAX, tooLarge: "too_large: a sound over 512 KB isn't handed over", magic: audioMagicType };
 
 /** The file at storage path `want` (from storagePath), only when it is in the record's attachment list: listed as a
  *  picture (or, with `sounds`, a sound) before it is read, served as the same kind by the hub (the type the hub gives
- *  from the file's name: the listed one is whatever the attacher wrote), 25 MB at most for a picture; a sound 2 MB at
+ *  from the file's name: the listed one is whatever the attacher wrote), 25 MB at most for a picture; a sound 512 KB at
  *  most, its first bytes the type it is served as. `failed` turns the read's failure into the caller's error. */
 async function attachedFile(want: string, list: unknown[], read: (path: string) => Promise<Blob>, failed: (e: unknown) => ContractError, sounds: boolean): Promise<{ type: string; bytes: ArrayBuffer }> {
   const att = list.find((a): a is Record<string, unknown> => plain(a) && a.path === want);

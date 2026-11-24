@@ -188,6 +188,10 @@ describe("SM-2 field normalization and formatting", () => {
       ease: MIN_EASE,
       due: "2026-11-29",
     });
+    // a day that isn't on the calendar (a hand edit) is due today, not a crash on the review screen
+    const odd = sm2FromFields({ interval: 3, state: "review", due: "2026-02-30" }, TODAY);
+    expect(odd.due).toBe(TODAY);
+    expect(() => previewIntervals(odd, TODAY)).not.toThrow();
   });
 
   it("formats intervals and review log lines cleanly", () => {
