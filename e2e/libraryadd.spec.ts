@@ -114,7 +114,7 @@ test("Add a book: an epub picked in Library becomes a job, and the importer make
     // as Uni runs it when told a book was added: every waiting job in the vault
     execFileSync("python3", ["-I", join(TOOLS, "import_book.py"), "--jobs", "--vault", VAULT, "--hub", h.origin, "--token-file", key, "--by", "the e2e"], { stdio: "pipe" });
     const done = (await api(h, "GET", `notes/${job.id}?include_metadata=true`)) as Rec;
-    expect(done.metadata).toMatchObject({ status: "done", by: "the e2e", result: "Books/A Small Garden" });
+    expect(done.metadata, `the job says: ${String(done.metadata?.note)}`).toMatchObject({ status: "done", by: "the e2e", result: "Books/A Small Garden" });
 
     // the book is on the shelf; the job is gone from Being added
     await reopen(page);

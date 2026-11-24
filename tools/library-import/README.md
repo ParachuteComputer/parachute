@@ -59,7 +59,8 @@ Under `Books/<Title>/`, one folder per book:
 
 It defines the Library pack's four types (`book`, `chapter`, `quote`, `summary`) when the vault lacks them, with the
 fields of `src/kit/packs/library.json` in the app repo (keep `TYPES` here and that file the same). A type the vault
-already has keeps every field; only missing fields are added.
+already has keeps every field; only missing fields are added. A name the vault keeps as a plain tag (an older vault, or
+one Library wrote to before the pack) stays a tag, and the import writes it on its records as a tag.
 
 - **Front matter** (title page, copyright, printed contents, dedication) is one record. The cover goes on the book.
 - **Notes**: an epub's footnotes and endnotes go to the end of the chapter that cites them. In a folder, the Notes

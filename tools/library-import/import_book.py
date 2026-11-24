@@ -837,10 +837,12 @@ def run(book, recs, hub, source, types_hub=None):
 
     # types: made when missing; a type the vault has keeps its fields and gets only those it lacks
     have = {t["name"]: t for t in hub.req("GET", "/types?include_schema=true") or []}
+    plain = set()  # names this vault keeps as plain tags: its records carry them as tags (the hub refuses them as types)
     for name, (desc, fields) in TYPES.items():
         t = have.get(name)
         if t and t.get("kind") != "type":
-            book["hard"].append(f"{name} is a plain tag in this vault; left as it is"); continue
+            plain.add(name)
+            book["hard"].append(f"{name} is a plain tag in this vault; left as it is, and written as a tag"); continue
         missing = {f: v for f, v in fields.items() if f not in ((t or {}).get("fields") or {})}
         if not missing: continue
         try:
@@ -906,8 +908,9 @@ def run(book, recs, hub, source, types_hub=None):
             made[r["path"]] = {"path": r["path"], "id": None, "updated_at": None, "hash": r["hash"], "pending": True,
                                "next": planned_print(r)}
             state["dirty"] = True; save()
-            new = hub.req("POST", "/records", {"path": r["path"], "body": body, "types": r["types"],
-                                               "fields": r["fields"], "if_exists": "ignore"})
+            tags = [t for t in r["types"] if t in plain]
+            new = hub.req("POST", "/records", {"path": r["path"], "body": body, "types": [t for t in r["types"] if t not in plain],
+                                               **({"tags": tags} if tags else {}), "fields": r["fields"], "if_exists": "ignore"})
             if new.get("existed"):  # someone made it meanwhile: theirs, and the note that it was ours goes
                 del made[r["path"]]; state["dirty"] = True; save()
                 raise SystemExit(f"{r['path']} appeared while this ran (someone else's); run again")
