@@ -1,7 +1,7 @@
 // The record door (src/vault/records.ts): on a hub that has `/api/records` (core 0.9) the app reads and writes there
 // and never on `/api/notes`; on one without it (0.8) it asks once and keeps `/api/notes`. CI runs this on both.
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, mintToken, VAULT } from "./hub";
 import { ui } from "./helpers";
 

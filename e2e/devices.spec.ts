@@ -6,7 +6,7 @@
 // journal test runs on any hub.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { getPublicKey } from "nostr-tools/pure";
 import { api, hubState, record, VAULT } from "./hub";
 import { installApplet, ui } from "./helpers";

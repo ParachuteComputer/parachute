@@ -1,7 +1,7 @@
 // Sign in once, two ways, and keep the result for the tests (the hub rate-limits password sign-ins, as it should):
 //   e2e/.hub-session.json: signed in on the hub's own page only (the app holds nothing yet);
 //   e2e/.signed-in.json:   also the app, with the e2e vault added and the self-test passed.
-import { expect, test as setup } from "@playwright/test";
+import { expect, test as setup } from "./test";
 import { api, hubState } from "./hub";
 import { held, letWrite, openVault, signIn } from "./helpers";
 import { MORE_VAULTS, VAULT } from "./hub";

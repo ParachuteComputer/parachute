@@ -264,9 +264,13 @@ export function e2eNative(secretHex: string): Native {
       const text = await res.text();
       if (res.status === 401) throw { code: "unknown_key", message: "This hub doesn't take your key for that." };
       if (res.status !== 200) throw { code: "unreachable", message: `The hub didn't answer (${res.status}). Try again in a moment.` };
-      const j = JSON.parse(text.trim().startsWith("{") ? text : (text.split("\n").find((l) => l.startsWith("data:")) ?? "data:{}").slice(5)) as { error?: { message?: string; data?: { error_type?: string } }; result?: { isError?: boolean; content?: { text?: string }[] } };
+      const j = JSON.parse(text.trim().startsWith("{") ? text : (text.split("\n").find((l) => l.startsWith("data:")) ?? "data:{}").slice(5)) as { error?: { message?: string; data?: { error_type?: string } }; result?: { isError?: boolean; content?: { text?: string }[]; structuredContent?: { error_type?: string; message?: string } } };
       const t = j.result?.content?.[0]?.text ?? "";
-      if (j.error) { const ty = j.error.data?.error_type; throw { code: ty === "grant_not_permitted" || ty === "key_required" ? "not_owner" : ty === "invalid_name" ? "invalid_name" : "refused", message: j.error.message ?? "" }; }
+      // the same reading as door.rs `tool_answer`: a hub from 0.9.1 refuses with structuredContent, an older one with a JSON-RPC error or bare text
+      const codeOf = (ty?: string) => (ty === "grant_not_permitted" || ty === "key_required" || ty === "unknown_tool" ? "not_owner" : ty === "invalid_name" ? "invalid_name" : "refused");
+      if (j.error) throw { code: codeOf(j.error.data?.error_type), message: j.error.message ?? "" };
+      const sc = j.result?.isError ? j.result.structuredContent : undefined;
+      if (sc?.error_type) throw { code: codeOf(sc.error_type), message: sc.message ?? "" };
       if (j.result?.isError) throw { code: t.startsWith("Unknown tool") ? "not_owner" : "refused", message: t };
       return JSON.parse(t) as unknown;
     },

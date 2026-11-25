@@ -94,7 +94,9 @@ npm run e2e          # Playwright on the web build, against a real hub (see belo
 
 `npm run e2e` starts a throwaway Parachute hub (`parachute-core` from `@openparachute/core`, which runs on Bun 1.4+) in
 a temp folder on a loopback port, seeds a vault from `e2e/fixtures`, and removes it after. Point `PARACHUTE_CORE` at
-the binary if it isn't on your `PATH`.
+the binary if it isn't on your `PATH`. Specs take `test` from `e2e/test.ts`, not `@playwright/test`: it writes each
+refreshed sign-in back to the saved state the next spec starts from, as a device keeps its own (the hub ends a sign-in whose
+spent refresh token comes back). `e2e/expiry.spec.ts` moves the hub's clock past the access token's lifetime to check it.
 
 ## How it fits together
 

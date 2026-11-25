@@ -9,7 +9,7 @@
 import { createServer } from "node:http";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { account, api, hubState, mintToken, record, VAULT } from "./hub";
 import { installApplet } from "./helpers";

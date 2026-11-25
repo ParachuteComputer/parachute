@@ -4,7 +4,7 @@
 // an approval with an edited hash, or one signed by a key that isn't the person's, is refused.
 // Two devices here are two browser contexts holding the same key (as the person's phone and laptop do after pairing).
 import { createHash } from "node:crypto";
-import { devices, expect, test, type Browser, type Page } from "@playwright/test";
+import { devices, expect, test, type Browser, type Page } from "./test";
 import { finalizeEvent } from "nostr-tools/pure";
 import { api, hubState, record, VAULT } from "./hub";
 import { fromAppletMenu, ui } from "./helpers";

@@ -4,7 +4,7 @@
 // raises a device but never lowers it; a passcode level refuses the unlock alone.
 // The native side here is the test signer (src/services/e2eNative.ts), which mirrors src-tauri/src/levels.rs; the
 // device unlock passes only when the test says so (window.__parachuteE2EUnlock = "pass").
-import { devices, expect, test, type Browser, type Page } from "@playwright/test";
+import { devices, expect, test, type Browser, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 import { newKey } from "./keys";

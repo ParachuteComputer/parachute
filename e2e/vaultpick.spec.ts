@@ -4,7 +4,7 @@
 // home vault, so the second follows it); and a test applet with a card, whose ticks decide what it reaches, and which
 // is refused pantry through `vaults` and `sharing`. The second lock (every word, each call) is src/shell/vaultPick.test.ts.
 import { readFileSync } from "node:fs";
-import { devices, expect, test, type Browser, type Page } from "@playwright/test";
+import { devices, expect, test, type Browser, type Page } from "./test";
 import { api, hubState, mintToken, record, VAULT } from "./hub";
 import { newKey } from "./keys";
 // its own sign-in (e2e/pick.setup.ts writes it; a spec can't import a setup file)

@@ -4,7 +4,7 @@
 // measured in a long journal, and in a plain box of the kit's own (a Page holding one Write) in the same run: the
 // journal may add at most two frames, or half the plain box's time on a slow machine, to what the plain box takes (the
 // frame's own floor, and this machine's, is in both). Before the fix the journal took twice the plain box and more.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";

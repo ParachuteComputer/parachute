@@ -3,7 +3,7 @@
 // ticks a book and the vault's field changes, in one call; the note view shows the record's fields; the app's editor
 // changes one, typed by the type's own definition. Needs a hub with the record door (core 0.9).
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, mintToken, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 

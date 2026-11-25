@@ -232,12 +232,13 @@ export async function createWithToken(accountMcp: string, token: string, name: s
   // a hub that never answers ends the step (signInFlow firstVault) rather than holding "Making it…" for good
   const res = await postAccount(accountMcp, token, body, fetchImpl, AbortSignal.timeout(20_000));
   if (!res.ok) throw new Error(`The hub didn't make the vault (${res.status}).`);
-  let a: { error?: { message?: unknown }; result?: { isError?: boolean; content?: { text?: unknown }[] } };
+  let a: { error?: { message?: unknown }; result?: { isError?: boolean; content?: { text?: unknown }[]; structuredContent?: { message?: unknown } } };
   try { a = rpcAnswer(await res.text()) as typeof a; } catch { throw new Error("The hub's answer couldn't be read."); }
   const said = (m: unknown) => (typeof m === "string" && m.trim() ? m.replace(/^Error:\s*/, "").slice(0, 200) : "The hub didn't make the vault.");
   if (a?.error) throw new HubRefused(said(a.error.message));
   const text = a?.result?.content?.[0]?.text;
-  if (a?.result?.isError) throw new HubRefused(said(text));
+  // a hub from 0.9.1 refuses with structuredContent {error_type, message} (T-476); an older one with the text alone
+  if (a?.result?.isError) throw new HubRefused(said(a.result.structuredContent?.message ?? text));
   let made: unknown;
   try { made = (JSON.parse(String(text)) as { name?: unknown }).name; } catch { made = null; }
   if (!isVaultName(made)) throw new Error("The hub's answer couldn't be read.");

@@ -2,7 +2,7 @@
 // an applet) and Techne's (two vaults, one of them given to the person's key). Nobody types a vault's address: each hub
 // is signed in to once; it reads the home (docs/design/SCOPES.md), and every other vault the person may reach there is
 // a tap away. A second device that signs in to the home Parachute finds Techne on the person's list.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, mintToken, MORE_VAULTS, NOT_GIVEN, ORG_VAULT, techneState, VAULT } from "./hub";
 import { approveUntilBack, held, moreVaults, openVault, signInWithKey, ui, vaultRow } from "./helpers";
 

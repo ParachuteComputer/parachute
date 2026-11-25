@@ -4,7 +4,7 @@
 // folder with alice.token and bob.token), BUZZ_KEYS (alice.hex: the key the app signs with).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";

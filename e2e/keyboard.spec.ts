@@ -1,6 +1,6 @@
 // The phone's keyboard: Android marks the page's root `keyboard-up` from the keyboard's own inset (MainActivity.kt);
 // then the bar steps aside and the applet's frame reaches the foot (styles.css), and both come back when it goes.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 

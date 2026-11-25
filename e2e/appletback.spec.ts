@@ -2,7 +2,7 @@
 // ‹; Android's goes the same way, shell/nativeBack.ts) closes that screen first, and the person stays in the applet;
 // with none open, Back leaves as before. It gets one Back for each screen it opened during a tap: one that holds Back
 // without being tapped keeps no one in.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 

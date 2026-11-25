@@ -2,7 +2,7 @@
 // easily"): the same Pin button on each applet's row in the list and in an applet's own top bar, pressed when it is on the
 // bar. Each tap writes the open bundle's record (as Settings → On the bar does, #204), so every device follows. And the
 // bar keeps its way to the list in reach however many places are pinned.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { bundleOf, clearBarAndHome, ui, writeBundle } from "./helpers";
 import { api, hubState, VAULT } from "./hub";
 

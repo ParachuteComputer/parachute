@@ -1,7 +1,7 @@
 // Parachute Simplified (docs/SIMPLE.md), as a person whose settings choose it signs in on a new device: they land on
 // Notes, find a note, change it (the first Save saves), write a new one, copy the hub's one address and a vault's own, capture a
 // line into Inbox/ and write a Journal entry, both Parachute's own applets with no card. Against the real hub: what the app writes is read back.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { moreVaults, signIn } from "./helpers";
 import { api, hubState, VAULT } from "./hub";
 

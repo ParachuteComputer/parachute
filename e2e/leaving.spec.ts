@@ -3,7 +3,7 @@
 // the recording and keeps it: it is where it was on coming back, with Send, and nothing was sent by leaving. Journal on the
 // hub alone, with Chromium's fake microphone. It signs in for itself (the shared sign-in of the specs before is retired well
 // into a long run, and this runs late), so it sits with the other specs that do (playwright.config.ts).
-import { devices, expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { devices, expect, test, type BrowserContext, type Page } from "./test";
 import { api, hubState, record } from "./hub";
 import { signIn } from "./helpers";
 import { appletRecord } from "../applets/record.ts";

@@ -5,7 +5,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, VAULT } from "./hub";
 
 // signed in on the hub's own page (its owner), as a person who opens the website is on their Parachute

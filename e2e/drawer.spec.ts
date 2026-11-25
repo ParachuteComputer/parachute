@@ -10,7 +10,7 @@
 // Recipes from uni-ops, for one.
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, mintToken } from "./hub";
 import { ui } from "./helpers";
 

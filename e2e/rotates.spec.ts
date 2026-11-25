@@ -1,7 +1,7 @@
-// The tests that sign in again or rotate the sign-in. A new sign-in replaces the hub's grant to this app, and a refresh
-// rotates it; either way the hub retires the tokens the other tests share (a minute or so later). So these run in their
-// own project, after all the others (playwright.config.ts), the one that uses the shared sign-in first.
-import { expect, test, type Page } from "@playwright/test";
+// The tests that sign in again or rotate the sign-in. A new sign-in replaces the hub's grant to this app, which retires the
+// tokens the other tests share (a refresh rotates them too, and e2e/test.ts keeps that). So these run in their own
+// project, after all the others (playwright.config.ts), the one that uses the shared sign-in first.
+import { expect, test, type Page } from "./test";
 import { signIn, ui } from "./helpers";
 import { api, hubState, VAULT } from "./hub";
 

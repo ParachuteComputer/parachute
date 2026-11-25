@@ -1,7 +1,7 @@
 // Claude accounts (applets/accounts.tsx): the Uni app's "New workers use" picker as an applet writing the launcher's
 // note, System/Claude accounts (PARITY-FROM-SYSTEMS item 1): account_preference with when it was set and until when.
 // Its meters show in Settings too, as the Uni app's did (its section, fields.settings; Aaron 11-22).
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";

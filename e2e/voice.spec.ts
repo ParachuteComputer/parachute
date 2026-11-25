@@ -2,7 +2,7 @@
 // app"): one tap on an applet's record button and it records, as the Uni app's microphone does; Send sends. Going to
 // the background stops it and keeps what was recorded; Cancel throws it away and lets the microphone go. Journal's
 // voice entry on the hub alone, with Chromium's fake microphone (docs/design/KEYRING.md "Voice, files, links, storage").
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, record } from "./hub";
 import { appletRecord } from "../applets/record.ts";
 

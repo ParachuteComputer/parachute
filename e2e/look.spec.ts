@@ -1,7 +1,7 @@
 // The look an applet gets with no CSS of its own (docs/THEME.md "The order of styles"): plain HTML in a sealed frame is
 // drawn in the theme (paper, the faces, the kit's button and field), an HTML applet can use the parts' `pa-` classes,
 // and the applet's own CSS always wins over the kit's, whatever its specificity (the kit sits in cascade layers).
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, record } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });

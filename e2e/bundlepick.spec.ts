@@ -2,7 +2,7 @@
 // select it. In settings I see Parachute simplified and everything; and I'm still a bit curious about what exactly
 // everything implies"). Settings → Your bundle names every bundle in the person's vaults on this device, each with what
 // it puts on the bar, and says what Everything is; choosing one kept in another vault makes that vault the home.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, mintToken } from "./hub";
 import { ui } from "./helpers";
 

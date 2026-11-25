@@ -1,7 +1,7 @@
 // Vault, Parachute's own viewer (applets/vault.tsx, docs/VAULT.md), on a real hub: added with one tap, allowed on its
 // card; your vaults, a type's records as a table, a record opened, a field changed (and the vault holds the new value),
 // a record an AI writes appearing while it is open; and a record no other applet opens opening in it.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, mintToken, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 

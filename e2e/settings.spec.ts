@@ -3,7 +3,7 @@
 // for Frame, a frame of their own in the home vault (src/views/settingsShown.ts). The app names no one's agent and no
 // one's network. At a phone's 390 px, a vault's line in Your Parachutes stays inside its card.
 // Each test signs in fresh on a new device, as a newcomer does, so it runs with the specs that sign in again.
-import { devices, expect, test, type Page } from "@playwright/test";
+import { devices, expect, test, type Page } from "./test";
 import { api, hubState, mcp } from "./hub";
 import { signIn } from "./helpers";
 import { newKey } from "./keys";
