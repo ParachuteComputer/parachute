@@ -104,14 +104,23 @@ final class Drive: XCTestCase {
         }
     }
 
-    /// The page fills the screen: the bar at the foot sits on its bottom edge (src-tauri/src/lib.rs full_screen_page;
-    /// UIKit's default left the page 82pt short, and on the list of applets the bar floated above the bottom).
+    /// The page fills the screen: the bar at the foot reaches its bottom edge (src-tauri/src/lib.rs full_screen_page;
+    /// UIKit's default left the page 82pt short, and on the list of applets the bar floated with the page's own colour
+    /// under it). Read from the screen itself: the accessibility frames of the bar didn't move with the page.
     private func footOnTheBottom(file: StaticString = #filePath, line: UInt = #line) {
-        let screen = app.windows.firstMatch.frame
-        let foot = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Applets")).allElementsBoundByIndex
-            .map { $0.frame.maxY }.filter { $0 <= screen.maxY + 1 }.max() ?? 0
-        print("the bar at the foot ends \(screen.maxY - foot)pt above the bottom of the screen")
-        XCTAssertLessThan(screen.maxY - foot, 80, "the bar at the foot ends \(screen.maxY - foot)pt above the bottom of the screen", file: file, line: line)
+        guard let cg = XCUIScreen.main.screenshot().image.cgImage else { return XCTFail("no screenshot", file: file, line: line) }
+        func colour(_ x: Int, _ y: Int) -> [Int] {
+            var px = [UInt8](repeating: 0, count: 4)
+            let ctx = CGContext(data: &px, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            ctx.draw(cg, in: CGRect(x: -x, y: -(cg.height - 1 - y), width: cg.width, height: cg.height))
+            return px.prefix(3).map { Int($0) }
+        }
+        // the bottom-left corner (the bar, or the page under a floating bar) against the page beside the list
+        let bottom = colour(4, cg.height - 4), page = colour(4, cg.height / 2)
+        let apart = zip(bottom, page).map { abs($0 - $1) }.reduce(0, +)
+        print("the foot's corner \(bottom), the page \(page): \(apart) apart")
+        XCTAssertGreaterThan(apart, 8, "the screen's bottom edge is the page's colour: the bar at the foot doesn't reach it", file: file, line: line)
     }
 
     func testSignInAndRooms() {
