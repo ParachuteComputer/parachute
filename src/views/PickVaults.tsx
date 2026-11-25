@@ -21,7 +21,7 @@ export default function PickVaults({ pick, onError, onCancel }: { pick: VaultPic
     };
     const look = (when: string) => {
       const sec = document.querySelector("section.card.stack"), cs = getComputedStyle(document.body);
-      const kids = sec ? [...sec.querySelectorAll(":scope > div > *")].map((k) => `${k.tagName.toLowerCase()}${Math.round(k.getBoundingClientRect().top)}+${Math.round(k.getBoundingClientRect().height)}`).join(" ") : "";
+      const kids = sec ? [...sec.querySelectorAll(":scope > div > *, :scope > div > fieldset > legend")].map((k) => `${k.tagName.toLowerCase()}${Math.round(k.getBoundingClientRect().top)}+${Math.round(k.getBoundingClientRect().height)}`).join(" ") : "";
       say(`${when} fonts=${document.fonts.status} bodypad=${cs.paddingTop} sec=${Math.round(sec?.getBoundingClientRect().top ?? -1)} ${kids}`);
     };
     look("mount");
