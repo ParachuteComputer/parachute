@@ -104,6 +104,16 @@ final class Drive: XCTestCase {
         }
     }
 
+    /// The page fills the screen: the bar at the foot sits on its bottom edge (src-tauri/src/lib.rs full_screen_page;
+    /// UIKit's default left the page 82pt short, and on the list of applets the bar floated above the bottom).
+    private func footOnTheBottom(file: StaticString = #filePath, line: UInt = #line) {
+        let screen = app.windows.firstMatch.frame
+        let foot = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Applets")).allElementsBoundByIndex
+            .map { $0.frame.maxY }.filter { $0 <= screen.maxY + 1 }.max() ?? 0
+        print("the bar at the foot ends \(screen.maxY - foot)pt above the bottom of the screen")
+        XCTAssertLessThan(screen.maxY - foot, 80, "the bar at the foot ends \(screen.maxY - foot)pt above the bottom of the screen", file: file, line: line)
+    }
+
     func testSignInAndRooms() {
         let hub = need("PARACHUTE_HUB"), key = need("PARACHUTE_KEY"), room = need("PARACHUTE_ROOM")
         let host = URL(string: hub)!.host! + ":" + String(URL(string: hub)!.port!)
@@ -129,6 +139,7 @@ final class Drive: XCTestCase {
         press("Approve")
         wait("write a line, see your days", 60)
         shot("05-applets")
+        footOnTheBottom()
 
         // Rooms, in the list of applets: its card asks once; Allow asks for Face ID (keyring.rs, through LocalAuthentication)
         let rooms = any("label CONTAINS %@", "your rooms on a Buzz relay")
@@ -141,12 +152,5 @@ final class Drive: XCTestCase {
         wait(room, 60)
         wait("The beans are up along the fence.", 30)
         shot("07-rooms")
-
-        // the page fills the screen: the bar at the foot sits on its bottom edge (src-tauri/src/lib.rs full_screen_page;
-        // UIKit's default left the page 82pt short and the bar floating above the bottom)
-        let screen = app.windows.firstMatch.frame
-        let foot = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Applets")).allElementsBoundByIndex
-            .map { $0.frame.maxY }.max() ?? 0
-        XCTAssertLessThan(screen.maxY - foot, 80, "the bar at the foot ends \(screen.maxY - foot)pt above the bottom of the screen")
     }
 }
