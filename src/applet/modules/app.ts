@@ -12,14 +12,18 @@
 //   app.follow({link, from?, choose?}) (open) open what a note link leads to, during a tap (`choose`: Open with…)
 //   app.address({note})    (open) a note's address in the applet's own vault: the one form a link to a note is written in
 //   app.openLink({url})    (links) an http, https or mailto address in the browser, during a tap, one a second: whether it went
+//   app.picture({url})     (pictures) a web picture, fetched by the shell (never the frame): {type, bytes}; public
+//                          addresses only, 10 MB at most, PNG, JPEG, GIF or WebP, 120 a minute, 6 at once
 //   app.save({name, bytes, type})   (save) a file into Downloads during a tap, its name made bare: {saved: name}
 //   app.pick({accept?, multiple?})  (attach) the shell's own picker, during a tap: [{name, type, bytes}], [] when none
+//   app.pick({accept?, multiple?, bytes: false})  (attach) the same, without the bytes: [{name, type, size, file}], `file`
+//                          a handle only the shell resolves, for `vault.upload` (docs/design/UPLOADS.md), up to 2 GB
 import { ContractError, ERROR_CODES, hasOnly, plain } from "../contract.ts";
 import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
 import type { Answer } from "../../links/resolve.ts";
 import { LINKS_PER_CALL, MAX_LINK } from "../../links/note.ts";
-import { bareName, FILE_MAX, LINK_GAP_MS, linkOk, mediaType, parseAccept, SAVE_GAP_MS } from "../files.ts";
+import { bareName, FILE_MAX, LINK_GAP_MS, linkOk, mediaType, parseAccept, PICTURES_A_MINUTE, PICTURES_AT_ONCE, pictureUrlOk, SAVE_GAP_MS } from "../files.ts";
 
 /** A note as `recent` gives it: its title, its vault's name, when it changed, and where it opens. No folder, no content. */
 export type RecentNote = { vaultName: string; title: string; updatedAt: string | null; href: string };
@@ -28,6 +32,10 @@ export type BarPlace = { name: string; glyph: string; href: string; home: boolea
  *  Vault's Changes for the vault with the most. */
 export type ChangedToday = { count: number; names: string[]; more: boolean; href: string | null };
 export type PickedFile = { name: string; type: string; bytes: ArrayBuffer };
+/** A file picked for the app to carry (`bytes: false`): the shell's own `File`, never handed to the applet. */
+export type ChosenFile = { name: string; type: string; size: number; file: File };
+/** What the applet gets for one: its handle in place of the file. */
+export type HandedFile = { name: string; type: string; size: number; file: string };
 export type AppDeps = {
   /** The newest `limit` notes in each vault this device holds, newest first; `charge` counts the vault reads. */
   recent(limit: number, charge: (n: number) => void): Promise<RecentNote[]>;
@@ -48,10 +56,14 @@ export type AppDeps = {
   follow(link: string, from: string | undefined, choose: boolean): Promise<boolean>;
   /** A note's address in the applet's own vault (its id only is checked: the address is made, not read). */
   address(note: string): string | null;
+  /** A web picture's bytes and type (src/shell/device.ts `pictureOut`), checked as a picture. */
+  picture(url: string): Promise<{ type: string; bytes: ArrayBuffer }>;
   /** Save it into Downloads (`name` already bare): the name it was saved as. Throws `notTapped()` without a tap. */
   save(name: string, bytes: ArrayBuffer, type: string): Promise<string>;
   /** The shell's own picker over the applet: what the person picked ([] for none). Throws `notTapped()` without a tap. */
   pick(accept: string[], multiple: boolean): Promise<PickedFile[]>;
+  /** The same picker, the files kept by the shell and handed over as handles. Absent: `bytes: false` is not_granted. */
+  choose?(accept: string[], multiple: boolean): Promise<HandedFile[]>;
 };
 
 /** What a call that needs the person's tap answers without one. */
@@ -83,6 +95,8 @@ export function appHref(href: string): boolean {
 export function createAppModule(allowed: readonly AppWord[], deps: AppDeps, now: () => number = Date.now): UniModule {
   const need = (w: AppWord) => { if (!allowed.includes(w)) throw new ContractError(ERROR_CODES.notGranted); };
   let lastLink = -Infinity, lastSave = -Infinity;
+  const pictured: number[] = [];
+  let picturing = 0;
   return {
     namespace: "app",
     methods: {
@@ -153,6 +167,20 @@ export function createAppModule(allowed: readonly AppWord[], deps: AppDeps, now:
           return went;
         },
       },
+      picture: {
+        cap: null,
+        validate: (p) => { need("pictures"); return plain(p) && hasOnly(p, ["url"]) && pictureUrlOk(p.url) ? { ok: true, value: p.url } : { ok: false }; },
+        run: async (url: string) => {
+          // a mail's pictures come in a burst; this many a minute, so an applet can't use it as a pipe out
+          const t = now();
+          while (pictured.length && t - pictured[0] >= 60_000) pictured.shift();
+          if (pictured.length >= PICTURES_A_MINUTE) throw new ContractError(ERROR_CODES.rateLimited, "pictures: too many a minute");
+          if (picturing >= PICTURES_AT_ONCE) throw new ContractError(ERROR_CODES.rateLimited, "pictures: too many at once");
+          pictured.push(t);
+          picturing++;
+          try { return await deps.picture(url); } finally { picturing--; }
+        },
+      },
       save: {
         cap: null,
         validate: (p) => {
@@ -173,11 +201,15 @@ export function createAppModule(allowed: readonly AppWord[], deps: AppDeps, now:
         cap: null,
         validate: (p) => {
           need("attach");
-          if (!plain(p) || !hasOnly(p, ["accept", "multiple"]) || (p.multiple !== undefined && typeof p.multiple !== "boolean")) return { ok: false };
+          if (!plain(p) || !hasOnly(p, ["accept", "multiple", "bytes"]) || (p.multiple !== undefined && typeof p.multiple !== "boolean") || (p.bytes !== undefined && typeof p.bytes !== "boolean")) return { ok: false };
           const accept = parseAccept(p.accept);
-          return accept ? { ok: true, value: { accept, multiple: p.multiple === true } } : { ok: false };
+          return accept ? { ok: true, value: { accept, multiple: p.multiple === true, bytes: p.bytes !== false } } : { ok: false };
         },
-        run: async (v: { accept: string[]; multiple: boolean }) => deps.pick(v.accept, v.multiple),
+        run: async (v: { accept: string[]; multiple: boolean; bytes: boolean }) => {
+          if (v.bytes) return deps.pick(v.accept, v.multiple);
+          if (!deps.choose) throw new ContractError(ERROR_CODES.notGranted, "this app can't carry a file for it here");
+          return deps.choose(v.accept, v.multiple);
+        },
       },
     },
   };

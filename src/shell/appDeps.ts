@@ -1,7 +1,7 @@
 // The shell's answers to an applet's `app` calls (applet/modules/app.ts), from what the shell holds.
 import type { Note } from "@openparachute/surface-client";
-import { notTapped, type AppDeps, type PickedFile, type RecentNote } from "../applet/modules/app";
-import { openLinkOut, saveFileOut } from "./device";
+import { notTapped, type AppDeps, type HandedFile, type PickedFile, type RecentNote } from "../applet/modules/app";
+import { openLinkOut, pictureOut, saveFileOut } from "./device";
 import { markTap } from "../open/mark";
 import { clientFor, keptClientFor } from "../vault/client";
 import { isAppOwn, noteHref, titleOnly } from "../vault/notes";
@@ -33,9 +33,19 @@ export const tappingIn = (frame: () => HTMLIFrameElement | null) => {
 };
 
 /** The shell's own picker sheet (views/DeviceSheets.tsx). */
-export type Picker = { pick(accept: string[], multiple: boolean): Promise<PickedFile[]> };
+export type Picker = { pick(accept: string[], multiple: boolean): Promise<PickedFile[]>;
+  /** The files kept by the shell, handed over as handles (`app.pick({bytes: false})`, for `vault.upload`). */
+  choose?(accept: string[], multiple: boolean): Promise<HandedFile[]> };
 
 export const MISS_MS = 60_000;
+/** How long a link's read may take before its hub counts as not answering (links/resolve.ts: such a note is still a
+ *  link): a read left hanging (a phone between networks, a tailnet coming back) would hold up every later link's
+ *  answer. At a tap, shorter: the tap goes to the note's screen while it is still fresh, and that screen reads it again. */
+export const READ_MS = 5_000, TAP_READ_MS = 1_500;
+const timed = <T>(p: Promise<T>, ms: number): Promise<T> => {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([p, new Promise<never>((_, no) => { t = setTimeout(() => no(new Error("the hub didn't answer in time")), ms); })]).finally(() => clearTimeout(t));
+};
 /** Which notes are there, asked of their vaults once a session (a note that was there is taken to be there still). */
 export function noteFinder(read: (rec: VaultRecord, idOrPath: string) => Promise<VaultNote | null>) {
   const seen = new Map<string, Promise<Found | null>>();
@@ -44,8 +54,8 @@ export function noteFinder(read: (rec: VaultRecord, idOrPath: string) => Promise
     const k = `${rec.key}\u0000${idOrPath}`;
     let p = seen.get(k);
     if (!p) {
-      p = read(rec, idOrPath).then((n) => (n && typeof n.id === "string" ? { id: n.id, path: typeof n.path === "string" ? n.path : "", code: isAppletCode(n) } : null));
-      // a failed read (the network, a refresh) is asked again next time; a note that isn't there, or one this lookup
+      p = timed(read(rec, idOrPath), READ_MS).then((n) => (n && typeof n.id === "string" ? { id: n.id, path: typeof n.path === "string" ? n.path : "", code: isAppletCode(n) } : null));
+      // a failed read (the network, a refresh, no answer in time) is asked again next time; a note that isn't there, or one this lookup
       // doesn't take (the hub found it by a path or a title, or outside the folders it may read), after a minute, as a
       // miss: kept longer, a quick answer later would say it is there (Uni may cite a note a moment before the hub has it)
       const mine = p;
@@ -73,8 +83,11 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
   const givenVaults = () => listVaults().filter((v) => given(v.key));
   // two resolvers: what a link leads to, asked of the vaults it was given (the answer is the applet's); where a tap goes,
   // of every vault held (the shell goes there; the applet hears only true or false)
-  const resolver = (): ResolveDeps => ({ vaults: givenVaults, here, mayRead, find });
-  const tapResolver = (): ResolveDeps => ({ vaults: listVaults, here, mayRead, find });
+  // a note in a vault that can't be asked now still counts, only in the applet's own vault: it knows that one, and
+  // another's name, drawn or tapped, would say which vaults are held (links/resolve.ts)
+  const ownVault = (rec: VaultRecord) => rec.key === here()?.key;
+  const resolver = (): ResolveDeps => ({ vaults: givenVaults, here, mayRead, find, unreached: ownVault });
+  const tapResolver = (): ResolveDeps => ({ vaults: listVaults, here, mayRead, find: (rec, p, ok) => timed(find(rec, p, ok), TAP_READ_MS), unreached: ownVault });
   return {
     async links(links, from, charge) {
       // the same for every link, read or not (a wikilink may take two): what it costs says nothing of what it names
@@ -157,6 +170,7 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
       await openLinkOut(url);
       return true;
     },
+    picture: (url) => pictureOut(url),
     async save(name, bytes, type) {
       if (!tappingInApplet()) throw notTapped();
       return saveFileOut(name, bytes, type);
@@ -165,5 +179,6 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
       if (!tappingInApplet()) return Promise.reject(notTapped());
       return picker.pick(accept, multiple);
     },
+    ...(picker.choose ? { choose: (accept: string[], multiple: boolean) => (tappingInApplet() ? picker.choose!(accept, multiple) : Promise.reject(notTapped())) } : {}),
   };
 }

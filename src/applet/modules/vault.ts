@@ -43,6 +43,8 @@ import type { CallCtx, UniModule } from "../router.ts";
 import type { Resolved } from "../needs.ts";
 import { tagsFor, type Opens } from "../opens.ts";
 import type { FetchResult } from "./frameFetch.ts";
+import type { ChosenFile } from "./app.ts";
+import type { Manifest, Progress } from "../upload.ts";
 
 export type PathRow = { id: string; path: string | null; extension?: string | null; updatedAt?: string | null };
 /** One end of a link as the hub summarises it (`include_links`). */
@@ -86,10 +88,14 @@ export type VaultDeps = {
   file?(path: string): Promise<Blob>;
   /** Attach a file already in the vault's storage (`<date>/<file>`) to the note `id`. Absent: attachFrom is not_granted. */
   attachPath?(id: string, path: string, mimeType: string): Promise<{ id?: string; path: string; mimeType?: string }>;
+  /** A file the person picked, carried onto the note `id` in pieces (upload.ts), the note's `upload` field saying what
+   *  landed. Absent: upload is not_granted. */
+  upload?(id: string, file: ChosenFile, progress: (p: Progress) => void, closed: () => boolean): Promise<Manifest>;
 };
 type AttachParams = { noteId: string; bytes: ArrayBuffer; type: string; transcribe: boolean };
 type FileParams = { id: string; path: string };
 type AttachFromParams = { noteId: string; from: string; path: string };
+type UploadParams = { noteId: string; file: string; id: string | null };
 /** One refusal for a record outside the folders, one it can't find and a file not attached to it: none tells it more. */
 const notAttached = () => new ContractError(ERROR_CODES.outOfScope, "only a file attached to a record it reads");
 type FetchParams = { method: string; path: string; headers: Record<string, string>; body: string | null };
@@ -197,7 +203,9 @@ const publicNote = (n: VaultNote, content: boolean, links: readonly string[] | n
   return out;
 };
 
-export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; opens?: readonly Opens[]; name?: string } = {}): UniModule {
+/** `files`: the files picked on this screen by their handles (`app.pick({bytes: false})`); `emit`: an event to the frame
+ *  (an upload's progress). */
+export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; opens?: readonly Opens[]; name?: string; files?: (handle: string) => ChosenFile | undefined; emit?: (event: string, data: unknown) => void } = {}): UniModule {
   const now = opts.now ?? Date.now;
   const opens = opts.opens ?? [];
   /** Each note's attachments as the hub listed them in the last 10 s: a note's pictures ask once, not once each. */
@@ -568,6 +576,33 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
           forget(v.noteId, note.id, note.path);
           lists.forget(note.id);
           return { id: a.id ?? null, path: a.path, type: a.mimeType ?? v.type, transcribe: v.transcribe };
+        },
+      },
+      // a file the person picked on this screen (its handle), carried onto a note it may change, judged as attach is;
+      // `id` names its progress events (`vault.upload` {id, sent, size}). The applet never holds the bytes.
+      upload: {
+        cap: "vault.update",
+        validate: (p: unknown) => (plain(p) && hasOnly(p, ["noteId", "file", "id"]) && typeof p.noteId === "string" && safeRef(p.noteId)
+          && typeof p.file === "string" && /^f\d{1,9}$/.test(p.file) && (p.id === undefined || (typeof p.id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(p.id)))
+          ? { ok: true, value: { noteId: p.noteId, file: p.file, id: typeof p.id === "string" ? p.id : null } } : { ok: false }),
+        async run(v: UploadParams, scopes, ctx) {
+          if (!deps.upload || !opts.files) throw new ContractError(ERROR_CODES.notGranted, "this vault takes no files from applets here");
+          const chosen = opts.files(v.file);
+          if (!chosen) throw new ContractError(ERROR_CODES.outOfScope, "only a file picked on this screen");
+          ctx.charge(1);
+          let note: VaultNote;
+          try { note = await deps.getNote(v.noteId); } catch (e) { if (e instanceof ContractError) throw e; throw new ContractError(ERROR_CODES.outOfScope, "it may attach files only to notes it may change"); }
+          if (!inScope(scopes["vault.update"] ?? [], note.path) || isAppletCode(note)) throw new ContractError(ERROR_CODES.outOfScope, "it may attach files only to notes it may change");
+          if (ctx.closed()) throw new ContractError(ERROR_CODES.failed);
+          const say = (p: Progress) => { if (v.id && !ctx.closed()) opts.emit?.("vault.upload", { id: v.id, sent: p.sent, size: p.size }); };
+          try {
+            return await deps.upload(note.id, chosen, say, ctx.closed);
+          } catch (e) {
+            throw new ContractError(ERROR_CODES.failed, `the vault didn't take it: ${e instanceof Error ? e.message.slice(0, 200) : "it failed"}`);
+          } finally {
+            forget(v.noteId, note.id, note.path);
+            lists.forget(note.id);
+          }
         },
       },
       attachFrom: {

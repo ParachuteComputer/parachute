@@ -7,6 +7,7 @@
 |---|---|
 | `e2e/rooms.spec.ts`, `roomlinks`, `area`, `today`, `devices`, `approvals` | `BUZZ_RELAY` (a Buzz relay), `BUZZ_KEYS` (a folder with `owner.hex`, `alice.hex`, `bob.hex`) |
 | `e2e/mail.spec.ts` | `MAIL_BRIDGE` (the Uni app's mail gateway in front of a Stalwart), `BUZZ_KEYS` (also `unibot.hex`) |
+| `e2e/mailread.spec.ts` | the mail stack as above, and `STALWART` with `MAIL_SECRETS` (up.sh writes them): fixture messages are put straight into alice's Inbox |
 | `e2e/matrix.spec.ts` | `MATRIX_HS` (a Matrix homeserver), `MATRIX_TOKENS` (a folder with `alice.token`, `bob.token`), `BUZZ_KEYS` |
 | `src-tauri/tests/services_real.rs` | `BUZZ_RELAY`, `MAIL_BRIDGE`, `BUZZ_KEYS` (the native side, not the browser) |
 
@@ -21,7 +22,7 @@ and on every pull request that changes more than docs. A skip there fails the ru
 ```sh
 e2e/services/up.sh                      # starts and seeds every server; writes e2e/.services/env
 set -a; . e2e/.services/env; set +a
-npx playwright test e2e/{approvals,area,devices,mail,matrix,roomlinks,rooms,today}.spec.ts --project=phone
+npx playwright test e2e/{approvals,area,devices,mail,mailread,matrix,roomlinks,rooms,today}.spec.ts --project=phone
 cargo test --manifest-path src-tauri/Cargo.toml --test services_real
 e2e/services/down.sh                    # removes the containers, their volumes and e2e/.services
 ```
@@ -49,7 +50,9 @@ production, so the shell's pacing is tested. Its per-key quota (60 stored messag
 specs' keys post far more than a person does. A rooms applet's person in many rooms is the case it holds: a burst of
 subscriptions is paced, and a post goes ahead of them.
 
-What the relay taught the applet (and the tests hold it to): it sends live events only to a subscription for one room;
+What the relay taught the applet (and the tests hold it to): it sends live events only to a subscription for one room
+(a room's member list, 39002, too: news that you were put in or taken out of a room comes as its own word to you, kinds
+44100 and 44101; put in, the word comes a moment before the member list says so);
 typing (kind 20002) goes in a filter of its own; a file with metadata in it (camera data, encoder tags) is refused, so
 the applet draws a picture again before it sends it; read markers and message times are whole seconds.
 

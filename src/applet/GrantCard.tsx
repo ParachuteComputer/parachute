@@ -67,6 +67,7 @@ function rowsOf(grant: Grant, face: { lines: FaceLine[]; also: string[] }): Row[
       : l.lead.startsWith("High risk") ? ["⚑", "Answer approvals as you"]
       : l.lead.startsWith("Notifies") ? ["◔", "Tell you when something comes"]
       : l.lead.startsWith("Opens web") ? ["↗", "Open links"]
+      : l.lead.startsWith("Loads pictures") ? ["▣", "Load web pictures"]
       : l.lead.startsWith("Sees the titles") ? ["☰", "See your newest notes"]
       : l.lead.startsWith("Sees and changes records") ? ["▦", "See and change the vaults you give it"]
       : l.lead.startsWith("Sees what reaches") ? ["⚿", "See and change who reaches them"]
@@ -137,7 +138,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
   const allow = (e: MouseEvent) => { if (settle ? press.counts(e) : e.isTrusted) onAllow(asked); };
   const change = changeOf(was, { scope, code, status, runs, ...asked });
   const codeChanged = change.kind === "code" || (change.kind === "expired" && change.codeMoved);
-  const reaches = (grant.services?.length ?? 0) > 0 || grant.app.includes("links");
+  const reaches = (grant.services?.length ?? 0) > 0 || grant.app.includes("links") || grant.app.includes("pictures");
   const isNew = (t: string) => !!change.fresh?.has(t);
   const New = ({ t }: { t: string }) => (isNew(t) ? <><span className="grant-new">New</span>{" "}</> : null);
   const freshOnFace = [...(change.fresh ?? [])].some((t) => !t.startsWith(DETAIL));

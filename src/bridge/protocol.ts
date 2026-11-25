@@ -56,6 +56,9 @@ export type FrameParachute = { hub: string; host: string; name: string; home: bo
  *  ("updated"), not yet allowed ("none"), or applets don't run on this device ("off"); absent when it isn't there. */
 export type FrameViewer = { vault: string; noteId: string; status: "ok" | "updated" | "none" | "off" };
 export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[]; look?: "notes"; app?: "simple"; notice?: "bundle-record" | "bundle-newer"; noticeName?: string; viewer?: FrameViewer;
+  /** Pin: `barTheirs`, the open bundle is someone else's and its bar is theirs (nothing can be pinned); `barOwn`, Parachute's
+   *  own applets on the bar as the bundle's own places (on it, but not pins) */
+  barTheirs?: true; barOwn?: string[];
   /** Parachute's own applets (docs/design/PARACHUTE-SOURCE.md), in the home: from the app, not from any vault's list */
   official?: FrameApplet[] };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */

@@ -59,3 +59,44 @@ test("Uni's kitchen:<ULID> in a room is a link: a tap opens the recipe in the Re
     await expect(frame(page).locator("#opened")).toHaveText("Opened: Recipes/Tomato toast");
   } finally { await made.remove(); }
 });
+
+test("off the tailnet: Uni's link to a note the hub can't be asked for right now is still a link; a tap says so plainly, and Try again opens it (T-476)", async ({ page }) => {
+  test.setTimeout(120_000);
+  // Aaron's relay is public and his hub is on his tailnet: his rooms come in before his hub answers. A fresh note (never
+  // read on this device, so no copy of it is kept) whose read fails as a hub off the network does
+  const note = (await api(hubState(), "POST", "notes", { path: `Checklists/Shed move ${Date.now()}`, content: "# Shed move\n\n- Empty the shelves\n- Book the trailer" })).id as string;
+  const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
+  const uni = await person(RELAY!, secret("bob"));
+  const stamp = Date.now().toString(36);
+  const owner = await person(RELAY!, secret("owner"));
+  const room = crypto.randomUUID();
+  for (const p of [alice, uni.pubkey]) await owner.publish({ kind: 9030, tags: [["p", p]] });
+  expect((await owner.publish({ kind: 9007, tags: [["h", room], ["name", `Shed ${stamp}`], ["visibility", "private"], ["channel_type", "stream"]] })).ok).toBe(true);
+  for (const p of [alice, uni.pubkey]) expect((await owner.publish({ kind: 9000, tags: [["h", room], ["p", p]] })).ok).toBe(true);
+  owner.close();
+  expect((await uni.publish({ kind: 9, content: `The full checklist is in the vault: ${VAULT}:${note} ${stamp}`, tags: [["h", room]] })).ok).toBe(true);
+  uni.close();
+  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
+  const made = await installApplet("rooms", { relay: RELAY!, uni: uni.pubkey });
+  // any read of that note (core 0.8 `notes`, 0.9 `records`; by `?id=` or in the path)
+  const off = (url: URL) => url.pathname.startsWith(`/vault/${VAULT}/api/`) && (url.searchParams.get("id") === note || url.pathname.includes(`/${note}`));
+  await page.route(off, (r) => r.abort("internetdisconnected"));
+  try {
+    await chip(page, /Rooms/);
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = frame(page);
+    await app.getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Shed ${stamp}`) }).click({ timeout: 30_000 });
+    const msg = app.getByRole("log").locator("article", { hasText: stamp });
+    await expect(msg).toContainText(`The full checklist is in the vault: ${VAULT}:${note}`);
+    await expect(msg.getByRole("link", { name: `${VAULT}:${note}` })).toBeVisible({ timeout: 20_000 });
+    // a tap while it still can't be read: the note's screen, in plain words, with a way to try again (never a dead link)
+    await msg.getByRole("link", { name: `${VAULT}:${note}` }).click();
+    await expect(page).toHaveURL(new RegExp(`/n/${note}`));
+    const screen = page.frameLocator("iframe.app-frame");
+    await expect(screen.getByRole("alert")).toHaveText(/^Can't reach the vault just now\./, { timeout: 20_000 });
+    // the hub is back: Try again opens it
+    await page.unroute(off);
+    await screen.getByRole("button", { name: "Try again" }).click();
+    await expect(screen.getByText("Book the trailer")).toBeVisible({ timeout: 20_000 });
+  } finally { await page.unroute(off).catch(() => {}); await made.remove(); await api(hubState(), "DELETE", `notes/${note}`).catch(() => {}); }
+});

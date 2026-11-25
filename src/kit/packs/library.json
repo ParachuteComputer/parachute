@@ -2,9 +2,9 @@
   "parachute_pack": 1,
   "id": "library",
   "name": "Library",
-  "version": 1,
+  "version": 2,
   "source": "https://parachute.computer/docs/build/packs/library",
-  "summary": "Books you own, chapter by chapter, with the words you mark in them and summaries beside each chapter. Its book is the Reading list's, with every field it has.",
+  "summary": "Books you own, chapter by chapter, with the words you mark in them and summaries beside each chapter, and the jobs that add a book from a file. Its book is the Reading list's, with every field it has.",
   "types": {
     "book": {
       "description": "A book you want to read, are reading, or have read. One you own can hold its chapters in its folder.",
@@ -49,6 +49,17 @@
         "sources": { "type": "reference", "cardinality": "many" },
         "by": { "type": "string" },
         "made": { "type": "date" }
+      }
+    },
+    "job": {
+      "description": "Work asked of an AI, with the file it needs attached: what to do in words, where it stands, and what it made. Its upload field (written by the app) lists the file's pieces in order, each with its SHA-256.",
+      "fields": {
+        "do": { "type": "string", "description": "What to do, in plain words." },
+        "kind": { "type": "string", "description": "A word a tool matches on, like import-book." },
+        "status": { "type": "string", "enum": ["uploading", "waiting", "working", "done", "failed"], "default": "waiting" },
+        "by": { "type": "string", "description": "Who took it." },
+        "result": { "type": "reference", "cardinality": "one", "description": "What it made." },
+        "note": { "type": "string", "description": "What happened: why it failed, or what was left out." }
       }
     }
   },

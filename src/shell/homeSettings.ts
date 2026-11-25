@@ -364,6 +364,12 @@ export async function startApplet(vault: string, noteId: string | null): Promise
 }
 
 export type Pin = Found & { place: Place };
+/** Parachute's own applets the bar holds as places of the bundle's own (shipped there, Connect, or Notes as the home
+ *  screen of a bundle that looks like Parachute Simplified): on the bar already, but not pins, so they offer no Pin. */
+export function barOwnIds(entries: readonly (Pin | AppPlace)[], look: string | undefined): string[] {
+  return entries.flatMap((e) => ("href" in e ? [] : "shipped" in e ? [officialId(e.shipped)] : e.screen === "connect" ? [officialId("connect")]
+    : look === "notes" ? [officialId("notes")] : []));
+}
 /** The bar as this device can show it, in the bundle's order: the app's own places as written, and the pins it can find,
  *  each once; and the home applet, which is on the bar only when it is pinned (the bundle's bar is the bar). `pins`: the
  *  applets alone. */

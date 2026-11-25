@@ -59,7 +59,7 @@ them all".
   changes notes · no applet uses it*. A tap on the line gives the reason in a sentence, then Whose, Read only, Sign in
   again and Sign out. Over them: *Parachute reaches your home vault, and another vault only when you open it or allow an
   applet there.*
-- The vaults it doesn't read are counted on one line (*12 more vaults there, which Parachute doesn't read*), with the
+- The vaults it doesn't read are counted on one line (*12 more vaults there, not open here*), with the
   list behind a tap.
 - No change to what the app asks for or holds.
 

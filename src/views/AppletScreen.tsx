@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import { Bar } from "../ui/Bar";
+import { PinButton } from "../ui/PinButton";
 import { useVault } from "../vault/hooks";
 import { clientFor, keptClientFor, keptReaderFor } from "../vault/client";
 import { askAgain, onFresh } from "../vault/readCache";
@@ -92,9 +93,10 @@ import { appDeps, tappingIn } from "../shell/appDeps";
 import { runDecision } from "../applet/selftest/gate";
 import { useGate, useSelfTestRun } from "../applet/selftest/run";
 import { vaultDeps } from "../applet/vaultDeps";
+import { chosenFiles } from "../applet/upload";
 import { takeMark } from "../open/mark";
 import { chooseStart, startChosenHere, takeStart } from "../shell/start";
-import { barNow, settingsReadNow, useSettings } from "../shell/homeSettings";
+import { barNow, barOwnIds, pinApplet, settingsReadNow, useSettings } from "../shell/homeSettings";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
@@ -191,7 +193,7 @@ export default function AppletScreen() {
   // so does any other way to that home (Back to it, the bar), when it isn't asked to open a note: while the settings, as
   // read this session, still name it, and the person chose it here. That read may be answered from the copy kept on
   // this device while the hub is asked behind it (vault/readCache.ts); a home the hub's answer no longer names stops (below)
-  useSettings();
+  const { bar: barHere, bundle: bundleHere } = useSettings();
   const home = settingsReadNow() ? barNow().start : null;
   // a home applet is in a vault of the person's own: someone else's code never runs by itself
   const chosenHome = !askedNote && !!rec && !!appletId && isMine(rec) && home?.vault === rec.key && home.noteId === appletId && startChosenHere(rec.key, appletId);
@@ -502,6 +504,9 @@ export default function AppletScreen() {
   sheetsRef.current = sheets;
   // the recorder and the file picker (docs/design/KEYRING.md "Voice, files, links, storage"): stable, as the router keeps them
   const device = useDeviceSheets(entry?.manifest.name ?? "This applet", kept.shown, subject);
+  // the files picked here for the app to carry (`app.pick({bytes: false})`, then `vault.upload`): the applet holds
+  // their handles only (docs/design/UPLOADS.md)
+  const chosen = useRef(chosenFiles());
   const servicesWhy = useRef<string | null>(null);
   const sessionRef = useRef<Session | null>(null);
   // Back, held by the applet while it has screens of its own open (the kit's onBack, modules/back.ts). It gets one Back for
@@ -517,7 +522,7 @@ export default function AppletScreen() {
     const was = brokerRef.current;
     if (was && was.session !== s) { void was.broker.then((b) => b?.close()); brokerRef.current = null; }
     // a recorder or picker open for the frame that went answers none (its session can't take the answer)
-    if (sessionRef.current && sessionRef.current !== s) device.cancel();
+    if (sessionRef.current && sessionRef.current !== s) { device.cancel(); chosen.current.clear(); }
     sessionRef.current = s;
     if (!s || !entry?.services.length || !rec || !subject) return;
     const services = entry.services;
@@ -564,10 +569,13 @@ export default function AppletScreen() {
   const reader = useMemo(() => (rec ? keptReaderFor(rec) : null), [rec?.key, rec?.issuer]); // eslint-disable-line react-hooks/exhaustive-deps
   const router = useMemo(() => (rec && entry && reader ? createRouter([
     // its `here`: this vault, or for Home's Inbox/ line Capture's (none to add to while that isn't here: no create)
-    ((h, add) => createVaultModule(((d) => (add ? d : { ...d, create: undefined }))(vaultDeps(clientFor(h), h === rec ? reader.client : keptReaderFor(h).client)), { opens: entry.opens, name: h.vault }))(
+    ((h, add) => createVaultModule(((d) => (add ? d : { ...d, create: undefined }))(vaultDeps(clientFor(h), h === rec ? reader.client : keptReaderFor(h).client)),
+      { opens: entry.opens, name: h.vault, files: (f) => chosen.current.get(f), emit: (event, data) => sessionNow.current?.sendEvent(event, data) }))(
       loaded.state === "ok" && loaded.here ? findVault(loaded.here) ?? rec : rec, !(loaded.state === "ok" && loaded.here === null)),
     createThemeModule({ theme: tokensNow }),
-    createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current, device, () => findVault(rec.key), entry.manifest.allow.filter((r) => r.verbs.includes("read")).map((r) => r.path), pickNow.given)),
+    createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current,
+      { pick: device.pick, choose: async (accept, multiple) => (await device.choose(accept, multiple)).map((f) => ({ name: f.name, type: f.type, size: f.size, file: chosen.current.add(f) })) },
+      () => findVault(rec.key), entry.manifest.allow.filter((r) => r.verbs.includes("read")).map((r) => r.path), pickNow.given)),
     // the microphone (manifest `reach: [voice]`) and a little storage on this device (`app: [storage]`): not_granted without
     createVoiceModule(!!entry.manifest.reach?.includes("voice"), { record: (max) => (tappingIn(() => frameEl.current) ? device.record(max) : Promise.reject(notTapped())) }),
     createStorageModule(entry.app.includes("storage"), storageFor(subjectOf(rec.key, entry.noteId))),
@@ -599,6 +607,22 @@ export default function AppletScreen() {
   const handed = (official || decision === "run") && claim && note ? { note: { id: note.id, path: note.path ?? "" }, screen: screenOf(entry!.manifest, claim.screen ?? askedScreen).id } : null;
   const name = entry?.manifest.name ?? "Applet";
   const sized = !!entry?.embeds.length;
+  // Pin, in the top bar: one tap puts it on the bar or takes it off, written to the open bundle's record (as the list's
+  // Pin and Settings → On the bar do). Pinning runs nothing, so it is there while the applet asks or is stopped too
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const pinId = entry?.noteId ?? appletId ?? "";
+  // Parachute's own are pinned in the home, as the bar finds them, also when Journal or Capture runs in a vault picked
+  // for its notes
+  const pinVault = officialOf(pinId) ? homeVault()?.key : rec?.key;
+  const pinnedHere = !!pinVault && barHere.pins.some((p) => p.vault === pinVault && p.noteId === pinId);
+  // another applet on this screen: the last one's error doesn't carry over
+  useEffect(() => { setPinError(null); }, [rec?.key, appletId]);
+  const togglePin = () => {
+    if (!pinVault || !pinId || pinBusy) return;
+    setPinBusy(true); setPinError(null);
+    pinApplet(pinVault, pinId, !pinnedHere).then(() => setPinBusy(false), (e: unknown) => { setPinError(e instanceof Error ? e.message : "That couldn't be saved."); setPinBusy(false); });
+  };
   // a notification's tap opens the applet at a room and message (services/notifyLink.ts)
   const launch: { room: string; event?: string } | { vault: string; record?: string; show?: "changes" | "sharing" } | null = launchOf(params) ?? (entry?.app.includes("vaults") ? vaultLaunchOf(params) : null);
   const launchKey = launch ? ("room" in launch ? `${launch.room}|${launch.event ?? ""}` : `${launch.vault}|${launch.record ?? ""}|${launch.show ?? ""}|${location.key}`) : "";
@@ -727,7 +751,12 @@ export default function AppletScreen() {
   const back = (nav: Parameters<typeof backOrLauncher>[0]) => { if (!backToApplet()) backOrLauncher(nav); };
   const plainNote = note ? <Link to={`${noteHref(rec.key, note.id)}?with=vault`}>Open {titleOf(note)} in the vault view</Link> : null;
   const theirsLabel = notMine ? ` · ${rec.vault}'s` : "";
-  const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : loaded.state === "newer" ? `${loaded.entry.manifest.glyph} ${loaded.entry.manifest.name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu} />{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;
+  // (none on a bar someone else offers, nor for one of Parachute's own the bundle places on the bar itself)
+  const canPin = !!pinVault && !bundleHere.live && !(pinVault === homeVault()?.key && barOwnIds(barHere.entries, bundleHere.look).includes(pinId));
+  const pinName = !canPin ? null : entry ? name : loaded.state === "newer" ? loaded.entry.manifest.name : null;
+  const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : loaded.state === "newer" ? `${loaded.entry.manifest.glyph} ${loaded.entry.manifest.name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu}>
+    {pinName && <PinButton name={pinName} pinned={pinnedHere} busy={pinBusy} onToggle={togglePin} />}
+  </Bar>{pinError && <p className="error" role="alert">{pinError}</p>}{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;
 
   // Parachute's own run whatever the self-test found: it guards against code the person hasn't trusted, and this is the
   // app's own (docs/design/PARACHUTE-SOURCE.md). Not while it runs, though: its probes' escapes would stop any frame

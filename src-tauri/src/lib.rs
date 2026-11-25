@@ -8,6 +8,7 @@ pub mod approve;
 mod cards;
 pub mod door;
 mod files;
+pub mod pictures;
 mod updates;
 pub mod key;
 pub mod keyring;
@@ -137,6 +138,7 @@ pub fn run() {
             updates::update_feed,
             updates::update_install,
             files::open_link,
+            pictures::web_picture,
             files::save_file,
             saved::saved_get,
             saved::saved_put,

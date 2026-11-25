@@ -17,12 +17,13 @@ room reaches both.
 |---|---|---|
 | Room list: your rooms (NIP-29 membership), newest first, glyph, time, last line "who: text" | built | e2e/rooms.spec.ts, real relay |
 | The list paints at once when Rooms opens: as it was last shown on this device (its share of `storage`, 64 KB), then the relay read again, its queries side by side, in its place | built | rooms.spec: the list shows with the relay held away |
+| The list stays live: a room you are put in, wherever it was made, shows at once with its name and last line; one you are taken out of, or archived, goes; a new name shows. From the relay's own word to you (kinds 44100, 44101) and each room's description (39000) on its live subscription | built | rooms.spec: with no rooms and opened again, then with some, a room made and joined after the list loaded shows within seconds with its last line, takes a new line and a new name, goes when she is taken out, and comes back live when put in again (archive: not tested) |
 | Unread count and "@" when you are named, from the Uni app's own read markers (kind 30078, sealed to you); a room with no marker yet shows no count, as in the Uni app | built | rooms.spec: a mention after you read shows "1 new, mentions you"; the marker on the relay is sealed |
 | "Wants you" on a row for an open ask | built | rooms.spec |
 | Search across rooms | built (the relay's NIP-50 search); a hit opens its room at that message, marked | rooms.spec: "seed potatoes" found, the room opened at it |
 | Messages: markdown (bold, italics, strike, code, fences, quotes, lists, tables, headings, rules), day lines, grouping, "New" line | built | rooms.spec (bold in a message) |
 | Links | built: a tap opens http, https and mail links in the browser, through the shell (`app.openLink`, the `links` line on the card, KEYRING.md) | e2e/devices.spec.ts: the shell's open called with the link |
-| Note links | built: `uni:<ULID>` (any `<vault>:<ULID>` of a vault the person has), a note's address and a `[[wikilink]]` open the note in the app, through the kit (`Link`, `Linked`, `Note`; the `open` line on the card); a vault name they don't have stays text | e2e/notelinks.spec.ts; e2e/roomlinks.spec.ts (a real relay) |
+| Note links | built: `uni:<ULID>` (any `<vault>:<ULID>` of a vault the person has), a note's address and a `[[wikilink]]` open the note in the app, through the kit (`Link`, `Linked`, `Note`; the `open` line on the card); a vault name they don't have stays text; a note in the applet's own vault (Rooms' `uni`) still links while its hub can't be reached (a phone back on the tailnet), and a link that led nowhere asks again when you come back | e2e/notelinks.spec.ts; e2e/roomlinks.spec.ts (a real relay) |
 | Threads: "N replies", the thread pane, replying in it | built | rooms.spec: the reply carries the root `e` tag; the count shows |
 | Reactions: none shown, none sent (Aaron, 11-18: "I don't really use them"); Uni's 👀 still drives "Uni is working" | removed on purpose | rooms.spec: no React buttons, a reaction draws nothing; the working test |
 | Edits shown "(edited)"; deletions hidden | built (shown) | not in a spec |
@@ -51,7 +52,7 @@ room reaches both.
 | Feature | State | Tested |
 |---|---|---|
 | Inbox, Drafts, Sent, Archive, Junk; unread count on Inbox | built | e2e/mail.spec.ts, real mail |
-| Reading a thread (text, or the words of an HTML message; never its HTML), marked seen | built | mail.spec: bob's message read, then shown as seen |
+| Reading a thread, marked seen: HTML mail drawn as HTML, safely (the kit's `MailBody`, [design/MAIL-READING.md](design/MAIL-READING.md)): links open, web pictures on **Show pictures** per sender (tracking pixels never), inline pictures at once, quoted replies folded; plain text with its links; older messages in a thread folded | built | mail.spec: bob's message read, then shown as seen; e2e/mailread.spec.ts, real mail: Apple and Google invites, a Stripe receipt, a Substack newsletter, a forwarded thread, plain text, inline pictures, a hostile mail; src/kit/mailClean.test.ts, each rule mutation-proved (scripts/mutate-mail.ts) |
 | Search | built (JMAP text search) | mail.spec |
 | Write, reply: save the draft, review exactly what will go, send | built | mail.spec: the reply reaches bob's inbox and is in Sent |
 | Open and send a draft; discard | built | not in a spec |

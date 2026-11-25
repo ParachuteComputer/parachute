@@ -46,14 +46,13 @@ test("the settings note's bar is still read while the bundle has no record; the 
   expect((await settingsNotes())[0].metadata.parachute?.bar).toEqual([note]);
 });
 
-test("a long-press pins an applet to the bar; the pin is the bundle record's, survives a restart, and taps start it", async ({ page }) => {
+test("Pin on the list's row pins an applet to the bar; the pin is the bundle record's, survives a restart, and taps start it", async ({ page }) => {
   await start(page);
-  await ui(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
-  await ui(page).getByRole("button", { name: "Pin to the bar" }).click();
+  await ui(page).getByRole("button", { name: "Pin Recipe box to the bar" }).click();
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await expect.poll(async () => (await bundleOf())?.body.bar).toEqual([{ vault: VAULT, applet: "Applets/Recipes" }]);
   expect(await settingsNotes()).toEqual([]);
-  await expect(ui(page).getByRole("link", { name: /Recipe box/ })).toContainText("pinned");
+  await expect(ui(page).getByRole("button", { name: "Pin Recipe box to the bar" })).toHaveAttribute("aria-pressed", "true");
   // a restart: still there
   await start(page);
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
@@ -190,12 +189,11 @@ test("a full bar: its first place and Applets stay in reach on a phone, and a th
     await writeBundle({ bar: [{ vault: VAULT, applet: "Applets/Recipes" }, ...Array.from({ length: 11 }, (_, i) => ({ vault: VAULT, applet: `Applets/Extra ${i + 1}` }))] });
     await start(page);
     await expect(bar(page).getByRole("link")).toHaveCount(14);
-    // the first place can be reached: it starts at the bar's left edge, not off screen; Applets, before Settings, scrolls into reach
+    // the first place can be reached: it starts at the bar's left edge, not off screen; Applets is held beside Settings, in reach
     expect((await bar(page).getByRole("link").first().boundingBox())!.x).toBeGreaterThanOrEqual(0);
     await bar(page).getByRole("link", { name: /Applets/ }).scrollIntoViewIfNeeded();
     await expect(bar(page).getByRole("link", { name: /Applets/ })).toBeInViewport();
-    await ui(page).getByRole("link", { name: /Cook mode/ }).click({ button: "right" });
-    await ui(page).getByRole("button", { name: "Pin to the bar" }).click();
+    await ui(page).getByRole("button", { name: "Pin Cook mode to the bar" }).click();
     await expect(ui(page).getByRole("alert")).toHaveText("The bar holds 12 places: unpin one first.");
   } finally {
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`);

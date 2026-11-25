@@ -5,8 +5,14 @@
 //           the link's screen, which says so and offers to add that Parachute (/open-link)
 //   null    nothing to open: a vault name this device doesn't hold, a note that isn't there, or not a note link. Drawn
 //           as plain text: no guess.
-// A short form or a wikilink is "note" only for a note that is there: the answer itself says a vault is held only to an
-// applet that already knows a note's id in it. (How long an answer takes can still hint that a name is held: that is
+// A note named by its id in the applet's own vault, whose hub can't be asked now (off the tailnet, a phone just back on
+// the network, a hub that doesn't answer in time), is "note" too: it may well be there, and its screen says so when it
+// can't be read (T-476: Aaron's relay is public and his hub is on his tailnet, so his rooms came in before his hub could
+// answer, and every `uni:` link in them stayed text). The applet knows its own vault already (`address`), so the answer
+// tells it nothing new; any other vault that can't be asked stays nothing until asked again (kit/links.tsx), drawn or
+// tapped: its name would say which vaults are held. Only a hub's own answer that the note isn't there is null.
+// A short form or a wikilink is "note" only for a note that is there (or, in the applet's own vault, may be: above): the
+// answer itself says a vault is held only to an applet that already knows a note's id in it, or its own. (How long an answer takes can still hint that a name is held: that is
 // what `open`'s card line says it may learn.) Each link costs the same, whatever it names (shell/appDeps.ts). A wikilink
 // names a path, which can be guessed, so it is looked up only in the folders the applet may read, and the note found
 // must be in one of them and not an applet's code (the hub also matches a path's other case, or a title). A short form
@@ -29,8 +35,12 @@ export type ResolveDeps = {
    *  up only where the applet could read it anyway. */
   mayRead(path: string): boolean;
   /** The note `idOrPath` names in `rec` (its id, its path, whether it is an applet's code) when `ok` takes it, else null.
-   *  A note `ok` refuses is kept no longer than a miss, so how fast a later answer comes can't say it is there. */
+   *  A note `ok` refuses is kept no longer than a miss, so how fast a later answer comes can't say it is there. Rejects
+   *  when the vault couldn't be asked (the network, a hub that doesn't answer in time): not a miss. */
   find(rec: VaultRecord, idOrPath: string, ok: (f: Found) => boolean): Promise<Found | null>;
+  /** Whether a note named by its id in `rec`, which couldn't be asked, still counts as there (its screen reads it
+   *  again): the applet's own vault. None, if not said. */
+  unreached?(rec: VaultRecord): boolean;
 };
 
 const bare = (u: string) => u.replace(/\/+$/, "");
@@ -50,13 +60,18 @@ export function wikiPaths(target: string, from?: string): string[] {
 export async function resolveLink(raw: string, from: string | undefined, d: ResolveDeps): Promise<Resolved> {
   const ref = parseNoteRef(raw);
   if (!ref) return { answer: null };
+  // the vault that couldn't be asked, first: where a note named by its id may still be
+  let unasked: VaultRecord | null = null;
   const first = async (recs: readonly VaultRecord[], idsOrPaths: string[], ok: (f: Found) => boolean = () => true): Promise<Resolved | null> => {
     for (const rec of recs) for (const p of idsOrPaths) {
-      const f = await d.find(rec, p, ok).catch(() => null);
+      const f = await d.find(rec, p, ok).catch(() => { if (!unasked && d.unreached?.(rec)) unasked = rec; return null; });
       if (f && ok(f)) return { answer: "note", href: noteHref(rec.key, f.id) };
     }
     return null;
   };
+  // a note named by its id in a held vault that couldn't be asked: its screen, which reads it again (a wikilink names a
+  // path, which a guess could probe, so it stays nothing)
+  const maybe = (note: string): Resolved | null => (unasked ? { answer: "note", href: noteHref((unasked as VaultRecord).key, note) } : null);
   if (ref.kind === "wiki") {
     const here = d.here();
     return (here && (await first([here], wikiPaths(ref.target, from).filter((p) => d.mayRead(p)), (f) => d.mayRead(f.path) && !f.code))) || { answer: null };
@@ -66,9 +81,9 @@ export async function resolveLink(raw: string, from: string | undefined, d: Reso
   const byId = (f: Found) => f.id === ref.note;
   // and only an id as core makes them is asked for at all: any other word is a path or a title to the hub
   if (!ULID.test(ref.note)) return ref.kind === "short" ? { answer: null } : away(ref.issuer, ref.vault, ref.note);
-  if (ref.kind === "short") return (await first(d.vaults().filter((r) => r.vault === ref.vault), [ref.note], byId)) || { answer: null };
+  if (ref.kind === "short") return (await first(d.vaults().filter((r) => r.vault === ref.vault), [ref.note], byId)) || maybe(ref.note) || { answer: null };
   const held = d.vaults().filter((r) => holds(r, ref.issuer, ref.vault));
-  return (await first(held, [ref.note], byId)) || away(ref.issuer, ref.vault, ref.note);
+  return (await first(held, [ref.note], byId)) || maybe(ref.note) || away(ref.issuer, ref.vault, ref.note);
 }
 const away = (issuer: string, vault: string, note: string): Resolved =>
   ({ answer: "away", href: `/open-link?url=${encodeURIComponent(linkFor(`${issuer}/vault/${encodeURIComponent(vault)}`, note))}` });

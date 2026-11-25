@@ -24,7 +24,7 @@ const dropVault = (vault: string) => { try { cli(hubState(), ["vault", "remove",
 /** A vault on offer: one line in Settings, under its Parachute. */
 const newLine = (page: Page, vault: string) => page.getByRole("button", { name: `Open ${vault}`, exact: true });
 
-test.afterAll(() => { dropVault("garden"); dropVault("attic"); });
+test.afterAll(() => { dropVault("garden"); dropVault("attic"); dropVault("shelf"); });
 
 test("a vault made after signing in is offered in Settings, and a tap adds it through the hub's consent", async ({ page }) => {
   // the app's clock, to come back to Settings a minute later (the hub is asked at most once a minute)
@@ -42,7 +42,7 @@ test("a vault made after signing in is offered in Settings, and a tap adds it th
   await page.clock.fastForward("01:05");
   await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
   await moreVaults(page, undefined, 15_000);
-  await expect(page.locator("details.parachute-more summary")).toContainText(/more vaults? there, which Parachute doesn't read/);
+  await expect(page.locator("details.parachute-more summary")).toContainText(/more vaults? there, not open here/);
   await expect(newLine(page, "garden")).toBeVisible();
   await expect(page.getByRole("link", { name: "Open garden", exact: true })).toHaveCount(0);
   if (SHOT) { mkdirSync(dirname(SHOT), { recursive: true }); await page.screenshot({ path: SHOT }); }
@@ -79,4 +79,48 @@ test("Not now keeps a new vault out of Settings, also after the app opens again"
   await openMore(page);
   await expect(newLine(page, "attic")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open attic", exact: true })).toHaveCount(0);
+});
+
+// T-476 (Aaron 11-24: "I dont see the Library applet yet"): his Library lives in a second vault the sign-in didn't read,
+// and the list, where he looks for it, said nothing of that vault; only a folded line deep in Settings did. The list
+// now ends with the vaults of his its bundle draws from that this device doesn't read, a tap each.
+test("a vault of yours this device doesn't read is offered at the foot of the list, and its applets come into the list", async ({ page }) => {
+  await signIn(page);
+  await makeVault("shelf", "Books");
+  // a bundle that draws applets from the home alone: shelf is no business of its list (Settings still has it)
+  const desk = await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/desk", content: "desk", tags: ["parachute-bundle"], metadata: { bundle: {
+    contract: 1, id: "desk", name: "Desk", sources: [{ vault: "kitchen", applet: "*" }] } } });
+  // (the sign-in wrote the settings note, with the hub on the person's list: it names the bundle for a while)
+  const rows = await api(hubState(), "GET", "notes?tag=parachute-settings&include_metadata=true");
+  const settings = (Array.isArray(rows) ? rows : rows.notes)[0] as { id: string; metadata: { parachute: Record<string, unknown> } };
+  const setBundle = async (metadata: Record<string, unknown>) => api(hubState(), "PATCH", `notes/${settings.id}`, { metadata, if_updated_at: (await api(hubState(), "GET", `notes/${settings.id}`)).updatedAt });
+  await setBundle({ ...settings.metadata, parachute: { ...settings.metadata.parachute, bundle: "desk", app: "desk" } });
+  const list = ui(page).getByRole("list", { name: "Applets" });
+  const toOpen = ui(page).getByRole("region", { name: "Your vaults not open here" });
+  try {
+    await page.goto("/settings");
+    await moreVaults(page, undefined, 15_000);
+    await expect(newLine(page, "shelf")).toBeVisible();
+    await page.goto("/");
+    await expect(list.getByRole("link").first()).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await expect(toOpen).toHaveCount(0);
+  } finally {
+    await setBundle(settings.metadata).catch(() => {});
+    await api(hubState(), "DELETE", `notes/${desk.id}`).catch(() => {});
+  }
+  // Everything draws from every vault: the app opens again, the hub is asked which vaults are the person's
+  await page.goto("about:blank");
+  await page.goto("/");
+  await expect(list.getByRole("link").first()).toBeVisible();
+  const open = toOpen.getByRole("button", { name: "Open shelf", exact: true });
+  await expect(open).toBeVisible({ timeout: 15_000 });
+  await expect(toOpen).toContainText("Their applets show here once you open them.");
+  await expect(list.getByRole("link", { name: /Books/ })).toHaveCount(0);
+  const app = new URL(page.url()).origin;
+  await open.click();
+  await page.waitForURL((u) => u.origin === hubState().origin);
+  expect(await approveUntilBack(page, hubState().origin, app)).toBe(1);
+  await expect(list.getByRole("link", { name: /Books/ })).toBeVisible({ timeout: 20_000 });
+  await expect(toOpen.getByRole("button", { name: "Open shelf", exact: true })).toHaveCount(0);
 });

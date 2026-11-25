@@ -278,9 +278,12 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 /* an applet's signals (services/signals.ts): its count, beside its glyph */
 .home-bar-place { position: relative; }
 .home-bar-badge { position: absolute; top: 1px; left: calc(50% + 7px); min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--primary); color: var(--on-primary); font: 700 var(--fs-label) var(--sans); line-height: 17px; text-align: center; }
-/* Settings, the shell's own place, last on the bar: held at the right edge, on screen however full the bar is (the
-   places before it pass under it; the desk's colour closes the gaps beside it, starting under the bar's top line) */
-.home-bar .home-bar-settings { position: sticky; right: 0; flex: none; box-shadow: -4px 2px 0 var(--desk), calc(12px + env(safe-area-inset-right)) 2px 0 var(--desk); }
+/* Settings, the shell's own place, last on the bar, and before it the way to the list the app adds when the bar names
+   none: held together at the right edge, on screen however full the bar is (T-476: with five pins, Applets scrolled out
+   of sight on a phone). The places before them pass under; the desk's colour closes the gaps beside them, starting under
+   the bar's top line */
+.home-bar-held { position: sticky; right: 0; flex: none; display: flex; align-items: start; gap: 4px; box-shadow: -4px 2px 0 var(--desk), calc(12px + env(safe-area-inset-right)) 2px 0 var(--desk); background: linear-gradient(transparent 2px, var(--desk) 2px); }
+.home-bar .home-bar-settings { flex: none; }
 /* pressed, it stays opaque: the places passing under it don't show through */
 .home-bar .home-bar-settings:active { background: color-mix(in srgb, var(--text) 8%, var(--bg)); }
 .home-bar-settings .home-bar-glyph { font-size: 1.3em; line-height: 0.85; }
@@ -314,7 +317,17 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .entry-days { grid-row: 1 / 3; grid-column: 3; width: 64px; }
 .entry-days .pa-days { margin: 0; } .entry-days .pa-days svg { height: calc(24px * var(--pa-days-h, 1)); max-width: 64px; }
 .entry-home { margin-left: 8px; font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track); text-transform: var(--label-transform); font-variant-caps: var(--label-caps); color: var(--label-ink); vertical-align: 3px; }
-.entry-pinned { margin-left: 8px; font: var(--fs-label) var(--sans); color: var(--accent); vertical-align: 2px; }
+/* Pin (ui/PinButton.tsx): beside an applet's row in the list, and in an applet's top bar; the same look in both */
+.entry-row { display: flex; align-items: center; gap: 10px; }
+.entry-row > .entry { flex: 1; min-width: 0; }
+.pin-toggle { flex: none; display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 2px 10px; border: var(--button-line); border-radius: var(--radius-button); background: none; color: var(--muted); font: var(--fs-label) var(--sans); white-space: nowrap; cursor: pointer; }
+.pin-toggle[aria-pressed="true"] { color: var(--accent); border-color: currentColor; }
+.pin-toggle:active { background: var(--tint); }
+.pin-mark { font-size: 0.85em; line-height: 1; }
+.applet-screen > .bar .pin-toggle { margin-left: auto; }
+.applet-screen > .bar .pin-toggle + .bar-menu { margin-left: 0; }
+.launcher-closed { margin-top: 6px; }
+.launcher-closed > .small { margin: 0; }
 .entry-quiet { padding: 10px 0; font: italic var(--fs-body) var(--serif); color: var(--muted); }
 .lately-label { margin: 18px 0 6px; font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track); text-transform: var(--label-transform); font-variant-caps: var(--label-caps); color: var(--muted); }
 .parts-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
@@ -366,6 +379,7 @@ a.quiet-button { color: var(--text); text-decoration: none; display: inline-bloc
   /* Settings at the foot of the sidebar */
   .home-bar { scroll-padding-block-end: 80px; }
   /* (:root: over Daylight's current tab, which sets its top margin) */
+  .home-bar-held { display: contents; }
   :root .home-bar .home-bar-settings, :root .home-bar .home-bar-settings[aria-current="page"] { position: sticky; right: auto; bottom: 16px; margin-top: auto; margin-bottom: 16px; box-shadow: -2px -6px 0 var(--desk), -2px 16px 0 var(--desk); }
   /* (a width of its own: an iframe left at width auto between left and right is its default 300px) */
   .with-bar .app-frame { left: calc(env(safe-area-inset-left) + var(--index-w)); right: env(safe-area-inset-right); width: calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right) - var(--index-w)); }
