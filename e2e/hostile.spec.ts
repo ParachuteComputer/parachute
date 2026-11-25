@@ -3,7 +3,7 @@
 // aren't in it, and a move to an applet. It can read no token and grant nothing. (The document is swapped from the
 // test, in the shell's realm: the app has no hook for it. Playwright's evaluate and its reads of a frame count as a tap,
 // and a tap lasts five seconds, so the hostile document waits six before it acts, and the test doesn't look until it's done.)
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { VAULT } from "./hub";
 import { ui } from "./helpers";
 

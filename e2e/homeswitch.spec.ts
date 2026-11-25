@@ -3,7 +3,7 @@
 // older install that it can't reach; every one of Parachute's own applets runs there, and Your bundle lists the home's
 // bundles only. Where the app says it can't reach the home (an applet, Settings, the list), it offers the person's other
 // vaults it can reach, one tap each to make that one home.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { ui } from "./helpers";
 import { hubState, VAULT } from "./hub";
 

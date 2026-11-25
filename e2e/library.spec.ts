@@ -6,7 +6,7 @@
 // Set LIBRARY_SHOTS=<dir> to capture 390x844 and 1440x900 walkthrough screenshots.
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { appletRecord } from "../applets/record.ts";
 import { api, hubState, VAULT } from "./hub";
 import {

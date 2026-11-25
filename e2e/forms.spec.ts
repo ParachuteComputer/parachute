@@ -1,7 +1,7 @@
 // A form written the plain way works in an applet (the cold walk, T-476: an AI's reading tracker used <form onSubmit>
 // and a submit button, and its Add did nothing). A sealed frame has no allow-forms, so the browser drops the submit;
 // the kit sends it (src/applet/kits/frameKit.ts). The button, Enter in a field, and a disabled button that stays put.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, VAULT } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });

@@ -2,7 +2,7 @@
 // Page scrolls, as any phone app's list does (no pages to turn, no "2 of 3"); what you write in is pinned at its foot
 // and stays in reach as the place scrolls; a place that says so opens at its top each time it is shown; the bar's
 // places are tabs, the one you are in joined to the page.
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });

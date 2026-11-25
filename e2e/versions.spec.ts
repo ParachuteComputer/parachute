@@ -1,7 +1,7 @@
 // An older app opening records written for a newer one (docs/design/VERSIONS.md): install order must not matter. Each
 // record here is one a newer Parachute would write; this build is the older app. It says "Update Parachute to open …"
 // and runs nothing of them, where it used to ask for and run code it couldn't draw, or hide the applet.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { installApplet, ui } from "./helpers";
 

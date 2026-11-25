@@ -1,6 +1,6 @@
 // Applets kept running while the person is elsewhere (src/shell/kept.tsx): back to one is the same running frame, at
 // once; hidden, it is told so and gets no tap; shown again, its note is read again, so changed code asks on the card.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { fromAppletMenu, ui } from "./helpers";
 

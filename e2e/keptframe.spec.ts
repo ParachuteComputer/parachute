@@ -1,7 +1,7 @@
 // The list of applets (the frame, src/shell/FrameArea.tsx) kept while the person is in an applet or Settings, as applets
 // are (kept.tsx): back to it is the same running frame, its list drawn at once, not a new frame booted and read again.
 // Aaron, 11-22: "The applets page re loads every time, doesn't seem to cache."
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 

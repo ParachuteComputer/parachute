@@ -1,7 +1,7 @@
 // Sessions (applets/sessions.tsx): the Claude Code sessions Uni runs, read from the run notes and steps notes mts writes
 // into the vault, per room: what is working now and what it is doing, how the recent ones ended and what they cost, and
 // a session step by step, every word through the redactor. Read-only. (Every run, room and line here is made up.)
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";

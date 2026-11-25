@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { api, hubState, record, VAULT } from "./hub";
 import { withImports } from "../applets/record.ts";

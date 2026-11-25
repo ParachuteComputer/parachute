@@ -3,7 +3,7 @@
 // nothing runs there before the person allowed the applet, or after its code changed.
 // Aaron, 11-22: "it was easy to see Claude usage in settings. I wonder about being able to add things into settings
 // within an app bundle more directly, just for small things".
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 

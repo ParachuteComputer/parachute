@@ -1,6 +1,6 @@
 // An applet's own number on the bar (a feed signal, as Mail's unread): found on the emulator walk (T-476 dogfood),
 // where Mail said "Inbox · 5" and the bar showed no count.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, record } from "./hub";
 import { barOf } from "./helpers";
 

@@ -2,7 +2,7 @@
 // once, from the copy the app kept of those reads (src/vault/readCache.ts), while the hub is asked behind it; when the
 // hub's answer differs, the applet draws it (the kit's Page, onRefresh). And a folder's records with their words are one
 // ask, not one per record in a line (modules/vault.ts `list`).
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";

@@ -4,7 +4,7 @@
 // follow-ups; a new session starts from its template; and once a pack is in, Start here is gone.
 // It signs in itself, on a vault made empty for it, so it runs with the sign-in specs. Adding a pack needs core #139
 // (write may define a type over REST); on an older hub that part skips, unless E2E_CORE_NEXT=1.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, cli, hubState, mintToken } from "./hub";
 import { ui } from "./helpers";
 

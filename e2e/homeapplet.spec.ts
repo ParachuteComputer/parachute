@@ -1,7 +1,7 @@
 // The starter home applet, written the way a chat AI with the Parachute MCP writes it: one `create-note` call with the
 // arguments in docs/WRITE-AN-APPLET.md, and the open bundle's record, which names it as the home (`start`). The app opens on it after the person's Allow.
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, mintToken, record, VAULT } from "./hub";
 import { clearBarAndHome, ui, writeBundle } from "./helpers";
 

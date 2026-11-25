@@ -11,6 +11,8 @@ src-tauri/gen/schemas
 e2e/.hub-session.json
 e2e/.signed-in.json
 e2e/.pick-signed-in.json
+e2e/.expiry-signed-in.json
+e2e/.*.keeping
 src-tauri/gen/android/buildSrc/.kotlin
 e2e/.viewer-5000.json
 e2e/.speed-*.json

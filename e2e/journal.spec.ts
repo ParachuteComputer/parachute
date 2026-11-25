@@ -1,7 +1,7 @@
 // Journal (applets/journal.tsx): the Uni app's journal as an applet on its own vault. A line written is a note in
 // Journal/YYYY/MM-DD/HH-MM <first words>, tagged journal, that the vault (and the Uni app) reads; entries already there
 // show by day, a voice entry's transcript among them.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";

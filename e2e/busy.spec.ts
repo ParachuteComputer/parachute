@@ -1,7 +1,7 @@
 // An applet that asks a lot at once (a rooms list with twenty rooms, a room full of cards and pictures) gets every
 // answer: the kit keeps its calls in line under the shell's limit (8 waiting, 60 in ten seconds) and waits out a busy
 // refusal, so the applet never sees one (src/applet/kits/frameKit.ts). The limits stay in the shell as its safety net.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 

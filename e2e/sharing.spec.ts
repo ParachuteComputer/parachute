@@ -5,7 +5,7 @@
 // holds is read back after each step.
 // Needs a hub with sharing (core T-476). On core from npm, which has none yet, the test says so and skips, unless
 // E2E_CORE_NEXT=1 says this hub is a core that must have it (CI's 0.9.0-pre.2 leg; the red run on a core without it).
-import { expect, test, type Browser, type BrowserContext, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page, type TestInfo } from "./test";
 import { approveUntilBack, openVault, signInWithKey } from "./helpers";
 import { account, api, cli, hubState, mintToken, techneState, VAULT } from "./hub";
 import { keyDoor, newKey, pubOf } from "./keys";

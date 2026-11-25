@@ -6,7 +6,7 @@
 // Services workflow only, as rooms.spec.ts: BUZZ_RELAY and BUZZ_KEYS (owner.hex, alice.hex, bob.hex).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import * as nip44 from "nostr-tools/nip44";
 import * as nip19 from "nostr-tools/nip19";

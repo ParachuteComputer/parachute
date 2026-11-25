@@ -3,7 +3,7 @@
 // without moving what is already there; under the device's
 // reduce-motion setting nothing moves at all, and a drawer or a toast still goes the moment it is put away (no waiting
 // on an end of motion that never comes); a drawer and a toast follow the finger and go when let go far enough.
-import { devices, expect, test, type Frame, type Page } from "@playwright/test";
+import { devices, expect, test, type Frame, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });

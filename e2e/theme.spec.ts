@@ -1,7 +1,7 @@
 // The theme record (docs/THEME.md): one note in the home vault that the shell, the frame and every applet follow. It
 // is written here the way an agent writes it (the hub's note API), and the app restyles while it runs: no reload, no
 // navigation (the frame area reads its notes again only when it is shown, so only the live query can carry this).
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, VAULT } from "./hub";
 import { ui } from "./helpers";
 

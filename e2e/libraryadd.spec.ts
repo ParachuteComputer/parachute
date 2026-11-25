@@ -10,7 +10,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { appletRecord } from "../applets/record.ts";
 import { api, hubState, VAULT } from "./hub";
 

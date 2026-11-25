@@ -3,7 +3,7 @@
 // Notes/ with the type it opens), open it, edit (the edit survives a reload) and save it (the write carries
 // if_updated_at), and the hub has it; the app's Back closes an open note, and an edit in progress survives it.
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { appletRecord } from "../applets/record.ts";
 import { api, hubState, VAULT } from "./hub";
 

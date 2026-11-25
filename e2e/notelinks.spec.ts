@@ -2,7 +2,7 @@
 // text holds each form. A tap opens the note in the app, where open-with decides (a recipe in the Recipe box, the
 // Welcome note in the plain view); a vault name the person doesn't have stays plain text; an address of a vault this
 // device doesn't hold leads to the link's screen, which offers to add it.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, VAULT } from "./hub";
 import { expectInVault, ui } from "./helpers";
 
