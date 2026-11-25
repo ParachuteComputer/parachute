@@ -71,5 +71,5 @@ more than launch needs, a "Copy a crash report" button that people paste into an
 
 - **Identifiers are for good.** `computer.parachute.app` (Android package, Mac bundle id, Keychain service) and the
   `parachute://` scheme can't change once in a store. Kept, for the reasons in [STORES.md](STORES.md).
-- **Other platforms.** iPhone and iPad need the Apple account above and an iOS shell (key store, pairing scan).
-  Windows builds are untested.
+- **Other platforms.** iPhone and iPad: the iOS shell is built and driven on a simulator in CI (`ios.yml`); TestFlight
+  waits on Aaron's Apple steps ([STORES.md](STORES.md#iphone)). Windows builds are untested.

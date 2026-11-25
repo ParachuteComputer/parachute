@@ -23,6 +23,10 @@
 /* checkboxes, radios and ranges in the theme's accent, never the browser's blue */
 /* a tap is a click at once: Android's webview otherwise waits ~300 ms to see whether it is a double tap (pinch still zooms) */
 html { accent-color: var(--accent, #36627d); touch-action: manipulation; }
+/* the text as the theme sizes it: iOS's WebKit otherwise resizes it on the first tap, and the tapped button moves out
+   from under the finger (on an iPhone the pick's Continue rose 46px as the tap began, and the tap landed on Back);
+   the kit's base.css says the same for applets */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 html, body { margin: 0; background: var(--bg, #fbf8f1); color: var(--text, #27221d); font: var(--size, 16px)/var(--leading, 1.45) var(--sans, system-ui, sans-serif); -webkit-tap-highlight-color: transparent; font-variant-emoji: text; }
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 a { color: var(--accent); }
@@ -99,7 +103,13 @@ details[open] summary { margin-bottom: 6px; }
 .error { color: var(--danger); }
 .plain { list-style: none; margin: 0; padding: 0; }
 fieldset.plain { border: 0; min-width: 0; }
+/* the legend as a plain block (floated, so it isn't drawn in the fieldset's border): iOS's WebKit laid a legend's height
+   out twice at first and took it back as a tap began, so a fieldset shrank a line under the finger and the tap landed on
+   the button below (the vault pick's Continue opened Back). Not a hidden legend (it stays 1px), not the flex .choice
+   (a floated legend would become one of its items) */
 fieldset.plain legend { padding: 0; }
+fieldset.plain:not(.choice) > legend:not(.sr-only) { float: left; width: 100%; margin-top: 0; }
+fieldset.plain:not(.choice) > legend:not(.sr-only) + * { clear: left; }
 .line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; }
 .line + .line { border-top: 1px solid var(--line); }
 /* what an allowed applet holds beyond its line (its servers, what it may do on Techne): under it, the whole width */

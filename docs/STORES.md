@@ -6,6 +6,9 @@ Plan as of 2026-11-23. The short of it:
   The APK from aero stays, for GrapheneOS without Google and for anyone who'd rather not use Play.
 - **Mac:** the dmg we already make, **signed with a Developer ID certificate and notarised**, so it opens with no
   Gatekeeper steps. No Mac App Store or TestFlight for now (why below).
+- **iPhone:** **TestFlight**, built and uploaded by `.github/workflows/ios.yml` (most testers use iPhones; Aaron,
+  11-24). Waiting on Aaron's three steps: the signing files, the App Store Connect record, the encryption answer
+  ([iPhone](#iphone)).
 - Built and waiting: the Play bundle (`scripts/android-build.sh --play`, `.github/workflows/play.yml`), the Mac signing
   and notarisation (`.github/workflows/mac.yml`, `scripts/mac-notarise-dmg.sh`), the privacy policy
   ([PRIVACY.md](PRIVACY.md)), the listing and screenshots (`store/`).
@@ -159,7 +162,7 @@ today's downloads and update feed.
 - open Tauri bugs on exactly this path: App Store signing (#15230), network requests blocked under the sandbox
   (#13878).
 
-Revisit it with an iPhone app: TestFlight would then serve both.
+Revisit it now that the iPhone app is on TestFlight ([iPhone](#iphone)): one TestFlight could serve both.
 
 ### What Apple needs for the dmg
 
@@ -182,6 +185,77 @@ After the first notarised build, the Mac asks once more about the Keychain item 
 then not again. The certificate needs renewing before it expires (check the date on the first one: Apple's page says
 one year for G2 certificates, other sources five); renewing means a new .p12 in the same secret. notarytool also stops
 working whenever Apple has a new agreement the Account Holder hasn't accepted.
+
+## iPhone
+
+### What the iPhone build is
+
+- **The same app**, from `src-tauri/gen/apple` (made once by `tauri ios init` on a Mac runner and kept; CI fails if a
+  build would change it). Bundle id `computer.parachute.app`, team FLX9G758VB, iOS 16 or newer, iPhone and iPad.
+- **What differs from Android and the Mac:**
+  - The key in the iPhone's Keychain (the keyring crate's iOS store). The device unlock before an approval is Face ID
+    or the passcode (LocalAuthentication, as on the Mac); with no passcode set it says so.
+  - The webview's seal closes the bridge to native code, as on the Mac, but leaves WebRTC on: switching it off takes a
+    private WebKit call an App Store build must not make. So the self-test runs approved code only there, as on Android.
+  - **No in-app update and no feed**: TestFlight and the App Store update it, and their rules allow no other way.
+    `build.rs` refuses `PARACHUTE_UPDATE_FEED` for an iPhone build.
+  - **Saved files** go to the app's Documents, which Files shows as On My iPhone → Parachute (an iPhone has no
+    Downloads an app may write to).
+  - **Pairing** can scan the other device's QR code, as on Android.
+  - **An iPad** asks for desktop pages, so its user agent says "Macintosh"; a Macintosh with touch points is named an
+    iPad (`src/shell/agent.ts`), on the approvals it signs, on Parachute Cloud's pages and in the self-test.
+  - `parachute://` links open the app (the deep-link plugin writes the scheme into the Info.plist). No other scheme is
+    registered, on any platform.
+  - The Info.plist lines iOS shows when it first asks: microphone, camera, Face ID (`src-tauri/Info.ios.plist`).
+- **Not on the iPhone yet:** the words for saving a file still say Downloads (an applet's card and its face: the face is
+  part of a signed approval, so changing it per device needs care); notifications while the app is closed (Android's relay listener can't run there; it needs
+  Apple push and a push key), a recording that goes on while another app is in front (background audio), and saving to
+  a folder the person picks (a document picker).
+- **Build number** (CFBundleVersion): the commit count alone, as Play's version code (`scripts/play-version-code.sh`),
+  beside the version 0.1.0. Not Tauri's `--build-number`, which makes 0.1.0.<count>: Apple reads at most three parts,
+  so every build would read as 0.1.0. Build from `next`: a feature branch's count could outrun later builds of `next`,
+  and TestFlight takes each number once. `ios.yml` checks the number inside the .ipa.
+
+### CI
+
+`ios.yml` on each pull request except docs-only ones (as `mac.yml`), on `testflight-*` and release tags, and by hand:
+
+- **simulator** (every run): a debug build for the simulator, installed on a fresh simulator and driven with XCUITest
+  (`scripts/ios-drive.sh`, `scripts/ios-drive/`): paste a key, sign in to a throwaway hub through its Approve page, see the
+  applets, open Rooms, allow it with Face ID (enrolled on the simulator, and matched), see a room on a fake relay
+  (`e2e/ios/world.ts`). Screenshots are the artifact `ios-drive`.
+- **testflight** (after the simulator job passes; a `testflight-*` tag on a commit of `next`, a release tag, or by hand once `ios.yml` is on `main`:
+  GitHub dispatches only the default branch's workflows; never a pull request): signed for the App Store and uploaded with `altool`, when all
+  three iPhone secrets are set: `IOS_CERTIFICATE` (the Apple Distribution certificate with its key, a .p12, base64),
+  `IOS_CERTIFICATE_PASSWORD`, `IOS_MOBILE_PROVISION` (the App Store profile, base64). The upload uses the App Store
+  Connect key the Mac workflow uses. None set: it says so and passes. Some set: it fails.
+
+### Signing, and who may do what
+
+The App Store Connect key we hold has the **Developer** role. Tried on 11-24: it reads bundle ids, certificates,
+profiles, apps and TestFlight groups, but registering the bundle id and making the certificate are refused (403).
+Only an Admin key or the Account Holder may make identifiers, certificates and profiles; only they make the app record
+(the API can't).
+
+`scripts/ios-signing.mjs` does each step that isn't done yet: registers the bundle id, makes an **Apple Distribution**
+certificate from the CSR of a private key kept on uni (`~/.config/uni/apple-ios/`, never in the repository), makes the
+**App Store** profile ("Parachute App Store <date>"; this app's older App Store profiles go only once the new one is
+made), writes the .p12, and with `--secrets` sets the three repository secrets from
+those files. With `--group`, once the app record exists, it makes the internal TestFlight group "Parachute testers"
+(every build). With the Developer key it stops at the first step it may not take; if Aaron made the files by hand, it
+reads them and goes on.
+
+### Aaron's steps
+
+1. The signing files: a temporary **Admin** team key for Uni (App Store Connect → Users and Access → Integrations →
+   Team Keys → +, Access Admin), revoked after; or the bundle id, certificate and profile by hand at
+   developer.apple.com.
+2. The app record: App Store Connect → Apps → + → New App, iOS, name **Parachute: your own vault** (the Play listing's;
+   plain "Parachute" is another company's app), bundle id `computer.parachute.app`, SKU `parachute-ios`.
+3. The export compliance answer on the first build (the app uses standard algorithms of its own: rustls, secp256k1,
+   ChaCha20). Once he answers, `ITSAppUsesNonExemptEncryption` goes into `Info.ios.plist` so later builds don't ask.
+4. Testers. Internal testing (no review) is for members of his App Store Connect team, up to 100. Anyone else needs
+   external testing, and Apple reviews its first build. External testers and the Beta App Review submission are his.
 
 ## The secrets Uni asks for (through a sealed secret card)
 
@@ -213,3 +287,5 @@ The Play upload key is ours, not Aaron's: Uni makes it, before Aaron's first upl
 | The app's part on parachute.computer/privacy/ | Uni, with Aaron's go-ahead for the site |
 | A Play upload script (service account), after the first manual upload | a worker |
 | Add the play-test key's fingerprint under Android developer verification | Uni, before 2027 |
+| iPhone: after Aaron's steps 1 and 2, run `scripts/ios-signing.mjs --secrets --group`, then tag a commit of `next` `testflight-<n>` and push the tag (build 1 to TestFlight) | Uni |
+| iPhone: notifications while closed (Apple push), background recording, a save-to-folder picker | an app worker |

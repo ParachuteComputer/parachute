@@ -16,3 +16,7 @@ e2e/.viewer-5000.json
 e2e/.speed-*.json
 e2e/.services
 dist-web/
+
+# the iPhone drive (scripts/ios-drive.sh): its generated Xcode project and its screenshots
+scripts/ios-drive/ParachuteDrive.xcodeproj
+ios-drive/

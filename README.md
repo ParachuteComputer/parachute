@@ -15,9 +15,11 @@ screen, **Your notes on another Parachute?** → **Sign in with its address**, t
    - **Mac** (Apple Silicon): the `.dmg`. It isn't notarised, so macOS asks once:
      [docs/INSTALL-MAC.md](docs/INSTALL-MAC.md). The newest build of `next` is in the
      [Mac workflow's](https://github.com/ParachuteComputer/parachute/actions/workflows/mac.yml) artifacts.
+   - **iPhone and iPad** (iOS 16 or newer): through TestFlight, once its Apple setup is done
+     ([docs/STORES.md](docs/STORES.md#iphone)).
 2. **Your key.** On the first screen, in the Nostr key card, **Make a new key**. If your key is already in the Uni app or
    [Buzz](https://github.com/unforcedagi/buzz) desktop, choose **Pair from a device that has your key** instead: on
-   that device, Settings → **Pair a device** (in Buzz, **Pair mobile device**); here, scan its QR code (Android) or
+   that device, Settings → **Pair a device** (in Buzz, **Pair mobile device**); here, scan its QR code (a phone) or
    paste its `nostrpair://` link (Mac); check the 6-digit codes match.
 3. **Your hub knows your key.** The hub's owner links it once: `parachute auth link-pubkey --user <name> <npub>`. The
    app shows your `npub1…`.

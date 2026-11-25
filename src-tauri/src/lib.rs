@@ -1,7 +1,7 @@
-//! Parachute's shell: one window around the app, the seal applets need on desktop, and the two facts the applet
-//! self-test is keyed on (the app's version and the webview runtime), and the person's key (key.rs: kept, paired in by
-//! pairing.rs, used to sign in to a hub by door.rs and for an allowed applet's services by services.rs). Everything else
-//! lives in the web app.
+//! Parachute's shell: one window around the app, the seal applets need on desktop and on an iPhone, and the two facts
+//! the applet self-test is keyed on (the app's version and the webview runtime), and the person's key (key.rs: kept,
+//! paired in by pairing.rs, used to sign in to a hub by door.rs and for an allowed applet's services by services.rs).
+//! Everything else lives in the web app.
 
 mod approvals;
 pub mod approve;
@@ -195,14 +195,16 @@ pub fn run() {
             notify::push_signals
         ])
         .setup(|app| {
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "ios"))]
             {
                 use tauri::Manager;
                 if let Some(window) = app.get_webview_window("main") {
                     seal_webview(&window);
+                    #[cfg(target_os = "ios")]
+                    full_screen_page(&window);
                 }
             }
-            #[cfg(mobile)]
+            #[cfg(target_os = "android")]
             let _ = app;
             Ok(())
         })
@@ -227,10 +229,31 @@ fn webview_runtime() -> String {
     }
 }
 
+/// The page fills the iPhone's screen and pads itself for the notch and the home bar (`viewport-fit=cover` and
+/// `env(safe-area-inset-*)` in the CSS). UIKit's default also shrank the page by those insets, so the page was 82pt
+/// short and the bar at the foot floated above the bottom of the screen.
+#[cfg(target_os = "ios")]
+fn full_screen_page(window: &tauri::WebviewWindow) {
+    if let Err(err) = window.with_webview(|webview| {
+        use objc2::{msg_send, rc::Retained, runtime::AnyObject};
+        // SAFETY: `inner()` is the live WKWebView, on the main thread (`with_webview`); `scrollView` and
+        // `setContentInsetAdjustmentBehavior:` are public UIKit API; 2 is UIScrollViewContentInsetAdjustmentNever.
+        unsafe {
+            let wk = &*webview.inner().cast::<AnyObject>();
+            let scroll: Retained<AnyObject> = msg_send![wk, scrollView];
+            let () = msg_send![&*scroll, setContentInsetAdjustmentBehavior: 2isize];
+        }
+    }) {
+        log::warn!("full_screen_page: with_webview failed ({err})");
+    }
+}
+
 /// Close the two holes a sealed applet's frame would otherwise have on desktop: the bridge to native code
 /// (wry's `ipc` message handler) and WebRTC, which ignores the frame's content policy. Copied from the Uni app's shell.
-/// The app reaches its few commands through Tauri's custom protocol, not this handler, on desktop.
-#[cfg(desktop)]
+/// The app reaches its few commands through Tauri's custom protocol, not this handler, on desktop and on an iPhone.
+/// On an iPhone only the bridge is closed: WebRTC goes off only through a private WebKit call, which an App Store build
+/// must not make, so the self-test finds it on and runs approved code only there, as on Android.
+#[cfg(any(desktop, target_os = "ios"))]
 fn seal_webview(window: &tauri::WebviewWindow) {
     let label = window.label().to_string();
     let logged = label.clone();
@@ -268,7 +291,32 @@ fn seal_webview(window: &tauri::WebviewWindow) {
                 }
             }
         }
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(target_os = "ios")]
+        {
+            use objc2::{msg_send, rc::Retained, runtime::AnyObject};
+            // SAFETY: on iOS `inner()` is the live WKWebView, and `with_webview` runs this on the main thread; the
+            // three messages are public WebKit API (WKWebView.configuration, WKWebViewConfiguration.userContentController,
+            // WKUserContentController removeScriptMessageHandlerForName:); objc2 retains the two objects they return.
+            unsafe {
+                let wk = &*webview.inner().cast::<AnyObject>();
+                let config: Retained<AnyObject> = msg_send![wk, configuration];
+                let controller: Retained<AnyObject> = msg_send![&*config, userContentController];
+                let () = msg_send![&*controller, removeScriptMessageHandlerForName: objc2_foundation::ns_string!("ipc")];
+                // a debug build (the simulator drive, scripts/ios-drive.sh) copies the page's console into the system
+                // log, where the drive keeps it; a private WebKit switch, so never in a release build
+                #[cfg(debug_assertions)]
+                {
+                    use objc2::runtime::Bool;
+                    let prefs: Retained<AnyObject> = msg_send![&*config, preferences];
+                    let can: Bool = msg_send![&*prefs, respondsToSelector: objc2::sel!(_setLogsPageMessagesToSystemConsoleEnabled:)];
+                    if can.as_bool() {
+                        let () = msg_send![&*prefs, _setLogsPageMessagesToSystemConsoleEnabled: Bool::YES];
+                    }
+                }
+            }
+            let _ = label;
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
         let _ = (webview, label);
     }) {
         log::warn!("seal_webview({logged}): with_webview failed ({err}); webview left unsealed");

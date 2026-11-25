@@ -5,8 +5,8 @@
 //!   else the everyday key in the approval role. **root key**: offline, never here.
 //! - The approval role is a type (`approvals::ApprovalKeys`): only this module makes one, so nothing signs a seal or an
 //!   approval request without deliberately taking it.
-//! - The unlock is decided here, natively: Android's BiometricPrompt (strong biometric or the screen lock), macOS
-//!   LocalAuthentication, elsewhere a native OK/Cancel dialog. Nothing from the web side can say "unlocked".
+//! - The unlock is decided here, natively: Android's BiometricPrompt (strong biometric or the screen lock), Apple's
+//!   LocalAuthentication on a Mac or an iPhone, elsewhere a native OK/Cancel dialog. Nothing from the web side can say "unlocked".
 //! - The grace: 300 seconds after a passing unlock, for routine approvals only, for the applet (grant subject) that
 //!   earned it, ended when the screen goes off (Android's screen-off count) and by the idle lock (levels.rs). Never on
 //!   desktop in this step. What an action asks before the unlock (nothing, the unlock, the passcode) is levels.rs's.
@@ -266,7 +266,8 @@ mod platform {
                     if m.contains("screen lock") { "Set a screen lock on this phone to approve this.".into() } else { "The device unlock was cancelled or failed.".into() }
                 })
         }
-        #[cfg(target_os = "macos")]
+        // Touch ID or the Mac's password; Face ID or the passcode on an iPhone (Info.ios.plist says why it asks)
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
         {
             let reason = _reason.to_string();
             tauri::async_runtime::spawn_blocking(move || {
@@ -274,16 +275,19 @@ mod platform {
                 use objc2_local_authentication::{LAContext, LAPolicy};
                 let context = unsafe { LAContext::new() };
                 let (send, receive) = std::sync::mpsc::sync_channel(1);
-                let reply = block2::RcBlock::new(move |success: objc2::runtime::Bool, _error: *mut NSError| {
-                    let _ = send.try_send(success.as_bool());
+                let reply = block2::RcBlock::new(move |success: objc2::runtime::Bool, error: *mut NSError| {
+                    // LAErrorPasscodeNotSet (-5): no passcode on this device, so nothing can confirm it is the person
+                    let code = if error.is_null() { 0 } else { unsafe { (*error).code() } };
+                    let _ = send.try_send((success.as_bool(), code));
                 });
                 // LocalAuthentication owns its system UI; creating and waiting stay off the main thread (from the Uni app)
                 unsafe { context.evaluatePolicy_localizedReason_reply(LAPolicy::DeviceOwnerAuthentication, &NSString::from_str(&reason), &reply) };
                 let result = receive.recv_timeout(std::time::Duration::from_secs(60));
                 unsafe { context.invalidate() };
                 match result {
-                    Ok(true) => Ok(()),
-                    Ok(false) => Err("The device unlock was cancelled or failed.".to_string()),
+                    Ok((true, _)) => Ok(()),
+                    Ok((false, -5)) => Err(if cfg!(target_os = "ios") { "Set a passcode on this iPhone to approve this." } else { "Set a password on this Mac to approve this." }.to_string()),
+                    Ok((false, _)) => Err("The device unlock was cancelled or failed.".to_string()),
                     Err(_) => Err("The device unlock timed out. Try again.".to_string()),
                 }
             })
@@ -302,10 +306,6 @@ mod platform {
             .await
             .map_err(|_| "The confirmation failed.".to_string())?;
             if ok { Ok(()) } else { Err("Cancelled: nothing was sent.".into()) }
-        }
-        #[cfg(target_os = "ios")]
-        {
-            Err("The device unlock isn't available here.".into())
         }
     }
 }

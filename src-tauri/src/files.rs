@@ -2,7 +2,9 @@
 //! each call first (src/applet/files.ts); Rust checks the link and the name again, then does the work:
 //! - `open_link`: http, https or mailto, in the system's browser.
 //! - `save_file`: into Downloads under a free name ("notes (2).pdf"), never over a file. Desktop writes the folder
-//!   itself; Android goes through MediaStore (gen/android/.../FilesPlugin.kt), which needs no storage permission.
+//!   itself; Android goes through MediaStore (gen/android/.../FilesPlugin.kt), which needs no storage permission. An
+//!   iPhone has no Downloads an app can write to: the file goes into the app's Documents, which the Files app shows as
+//!   On My iPhone → Parachute (UIFileSharingEnabled in Info.ios.plist).
 
 use tauri::{AppHandle, Runtime};
 
@@ -99,7 +101,7 @@ pub fn bare_name(raw: &str) -> String {
 }
 
 /// The k-th name tried for `name`: the name itself, then "name (2).ext", "name (3).ext"…
-#[cfg(any(desktop, test))]
+#[cfg(any(desktop, target_os = "ios", test))]
 fn numbered(name: &str, k: u32) -> String {
     if k <= 1 {
         return name.to_string();
@@ -112,7 +114,7 @@ fn numbered(name: &str, k: u32) -> String {
 
 /// Writes `bytes` into `dir` as `name`, or the first free numbered name; never over a file that is there. Returns the
 /// file name it got.
-#[cfg(any(desktop, test))]
+#[cfg(any(desktop, target_os = "ios", test))]
 pub fn save_free(dir: &std::path::Path, name: &str, bytes: &[u8]) -> std::io::Result<String> {
     use std::io::{ErrorKind, Write};
     std::fs::create_dir_all(dir)?;
@@ -161,20 +163,21 @@ pub async fn save_file<R: Runtime>(app: AppHandle<R>, name: String, bytes: Strin
     save(&app, name, bytes, mime).await
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "ios"))]
 async fn save<R: Runtime>(app: &AppHandle<R>, name: String, bytes: Vec<u8>, _mime: String) -> Result<String, String> {
     use tauri::Manager;
     // Linux without xdg-user-dirs has no named Downloads folder: ~/Downloads.
-    let dir: std::path::PathBuf = app
-        .path()
-        .download_dir()
-        .ok()
-        .or_else(|| app.path().home_dir().ok().map(|h| h.join("Downloads")))
-        .ok_or("Couldn't find a Downloads folder on this computer")?;
+    #[cfg(desktop)]
+    let (dir, called): (Option<std::path::PathBuf>, &str) =
+        (app.path().download_dir().ok().or_else(|| app.path().home_dir().ok().map(|h| h.join("Downloads"))), "Downloads");
+    // the app's Documents: the Files app's On My iPhone → Parachute
+    #[cfg(target_os = "ios")]
+    let (dir, called): (Option<std::path::PathBuf>, &str) = (app.path().document_dir().ok(), "Parachute's folder in Files");
+    let dir = dir.ok_or_else(|| format!("Couldn't find {called} on this device"))?;
     tauri::async_runtime::spawn_blocking(move || save_free(&dir, &name, &bytes))
         .await
         .map_err(|e| e.to_string())?
-        .map_err(|e| format!("Couldn't save to Downloads: {e}"))
+        .map_err(|e| format!("Couldn't save to {called}: {e}"))
 }
 
 /// Android: the bytes go to a file in the app's cache (`cache/save/`, the one folder FilesPlugin.kt reads from), which
@@ -223,7 +226,7 @@ async fn save<R: Runtime>(app: &AppHandle<R>, name: String, bytes: Vec<u8>, mime
     Ok(saved?.name)
 }
 
-#[cfg(not(any(desktop, target_os = "android")))]
+#[cfg(not(any(desktop, target_os = "android", target_os = "ios")))]
 async fn save<R: Runtime>(_app: &AppHandle<R>, _name: String, _bytes: Vec<u8>, _mime: String) -> Result<String, String> {
     Err("Saving files isn't supported on this device yet".into())
 }
