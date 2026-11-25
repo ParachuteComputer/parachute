@@ -12,8 +12,8 @@ describe("the vault module's words, read as the REST door reads them", () => {
       .toEqual({ fields: { status: "open", rating: { gte: 4 }, due: { exists: true }, kind: { in: ["book", "zine"] } } });
   });
   it("true, false and exact numbers are typed (shorthandValue); other text stays text", () => {
-    expect(fieldsFilter([["meta[favorite]", "true"], ["meta[zip]", "02134"], ["meta[n]", "7"], ["meta[tags][in]", "a, b"]]))
-      .toEqual({ fields: { favorite: true, zip: "02134", n: 7, tags: { in: ["a", "b"] } } });
+    expect(fieldsFilter([["meta[favorite]", "true"], ["meta[zip]", "02134"], ["meta[n]", "7"], ["meta[tags][in]", "a, b"], ["meta[done][eq]", "true"]]))
+      .toEqual({ fields: { favorite: true, zip: "02134", n: 7, tags: { in: ["a", "b"] }, done: { eq: "true" } } });
   });
   it("the record's own dates are a date filter, gte and lt only", () => {
     expect(fieldsFilter([["meta[updated_at][gte]", "2026-11-01"], ["meta[updated_at][lt]", "2026-12-01"]])).toEqual({ date_filter: { field: "updated_at", from: "2026-11-01", to: "2026-12-01" } });
@@ -52,11 +52,21 @@ describe("the vault module's legs", () => {
     expect(noteOf({ id: "1", path: "People/Maya", extension: "md", body: "hi", fields: { a: 1 }, tags: ["x"], types: ["person"], updatedAt: "t" }))
       .toMatchObject({ id: "1", path: "People/Maya", content: "hi", metadata: { a: 1 }, tags: ["x", "person"], types: ["person"], updatedAt: "t" });
   });
-  it("a write whose tags name a type goes again with them as types", async () => {
+  it("a write whose tags name a type goes again with only the types as types (the vault says which)", async () => {
     const asked: Record<string, unknown>[] = [];
-    const d = legs((_n, a) => { asked.push(a); if (a.tags) throw new Refusal("tag_kind", "person is a type"); return { id: "2", path: "People/Ann", types: ["person"] }; });
-    expect((await d.create!("People/Ann", "", ["person"])).tags).toEqual(["person"]);
-    expect(asked).toEqual([{ path: "People/Ann", body: "", tags: ["person"] }, { path: "People/Ann", body: "", types: ["person"] }]);
+    const d = legs((n, a) => {
+      if (n === "list-types") return { name: a.name, kind: a.name === "person" ? "type" : "tag" };
+      asked.push(a);
+      if ((a.tags as string[] | undefined)?.includes("person")) throw new Refusal("tag_kind", "person is a type");
+      return { id: "2", path: "People/Ann", tags: ["starred"], types: ["person"] };
+    });
+    expect((await d.create!("People/Ann", "", ["person", "starred"])).tags).toEqual(["starred", "person"]);
+    expect(asked).toEqual([{ path: "People/Ann", body: "", tags: ["person", "starred"] }, { path: "People/Ann", body: "", tags: ["starred"], types: ["person"] }]);
+  });
+  it("any other refusal is the module's to read, not retried", async () => {
+    let n = 0;
+    await expect(legs(() => { n++; throw new Refusal("path_conflict", "taken"); }).create!("People/Ann", "", ["person"])).rejects.toThrow("taken");
+    expect(n).toBe(1);
   });
 });
 

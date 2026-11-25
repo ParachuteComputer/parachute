@@ -51,18 +51,33 @@ async function rest(state, method, path, body) {
 const putApplet = (state, path, extension, content, applet, more = {}) => rest(state, "POST", "notes", { path, content, extension, tags: ["applet"], metadata: { applet, ...more } });
 const fromRepo = (stem) => { const m = JSON.parse(readFileSync(`${REPO}applets/${stem}.json`, "utf8")); const { applet, ...more } = m.fields; return { path: m.path, extension: m.extension, content: readFileSync(`${REPO}applets/${stem}.${m.extension}`, "utf8"), applet, more }; };
 
-/** The view's own asks hash (packages/applet-host/src/asks.ts, the app's asksOf), bundled for node once. */
+/** The asks hash as the app computes it when a person approves (src/views/AppletScreen.tsx: readApplet as their own
+ *  vault, the role tags out of what it opens, asksOf), from the app's own modules, bundled for node once. Not the
+ *  view's asks.ts: the e2e signs as the app signs, so a view that hashes differently is refused. */
 let asksModule;
 async function asks() {
   if (asksModule) return asksModule;
   const outfile = join(mkdtempSync(join(tmpdir(), "mcpapp-t476-asks-")), "asks.mjs");
-  // Vite's `?raw` and `?inline` imports (the app's own applets, read as text by parachuteSource.ts), as text
+  const contents = `
+    import { readApplet } from "./applet/discovery";
+    import { asksOf } from "./applet/approvals";
+    import { withoutRoles } from "./applet/opens";
+    import { DEFAULT_ROLE_TAGS } from "./open/roles";
+    export async function appAsks(subject, n, roleTags = DEFAULT_ROLE_TAGS) {
+      const a = readApplet(n, subject.vault, false, (o) => o === new URL(subject.hub).origin);
+      if (!a.ok) throw new Error(a.error);
+      a.entry.opens = withoutRoles(a.entry.opens, roleTags);
+      return asksOf(subject, a.entry, n.metadata ?? {}, [], null);
+    }`;
+  // Vite's \`?raw\` and \`?inline\` imports (the app's own applets, read as text by parachuteSource.ts), as text
   const asText = { name: "as-text", setup(b) {
     b.onResolve({ filter: /\?(raw|inline)$/ }, (a) => ({ path: join(a.resolveDir, a.path.replace(/\?(raw|inline)$/, "")), namespace: "as-text" }));
     b.onLoad({ filter: /.*/, namespace: "as-text" }, (a) => ({ contents: readFileSync(a.path, "utf8"), loader: "text" }));
   } };
-  await build({ entryPoints: [new URL("../src/asks.ts", import.meta.url).pathname], bundle: true, format: "esm", platform: "node", outfile, logLevel: "silent", plugins: [asText], define: { "import.meta.env": "{}" } });
-  return (asksModule = await import(outfile));
+  await build({ stdin: { contents, resolveDir: join(REPO, "src"), loader: "ts" }, bundle: true, format: "esm", platform: "node", outfile, logLevel: "silent", plugins: [asText], define: { "import.meta.env": "{}" } });
+  asksModule = await import(outfile);
+  rmSync(join(outfile, ".."), { recursive: true, force: true });
+  return asksModule;
 }
 
 /** The e2e's own applets: one that tries every way out of its frame, and one nobody approves. */
@@ -104,7 +119,8 @@ export default function Probe() {
   return <main><h1>Probe</h1><ul>{out.map((t) => <li key={t}>{t}</li>)}</ul></main>;
 }`;
 const PROBE_APPLET = { contract: 2, id: "probe", name: "Probe", glyph: "?", access: [{ vault: "here", allow: [{ path: "People/", verbs: ["read", "create", "update"] }] }], screens: [{ id: "home", name: "Probe" }] };
-const PROBE_OPENS = [{ type: "person", path: "People/" }];
+// `archived` is one of the vault's role tags: the app drops it from what an applet opens before it hashes the asks
+const PROBE_OPENS = [{ type: "person", path: "People/" }, { type: "archived", path: "People/" }];
 const UNAPPROVED_APPLET = { contract: 2, id: "unapproved", name: "Unapproved", glyph: "?", access: [{ vault: "here", allow: [{ path: "Notes/", verbs: ["read"] }] }], screens: [{ id: "home", name: "Unapproved" }] };
 
 const codeHash = (kind, src) => (kind === "html" ? "" : `${kind}:`) + createHash("sha256").update(src, "utf8").digest("hex");
@@ -134,7 +150,7 @@ export async function start(opts = {}) {
   child.stdout.on("data", (d) => { log += d; }); child.stderr.on("data", (d) => { log += d; });
   const until = Date.now() + 30_000;
   while (!/ready: hub/.test(log)) {
-    if (Date.now() > until || child.exitCode !== null) { stop(state); throw new Error(`the e2e hub didn't start:\n${log.slice(-2000)}`); }
+    if (Date.now() > until || child.exitCode !== null) { await stop(state); throw new Error(`the e2e hub didn't start:\n${log.slice(-2000)}`); }
     await new Promise((r) => setTimeout(r, 200));
   }
   child.stdout.removeAllListeners("data"); child.stderr.removeAllListeners("data");
@@ -161,14 +177,13 @@ export async function start(opts = {}) {
   made.widened = { ...(await putApplet(state, "Applets/Widened", "tsx", "export default () => <p>widened</p>;", { ...HOSTILE_APPLET, id: "widened", name: "Widened" })), kind: "tsx", content: "export default () => <p>widened</p>;", applet: "widened" };
   made.unapproved = { ...(await putApplet(state, "Applets/Unapproved", "tsx", "export default () => <p>never runs</p>;", UNAPPROVED_APPLET)), kind: "tsx", content: "", applet: "unapproved" };
   // approvals signed by the person's key, of each one's code and asks as the app hashes them; none for Unapproved
-  const { asksFor } = await asks();
+  const { appAsks } = await asks();
   for (const stem of ["people", "library", "hostile", "probe", "widened"]) {
     const m = made[stem];
     const subject = { hub: origin, vault: VAULT, record: m.id, applet: m.applet };
     const rec = await tool(state, "query-records", { id: m.id });
-    const a = await asksFor({ vault: VAULT, record: { id: rec.id, path: rec.path, tags: [...(rec.tags ?? []), ...(rec.types ?? [])], fields: rec.fields ?? {} }, approval: { subject } });
-    if (!a.ok) throw new Error(`${stem}: ${a.why}`);
-    await putApproval(state, approval(sk, subject, { code: codeHash(m.kind, m.content), scope: a.scope }), subject);
+    const scope = await appAsks(subject, { id: rec.id, path: rec.path, tags: [...(rec.tags ?? []), ...(rec.types ?? [])], metadata: rec.fields ?? {} });
+    await putApproval(state, approval(sk, subject, { code: codeHash(m.kind, m.content), scope }), subject);
   }
   // Widened: after its approval, a vault writer gives it People/ to read and write (its code unchanged)
   await rest(state, "PATCH", `notes/${made.widened.id}`, { metadata: { applet: { ...HOSTILE_APPLET, id: "widened", name: "Widened", access: [{ vault: "here", allow: [{ path: "Notes/", verbs: ["read"] }, { path: "People/", verbs: ["read", "create", "update"] }] }] } }, force: true });
@@ -176,7 +191,9 @@ export async function start(opts = {}) {
   return state;
 }
 
-export function stop(state) {
+/** Stop the hub and remove its home (once it has let go of its files). */
+export async function stop(state) {
   if (state?.pid) { try { process.kill(-state.pid, "SIGTERM"); } catch {} }
-  if (state?.home) setTimeout(() => rmSync(state.home, { recursive: true, force: true }), 1500);
+  await new Promise((r) => setTimeout(r, 1500));
+  if (state?.home) rmSync(state.home, { recursive: true, force: true });
 }

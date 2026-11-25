@@ -46,9 +46,9 @@ const host = spawn("bun", ["serve.ts"], { cwd: join(EXT, "examples/basic-host"),
 let hostLog = ""; host.stdout.on("data", (d) => { hostLog += d; }); host.stderr.on("data", (d) => { hostLog += d; });
 for (let i = 0; i < 100 && !/Sandbox server/.test(hostLog); i++) await new Promise((r) => setTimeout(r, 100));
 
-const cleanup = () => { try { process.kill(-host.pid, "SIGTERM"); } catch {} proxy.close(); stop(state); };
+const cleanup = async () => { try { process.kill(-host.pid, "SIGTERM"); } catch {} proxy.close(); await stop(state); };
 let browser;
-try { browser = await (browserName === "webkit" ? webkit : chromium).launch(); } catch (e) { cleanup(); throw e; }
+try { browser = await (browserName === "webkit" ? webkit : chromium).launch(); } catch (e) { await cleanup(); throw e; }
 const page = await browser.newPage({ viewport: { width: 1180, height: 1000 } });
 const errors = [];
 const logs = [];
@@ -140,7 +140,7 @@ try {
   ok(errors.length === 0, `no uncaught errors in the page (${errors.slice(0, 3).join(" / ")})`);
 } finally {
   await browser.close();
-  cleanup();
+  await cleanup();
 }
 console.log(failed ? `${failed} check(s) failed` : "every check passed");
 process.exit(failed ? 1 : 0);

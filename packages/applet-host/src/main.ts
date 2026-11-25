@@ -25,7 +25,8 @@ import { frameHead } from "../../../src/kit/frameCss";
 import { connectHost, type Host } from "./host";
 import { mcpVaultDeps } from "./mcpVault";
 import { readPayload, type Payload } from "./payload";
-import { asksFor } from "./asks";
+import { asksFor, roleTagsVia } from "./asks";
+import { withoutRoles } from "../../../src/applet/opens";
 
 declare const __HOST_VERSION__: string;
 const root = document.getElementById("root")!;
@@ -105,12 +106,15 @@ async function main() {
   // the connector sent this code because the person approved its hash; the view checks the same hash itself
   if ((await codeHash(kind, p.code)) !== p.approval.code) { say(`${a.entry.manifest.name} changed since you approved it. Approve it again in Parachute.`); return; }
   // and what it asks for: its fields as they are now, hashed as the approving device hashed them
-  const asks = await asksFor(p);
+  let roles: string[];
+  try { roles = await roleTagsVia((name, args) => host.callTool(name, args)); } catch { say(`${a.entry.manifest.name} can't open: the vault's settings couldn't be read.`); return; }
+  const asks = await asksFor(p, roles);
   if (!asks.ok) { say(`${a.entry.manifest.name} can't open here: ${asks.why}.`); return; }
   if (asks.scope !== p.approval.scope) { say(`${a.entry.manifest.name} asks for more than when you approved it. Approve it again in Parachute.`); return; }
   const page = await pageOf(kind, p.code, a.entry.manifest.name);
   if (!page.ok) { say(page.why); return; }
-  running = run(host, p, a.entry, page.html);
+  // what it opens, without the vault's role tags (as the app runs it)
+  running = run(host, p, { ...a.entry, opens: withoutRoles(a.entry.opens, roles) }, page.html);
   // inline, the host sizes the view to what it asks: a screen's worth (an applet is a page, not a card)
   if ((host.context().displayMode ?? "inline") === "inline") host.sizeChanged(640);
 }

@@ -16,6 +16,6 @@ console.log(`look     node packages/applet-host/e2e/look.mjs ${join(state.home, 
 console.log(`connector ${state.origin}/vault/demo/mcp`);
 console.log(`sign in  user "owner", password in ${join(state.home, "pw")}`);
 console.log(`applets  approved: ${Object.keys(state.made).filter((k) => k !== "unapproved").join(", ")}; not approved: unapproved`);
-const quit = () => { stop(state); setTimeout(() => process.exit(0), 2000); };
+const quit = () => { stop(state).then(() => process.exit(0)); };
 process.on("SIGINT", quit); process.on("SIGTERM", quit);
 setInterval(() => {}, 1 << 30);

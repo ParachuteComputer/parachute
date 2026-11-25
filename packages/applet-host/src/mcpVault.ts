@@ -68,20 +68,27 @@ export function fieldsFilter(meta: readonly [string, string][]): { fields?: Rec;
     if (op === "exists") { if (v !== "true" && v !== "false") throw bad("exists takes true or false"); fields[field] = { ...cur, exists: v === "true" }; continue; }
     if (op === "in" || op === "not_in") {
       const vals = list ? [v] : v.split(",").map((x) => x.trim()).filter(Boolean);
-      fields[field] = { ...cur, [op]: [...((cur[op] as unknown[]) ?? []), ...vals.map(shorthandValue)] };
+      fields[field] = { ...cur, [op]: [...((cur[op] as unknown[]) ?? []), ...vals] };
       continue;
     }
-    fields[field] = { ...cur, [op]: shorthandValue(v) };
+    // as REST: an operator's value is the text, a comparison's a number when it is one exactly
+    fields[field] = { ...cur, [op]: /^(gt|gte|lt|lte)$/.test(op) && Number.isFinite(Number(v)) && String(Number(v)) === v ? Number(v) : v };
   }
   return { ...(Object.keys(fields).length ? { fields } : {}), ...(date ? { date_filter: date } : {}) };
 }
 
 /** A write whose tags include a type: the record door refuses it (`tag_kind`, "pass it as types"), where the REST door
- *  took it. The module only ever adds the types its card names for a folder, so those names go again as `types`. */
-async function asTypes<T>(write: (moveToTypes: boolean) => Promise<T>): Promise<T> {
-  try { return await write(false); } catch (e) {
-    if (e instanceof Refusal && e.error_type === "tag_kind") return write(true);
-    throw e;
+ *  took it. Then the vault is asked which of the names are types (list-types), and those, only those, go again as
+ *  `types` (the module only ever adds the names its card opens for a folder). */
+async function asTypes<T>(call: CallTool, names: readonly string[], write: (types: ReadonlySet<string>) => Promise<T>): Promise<T> {
+  try { return await write(new Set()); } catch (e) {
+    if (!(e instanceof Refusal && e.error_type === "tag_kind") || !names.length) throw e;
+    const kinds = await Promise.all(names.map(async (n) => {
+      try { const t = (await call("list-types", { name: n })) as { kind?: unknown } | null; return t?.kind === "type" ? n : null; } catch { return null; }
+    }));
+    const types = new Set(kinds.filter((n): n is string => !!n));
+    if (!types.size) throw e;
+    return write(types);
   }
 }
 
@@ -111,20 +118,23 @@ export function mcpVaultDeps(call: CallTool): VaultDeps {
         ...(filter ?? {}) }).catch(badQuery);
     },
     create: async (path, content, tags, more) => {
-      const r = await asTypes((move) => {
-        const types = [...new Set([...(more?.types ?? []), ...(move ? tags : [])])];
-        return call("create-record", { path, body: content, ...(!move && tags.length ? { tags } : {}), ...(types.length ? { types } : {}), ...(more?.metadata ? { fields: more.metadata } : {}) });
+      const r = await asTypes(call, tags, (moved) => {
+        const asTags = tags.filter((t) => !moved.has(t));
+        const types = [...new Set([...(more?.types ?? []), ...moved])];
+        return call("create-record", { path, body: content, ...(asTags.length ? { tags: asTags } : {}), ...(types.length ? { types } : {}), ...(more?.metadata ? { fields: more.metadata } : {}) });
       });
       return noteOf((Array.isArray(r) ? r[0] : r) as Rec);
     },
     save: async (id, content, ifUpdatedAt, more) => {
       try {
-        return noteOf((await asTypes((move) => {
-          const both = (a?: string[], b?: string[]) => [...new Set([...(a ?? []), ...(b ?? [])])];
-          const types = move ? { add: both(more?.types?.add, more?.tags?.add), remove: both(more?.types?.remove, more?.tags?.remove) } : more?.types;
-          const tags = move ? undefined : more?.tags;
+        const named = [...(more?.tags?.add ?? []), ...(more?.tags?.remove ?? [])];
+        return noteOf((await asTypes(call, named, (moved) => {
+          const split = (l?: string[]) => ({ tags: (l ?? []).filter((t) => !moved.has(t)), types: (l ?? []).filter((t) => moved.has(t)) });
+          const add = split(more?.tags?.add), remove = split(more?.tags?.remove);
+          const types = { add: [...new Set([...(more?.types?.add ?? []), ...add.types])], remove: [...new Set([...(more?.types?.remove ?? []), ...remove.types])] };
+          const tags = { add: add.tags, remove: remove.tags };
           return call("update-record", { id, ...(content !== undefined ? { body: content } : {}), ...(more?.metadata ? { fields: more.metadata } : {}),
-            ...(types && (types.add?.length || types.remove?.length) ? { types } : {}), ...(tags ? { tags } : {}), if_updated_at: ifUpdatedAt });
+            ...(types.add.length || types.remove.length ? { types } : {}), ...(tags.add.length || tags.remove.length ? { tags } : {}), if_updated_at: ifUpdatedAt });
         })) as Rec);
       } catch (e) {
         // the module reads a conflict by these words (vault.ts save)

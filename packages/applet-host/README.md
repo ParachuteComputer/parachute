@@ -19,6 +19,9 @@ person opens one of their applets from Parachute's connector. One HTML file, ver
   the record door as the REST door the module was written on: types among tags, an opened type written as a type,
   filter values and the record's own dates by the REST door's rules.
 - The host protocol is a few messages by hand (`src/host.ts`): `ui/initialize`, `tools/call`, size and display mode.
+- A frame that navigates away is stopped by the view (a second load of the frame), as the app stops it; that the
+  navigation itself goes nowhere rests on the host's policy for the view (`frame-src`, which the MCP Apps spec makes
+  a host set). The e2e's hostile applet tries it in the reference host; CLAUDE-RUN step 5 looks in Claude.
 
 ## What doesn't work inside Claude (and why)
 
