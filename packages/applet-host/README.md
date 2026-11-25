@@ -9,12 +9,15 @@ person opens one of their applets from Parachute's connector. One HTML file, ver
 - The connector offers each applet the person approved by code hash as its own tool, `open-<id>`, with its own view
   and a global entry point: one tile per applet on Claude's Artifacts page, pinnable to the sidebar. An applet nobody
   approved, or one whose code changed since, isn't offered.
-- The view gets the applet in the page (`src/payload.ts`), checks the code's hash against the approval again, compiles
-  it as the app does, and runs it in **the app's sealed frame, nested inside the view**: `sandbox="allow-scripts"` (an
+- The view gets the applet in the page (`src/payload.ts`), checks the code's hash and the asks' hash against the
+  approval again (`src/asks.ts`: the app's own `readApplet` and `asksOf`, so an applet whose folders were widened after
+  it was approved asks again, as in the app), compiles it as the app does, and runs it in **the app's sealed frame, nested inside the view**: `sandbox="allow-scripts"` (an
   opaque origin, no storage, no reach into the view), the frame's own content policy (no network), no devices.
 - The frame's only door is the app's contract session, routed to the app's own vault module: the record tools, only in
   the manifest's folders, judged at every call as in the app. Its legs are the host's `tools/call` on the connector
-  (`src/mcpVault.ts`), so the view holds no token and every call is the person's own key at its level.
+  (`src/mcpVault.ts`), so the view holds no token and every call is the person's own key at its level. The legs read
+  the record door as the REST door the module was written on: types among tags, an opened type written as a type,
+  filter values and the record's own dates by the REST door's rules.
 - The host protocol is a few messages by hand (`src/host.ts`): `ui/initialize`, `tools/call`, size and display mode.
 
 ## What doesn't work inside Claude (and why)
@@ -24,7 +27,8 @@ person opens one of their applets from Parachute's connector. One HTML file, ver
   applet that needs them shows without them, as in someone else's vault.
 - **Other vaults** (`app: [vaults]`), **files and uploads** (attachments, `app.pick`), **embeds**, **signals** and
   **settings sections**: not bridged.
-- **Components** (`component:` imports): not offered; their code lives in other records.
+- **Components** (`component:` imports): not offered; their code lives in other records. **Embeds**: an applet whose
+  page embeds others doesn't run (its asks name where they come from, which only a device resolves).
 - **Saved state** lasts while the view is open; **offline** isn't possible (every read is a live connector call).
 
 ## Build and test
@@ -38,7 +42,8 @@ EXT_APPS="$TMPDIR/ext-apps" PARACHUTE_CORE=<parachute-core> APPLET_HOST_HTML=$PW
 ```
 
 The e2e (CI: `applet-host`) starts a throwaway hub with made-up records, the app's People and Library applets, an
-applet that tries every way out of its frame, and one nobody approved; links a throwaway key to the owner and signs
+applet that tries every way out of its frame, a probe of the bridge (a type read, a typed create, field and date
+filters), one approved and then widened by a vault writer, and one nobody approved; links a throwaway key to the owner and signs
 approvals as the app does; then drives the reference host as a person would.
 
 A new version: bump `version` here, build, and keep it in core with `bun scripts/keep-applet-host.ts <html> <version>`

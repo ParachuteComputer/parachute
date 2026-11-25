@@ -25,6 +25,7 @@ import { frameHead } from "../../../src/kit/frameCss";
 import { connectHost, type Host } from "./host";
 import { mcpVaultDeps } from "./mcpVault";
 import { readPayload, type Payload } from "./payload";
+import { asksFor } from "./asks";
 
 declare const __HOST_VERSION__: string;
 const root = document.getElementById("root")!;
@@ -86,10 +87,13 @@ async function main() {
   const payload = readPayload(document);
   let running: ReturnType<typeof run> | null = null;
   const look = (c: { displayMode?: string; theme?: string }) => { document.documentElement.dataset.mode = c.displayMode ?? "inline"; document.documentElement.style.colorScheme = c.theme ?? ""; };
+  // outside a host nothing answers: say so rather than wait for good
+  const alone = setTimeout(() => say("This is a Parachute applet's view. It opens inside an AI app that shows Parachute's applets, such as Claude."), 10_000);
   const host = await connectHost({
     context: (c) => { look(c); running?.theme(); },
     teardown: () => running?.stop(),
   }, { name: "Parachute", version: typeof __HOST_VERSION__ === "string" ? __HOST_VERSION__ : "dev" });
+  clearTimeout(alone);
   look(host.context());
   if (!payload.ok) { say(payload.why); return; }
   const p = payload.payload;
@@ -100,6 +104,10 @@ async function main() {
   if (!kind) { say(`${a.entry.manifest.name} isn't code Parachute runs.`); return; }
   // the connector sent this code because the person approved its hash; the view checks the same hash itself
   if ((await codeHash(kind, p.code)) !== p.approval.code) { say(`${a.entry.manifest.name} changed since you approved it. Approve it again in Parachute.`); return; }
+  // and what it asks for: its fields as they are now, hashed as the approving device hashed them
+  const asks = await asksFor(p);
+  if (!asks.ok) { say(`${a.entry.manifest.name} can't open here: ${asks.why}.`); return; }
+  if (asks.scope !== p.approval.scope) { say(`${a.entry.manifest.name} asks for more than when you approved it. Approve it again in Parachute.`); return; }
   const page = await pageOf(kind, p.code, a.entry.manifest.name);
   if (!page.ok) { say(page.why); return; }
   running = run(host, p, a.entry, page.html);

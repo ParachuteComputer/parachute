@@ -75,7 +75,7 @@ try {
 
   // 0. what the host is offered: the approved applets as tools, each with a global entry point; never the unapproved
   const listed = (await mcp(state, "tools/list", {})).result.tools.filter((t) => t.name.startsWith("open-"));
-  ok(JSON.stringify(listed.map((t) => t.name).sort()) === JSON.stringify(["open-hostile", "open-library", "open-people"]), `tools: ${listed.map((t) => t.name).join(", ")} (open-unapproved is not offered)`);
+  ok(JSON.stringify(listed.map((t) => t.name).sort()) === JSON.stringify(["open-hostile", "open-library", "open-people", "open-probe", "open-widened"]), `tools: ${listed.map((t) => t.name).join(", ")} (open-unapproved is not offered)`);
   ok(listed.every((t) => t._meta?.["openai/ui"]?.entrypoints?.[0]?.type === "global" && t._meta?.ui?.resourceUri === `ui://parachute/applet/${t.name.slice(5)}`), "each is its own tile: a global entry point and its own ui:// view");
 
   // 1. People, the app's own applet, from the vault: nested in the view, sealed
@@ -115,7 +115,25 @@ try {
   ok(!!(await tool(state, "query-records", { id: "Notes/Keep me" }).catch(() => null)), "the record it tried to delete is there");
   if (shots) await page.screenshot({ path: `${shots}/04-hostile.png` });
 
-  // 4. one not approved: no tool, and its view is refused
+  // 4. the bridge reads and writes as the REST door the app uses does (a type read, a create where it opens a type,
+  // a field filter, a date filter)
+  await open("open-probe");
+  ok(await until(async () => /date filter: /.test(await text(applet())), 20000), "the probe applet ran");
+  const probe = await text(applet());
+  console.log("     probe:", probe.replace(/\n+/g, " | "));
+  ok(/type read: 4\b/.test(probe), "a read by type finds the vault's four people");
+  ok(/types on a record: true/.test(probe), "a record's types are among its tags, as in the app");
+  ok(/create: People\/Probe Person/.test(probe) && (await tool(state, "query-records", { id: "People/Probe Person" }).catch(() => null))?.types?.includes("person"), "a create where it opens a type lands, typed");
+  ok(/field filter: [12]\b/.test(probe), "a field filter on a typed value (favorite: true) matches");
+  ok(/date filter: [45]\b/.test(probe), "a filter on the record's own updated_at matches");
+  // 5. approved, then widened by a vault writer (every folder, same code): the view asks again, runs nothing
+  await open("open-widened");
+  ok(await until(async () => /asks for more than when you approved it/.test(await text(view()))), "an approved applet whose asks were widened after approval doesn't run");
+  if (process.env.DEBUG) console.log("     widened view:", await text(view()));
+  ok(!applet(), "no applet frame for it");
+  if (shots) await page.screenshot({ path: `${shots}/05-widened.png` });
+
+  // 6. one not approved: no tool, and its view is refused
   const unapproved = await mcp(state, "resources/read", { uri: "ui://parachute/applet/unapproved" });
   ok(!!unapproved.error, "an applet nobody approved has no view to read");
   if (strict) ok(true, "all of the above under the spec's default content policy");

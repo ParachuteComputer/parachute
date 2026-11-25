@@ -6,16 +6,22 @@ import { fieldsFilter, mcpVaultDeps, noteOf, Refusal } from "./mcpVault";
 import { replyOf } from "./host";
 import { parsePayload, withPayload } from "./payload";
 
-describe("the vault module's words as query-records' fields filter", () => {
-  it("a value, an operator, a list", () => {
+describe("the vault module's words, read as the REST door reads them", () => {
+  it("a value, an operator, a list, exists", () => {
     expect(fieldsFilter([["meta[status]", "open"], ["meta[rating][gte]", "4"], ["meta[due][exists]", "true"], ["meta[kind][in][]", "book"], ["meta[kind][in][]", "zine"]]))
-      .toEqual({ status: "open", rating: { gte: 4 }, due: { exists: true }, kind: { in: ["book", "zine"] } });
+      .toEqual({ fields: { status: "open", rating: { gte: 4 }, due: { exists: true }, kind: { in: ["book", "zine"] } } });
   });
-  it("text stays text where it isn't compared as a number", () => {
-    expect(fieldsFilter([["meta[zip][eq]", "02134"], ["meta[name][gt]", "M"]])).toEqual({ zip: { eq: "02134" }, name: { gt: "M" } });
+  it("true, false and exact numbers are typed (shorthandValue); other text stays text", () => {
+    expect(fieldsFilter([["meta[favorite]", "true"], ["meta[zip]", "02134"], ["meta[n]", "7"], ["meta[tags][in]", "a, b"]]))
+      .toEqual({ fields: { favorite: true, zip: "02134", n: 7, tags: { in: ["a", "b"] } } });
   });
-  it("no words: no filter; a word it doesn't know: a 400", () => {
+  it("the record's own dates are a date filter, gte and lt only", () => {
+    expect(fieldsFilter([["meta[updated_at][gte]", "2026-11-01"], ["meta[updated_at][lt]", "2026-12-01"]])).toEqual({ date_filter: { field: "updated_at", from: "2026-11-01", to: "2026-12-01" } });
+    expect(() => fieldsFilter([["meta[created_at][eq]", "x"]])).toThrow(expect.objectContaining({ status: 400 }));
+  });
+  it("no words: no filter; a value and operators on one field, or an unknown word: a 400", () => {
     expect(fieldsFilter([])).toBeNull();
+    expect(() => fieldsFilter([["meta[a]", "x"], ["meta[a][gt]", "1"]])).toThrow(expect.objectContaining({ status: 400 }));
     expect(() => fieldsFilter([["meta[a][drop]", "x"]])).toThrow(expect.objectContaining({ status: 400 }));
   });
 });
@@ -42,14 +48,20 @@ describe("the vault module's legs", () => {
     await expect(d.save!("r1", "x", "t")).rejects.toThrow(/^conflict:/);
     await expect(legs(() => { throw new Refusal("not_found", "gone"); }).getNote("nope")).rejects.toThrow("not found");
   });
-  it("records come back in the note words the module reads", () => {
+  it("records come back in the note words the module reads, types among the tags as REST lists them", () => {
     expect(noteOf({ id: "1", path: "People/Maya", extension: "md", body: "hi", fields: { a: 1 }, tags: ["x"], types: ["person"], updatedAt: "t" }))
-      .toMatchObject({ id: "1", path: "People/Maya", content: "hi", metadata: { a: 1 }, tags: ["x"], types: ["person"], updatedAt: "t" });
+      .toMatchObject({ id: "1", path: "People/Maya", content: "hi", metadata: { a: 1 }, tags: ["x", "person"], types: ["person"], updatedAt: "t" });
+  });
+  it("a write whose tags name a type goes again with them as types", async () => {
+    const asked: Record<string, unknown>[] = [];
+    const d = legs((_n, a) => { asked.push(a); if (a.tags) throw new Refusal("tag_kind", "person is a type"); return { id: "2", path: "People/Ann", types: ["person"] }; });
+    expect((await d.create!("People/Ann", "", ["person"])).tags).toEqual(["person"]);
+    expect(asked).toEqual([{ path: "People/Ann", body: "", tags: ["person"] }, { path: "People/Ann", body: "", types: ["person"] }]);
   });
 });
 
 describe("the payload a connector puts in the view", () => {
-  const good = { v: 1 as const, vault: "demo", record: { id: "01X", path: "Applets/People", extension: "tsx", tags: ["applet"], fields: { applet: {} } }, code: "export default () => null;", approval: { code: "tsx:ab" } };
+  const good = { v: 1 as const, vault: "demo", record: { id: "01X", path: "Applets/People", extension: "tsx", tags: ["applet"], fields: { applet: {} } }, code: "export default () => null;", approval: { code: "tsx:ab", scope: "s", subject: { hub: "https://hub.example", vault: "demo", record: "01X", applet: "people" } } };
   it("round-trips through the page, and code can't close its script", () => {
     const html = withPayload("<!doctype html><html><head></head><body></body></html>", { ...good, code: "</script><script>alert(1)</script>" });
     expect(html).not.toContain("</script><script>alert");
