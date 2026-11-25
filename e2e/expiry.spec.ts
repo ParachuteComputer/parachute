@@ -1,7 +1,7 @@
 // Signed in across the access token's expiry (T-476). A device keeps each sign-in the hub rotates; so must the saved start
 // the specs share, which is a device kept on disk (e2e/test.ts): three specs in a row that start from it after the token
 // ran out each read the vault. The hub's clock is moved past the token's 15 minutes (e2e/clock.ts) instead of waiting.
-// Last in the run, on a sign-in of its own through the key door (no fifth password sign-in: the hub limits them), so the
+// Last in the run, on a sign-in of its own through the key door (a fourth password sign-in meets the hub's limit), so the
 // moved clock reaches nothing after it.
 import { expect, test, type Page } from "./test";
 import { api, hubState, moveClock, VAULT } from "./hub";
