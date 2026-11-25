@@ -42,11 +42,14 @@ export function createSession(opts: SessionOptions) {
     handle(data: unknown): void {
       if (closed) return;
       const raw = data && typeof data === "object" ? data as { ns?: unknown; method?: unknown } : {};
-      // a typed /approve is paid by a tap too (broker.ts `paid`): refused at once without one
-      const params = (raw as { params?: { event?: { content?: unknown } } }).params;
-      const tapCall = typeof raw.ns === "string" && typeof raw.method === "string" && (TAP_CALLS.has(`${raw.ns}.${raw.method}`)
-        || (raw.ns === "services" && raw.method === "publish" && typeof params?.event?.content === "string" && isCommandApproval(params.event.content)));
-      const limited = !requests.take(now()) && !(tapCall && taps.take(now()));
+      // a typed /approve is paid by a tap too (broker.ts `paid`): refused at once without one. Read only once the 60 are
+      // spent, and only within a request's size
+      const tapCall = () => {
+        const content = (raw as { params?: { event?: { content?: unknown } } }).params?.event?.content;
+        return typeof raw.ns === "string" && typeof raw.method === "string" && (TAP_CALLS.has(`${raw.ns}.${raw.method}`)
+          || (raw.ns === "services" && raw.method === "publish" && typeof content === "string" && content.length <= LIMITS.maxRequestBytes && isCommandApproval(content)));
+      };
+      const limited = !requests.take(now()) && !(tapCall() && taps.take(now()));
       const env = parseEnvelope(data);
       const isPfr = !!data && typeof data === "object" && "pfr" in (data as object);
       const errorReply = (id: string, code: ErrorCode, words?: string) => post(isPfr || env.kind === "pfr"

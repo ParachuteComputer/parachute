@@ -593,8 +593,10 @@ const outbox = (() => {
   let stale = false;
   const gone = new Set<string>();
   const save = async () => {
+    // what is written now covers the sent ones dropped so far (one dropped while it is written waits for the next)
+    const had = stale; stale = false;
     const ok = (await load()) && await storage.set("outbox", all().length ? all().map(({ listed: _, ...o }) => o) : null).then(() => true, () => false);
-    if (ok) stale = false;
+    if (!ok && had) stale = true;
     // a file goes only once no list written names it
     if (ok && keepsFiles()) for (const k of [...gone]) { gone.delete(k); await (storage as any).setFile(k, null).catch(() => {}); }
     for (const [room, l] of rooms) if (l.some((o) => (o.listed !== false) !== ok)) rooms.set(room, l.map((o) => ({ ...o, listed: ok })));
