@@ -23,10 +23,11 @@ export default defineConfig({
     // last of all, for the same reason (the walk of every screen reaches what an older hub refuses: Sharing, Changes), on a
     // sign-in of its own: the one the specs before it shared is retired by now
     { name: "plain-setup", dependencies: ["packs"], testMatch: /auth\.setup\.ts/, use: { ...devices["Pixel 7"], browserName: "chromium" } },
-    // the recorder's specs too: last in the phone project they ran past its sign-in's 15 minutes (core's
-    // ACCESS_TOKEN_TTL_SECONDS; a saved session shared by many pages can't refresh), and here they need no sign-in of
-    // their own (the hub takes five password sign-ins in 15 minutes)
-    { name: "plain", dependencies: ["plain-setup"], testMatch: [/plainwords\.spec\.ts/, /voice\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
+    // the recorder's specs: last in the phone project they ran past its sign-in's 15 minutes (core's
+    // ACCESS_TOKEN_TTL_SECONDS; a saved session shared by many pages can't refresh). Here, on plain-setup's fresh
+    // sign-in (the hub takes five password sign-ins in 15 minutes) and before plainwords changes the person's settings
+    { name: "voice", dependencies: ["plain-setup"], testMatch: [/voice\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
+    { name: "plain", dependencies: ["voice"], testMatch: [/plainwords\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // the same build in WebKit (the Mac app's WKWebView, Safari) at a Mac's width: the applet frame (e2e/webkit.spec.ts).
     // Last, on a sign-in of its own, so nothing before it waits on it. PW_WEBKIT_WS: a Playwright server to run WebKit in
     // (on a machine whose own libraries Playwright's WebKit can't use)
