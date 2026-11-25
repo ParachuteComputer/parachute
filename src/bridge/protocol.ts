@@ -48,7 +48,7 @@ export type FramePlace = { vault: string; noteId: string };
  *  `fresh`: vaults made there since this device signed in, which it may add (vault/newVaults.ts). */
 /** `fresh`: the person's vaults there this device doesn't read; `lines`: what the Open line of each says of whose it
  *  opens as (vault/newVaults.ts `opensAs`), when it says anything. */
-export type FrameParachute = { hub: string; host: string; name: string; home: boolean; signedIn: boolean; fresh?: string[]; lines?: Record<string, "yours" | "someone else's"> };
+export type FrameParachute = { hub: string; host: string; name: string; home: boolean; signedIn: boolean; fresh?: string[]; lines?: Record<string, "yours" | "someone else's" | "someone else's, trusted"> };
 /** `look`: "notes" when the open bundle's home is Notes (docs/SIMPLE.md), else the list. `app: "simple"` says the same
  *  for frames written before 11-20, until 2026-12-20. */
 /** `notice: "bundle-record"`: the bundle this device chose didn't load (its record is malformed or gone); the list says

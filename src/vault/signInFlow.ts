@@ -204,8 +204,6 @@ export async function finishStep(code: string, state: string, iss?: string | nul
     // whether the person reaches every vault there: then the hub's public list is theirs, for vaults made later (newVaults.ts)
     // (strictly: a list cut at MAX_VAULTS is taken as every vault for the pick, never here)
     noteEvery(p.hub, listed.all && listed.vaults.length < MAX_VAULTS);
-    // a sign-in without the key: only the key's own listing says the person is the hub's admin (newVaults.ts opensAs)
-    if (pending.how !== "key") noteAdmin(p.hub, false);
     if (!listed.vaults.length) throw new Error(p.door === "cloud"
       ? "You're signed in, but you have no vault there yet. Make one on Parachute Cloud's website, then sign in again."
       : "You're signed in there, but no vault is yours yet. Ask the hub's owner to give you one.");

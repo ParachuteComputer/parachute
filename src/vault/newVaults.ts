@@ -10,6 +10,7 @@
 // vaults they waved away (Not now, or signed out of on purpose), so those don't come back.
 import { beginSignIn, dropPending } from "./oauth";
 import { describe, everyVault } from "./parachute";
+import { MAX_VAULTS } from "./address";
 import { listVaults, originOf } from "./store";
 import { isMine, whoseSaid } from "./whose";
 import { keySignIn, keysHere, listWithKey, type Refusal } from "../key/key";
@@ -105,7 +106,8 @@ async function reachable(hub: string): Promise<string[] | null> {
   if (keysHere()) {
     try {
       const listed = await listWithKey(await describe(hub));
-      if (listed) { noteEvery(hub, listed.all); noteAdmin(hub, listed.all); return listed.vaults; }
+      // (a list cut at MAX_VAULTS isn't every vault for the public list, as at sign-in)
+      if (listed) { noteEvery(hub, listed.all && listed.vaults.length < MAX_VAULTS); noteAdmin(hub, listed.all); return listed.vaults; }
     } catch (e) {
       // no key here, or the hub refused it: the public list, where it is the person's (a hub out of reach says nothing)
       if (KEY_GONE.includes((e as Partial<Refusal> | null)?.code as Refusal["code"])) noteAdmin(hub, false);
@@ -113,8 +115,9 @@ async function reachable(hub: string): Promise<string[] | null> {
   }
   return read().every.includes(hub) ? everyVault(hub) : null;
 }
-/** What the key's listing answers when the key is gone or the hub no longer takes it. */
-const KEY_GONE: readonly Refusal["code"][] = ["no_key", "unknown_key", "refused"];
+/** What the key's listing answers when the key is gone or the hub no longer knows it (not "refused": the door also says
+ *  that for a moment's limit or an answer it couldn't read, and a tap in that moment would keep "someone else's"). */
+const KEY_GONE: readonly Refusal["code"][] = ["no_key", "unknown_key"];
 
 /** Ask each hub this device is signed in to which vaults the person reaches there (at most once a minute per hub). */
 export async function relistVaults(now = Date.now()): Promise<void> {
@@ -136,14 +139,18 @@ export function runsHub(hub: string): boolean {
   return read().admin.includes(h) && listVaults().some((v) => originOf(v.issuer) === h && isMine(v));
 }
 
+export type OpenLine = "yours" | "someone else's" | "someone else's, trusted";
+
 /** Whose a vault on offer opens as, and what its Open line says of it (`said`: nothing, the person said so already):
  *  what the person said of it; else, on a Parachute they run, theirs, as the sign-in's own pick ticks every vault there
  *  to begin with, and its line says "yours", so the tap that opens it says so too (a vault another admin of the hub
  *  made is one to wave away, or to change in Settings); elsewhere someone else's, and its line says that (a vault
  *  offered later there may be one someone shared with them), until the person says otherwise in Settings. */
-export function opensAs(hub: string, vault: string): { whose: "mine" | "theirs"; line: "yours" | "someone else's" | null } {
+export function opensAs(hub: string, vault: string): { whose: "mine" | "theirs"; line: OpenLine | null } {
   const said = whoseSaid({ issuer: originOf(hub), vault });
   if (said === "mine") return { whose: "mine", line: null };
+  // trusted stays trusted (signInFlow keep() never changes what was said); its line says so
+  if (said === "trusted") return { whose: "theirs", line: "someone else's, trusted" };
   if (said === null && runsHub(hub)) return { whose: "mine", line: "yours" };
   return { whose: "theirs", line: "someone else's" };
 }

@@ -87,7 +87,7 @@ describe("whose a vault on offer opens as", () => {
     setWhose({ issuer: HUB, vault: "attic" }, "trusted");
     setWhose({ issuer: HUB, vault: "cellar" }, "mine");
     expect(opensAs(HUB, "playground").whose).toBe("theirs");
-    expect(opensAs(HUB, "attic").whose).toBe("theirs");
+    expect(opensAs(HUB, "attic")).toEqual({ whose: "theirs", line: "someone else's, trusted" });
     expect(opensAs(HUB, "cellar")).toEqual({ whose: "mine", line: null });
   });
 
@@ -115,7 +115,7 @@ describe("whose a vault on offer opens as", () => {
     } finally { delete w.__TAURI_INTERNALS__; stop(); }
   });
 
-  it("a key the hub no longer takes, or gone from the device, takes the admin word back; a hub out of reach doesn't", async () => {
+  it("a key the hub no longer knows, or gone from the device, takes the admin word back; a hub out of reach or a moment's limit doesn't", async () => {
     mine();
     noteAdmin(HUB, true);
     const w = window as unknown as Record<string, unknown>;
@@ -125,8 +125,11 @@ describe("whose a vault on offer opens as", () => {
     try {
       await relistVaults(0);
       expect(opensAs(HUB, "playground").line).toBe("yours");
+      answer = { code: "refused", message: "The hub asks you to wait a moment." };
+      await relistVaults(RELIST_MS / 2 + RELIST_MS);
+      expect(opensAs(HUB, "playground").line).toBe("yours");
       answer = { code: "unknown_key", message: "this hub doesn't know the key" };
-      await relistVaults(RELIST_MS);
+      await relistVaults(RELIST_MS * 3);
       expect(opensAs(HUB, "playground")).toEqual({ whose: "theirs", line: "someone else's" });
     } finally { delete w.__TAURI_INTERNALS__; }
   });
