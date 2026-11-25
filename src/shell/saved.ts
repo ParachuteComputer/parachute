@@ -4,6 +4,7 @@
 // own (src-tauri/src/saved.rs: synced, then renamed, so a force-stop or a reboot keeps the last whole copy); in a
 // browser to localStorage. Never synced, never in a vault. The applet's `saved` and `storage` calls are one store.
 import { inShell } from "../vault/oauth";
+import { deviceFiles } from "./keptFiles";
 
 /** The most one applet keeps, as JSON. */
 export const SAVED_MAX = 256 * 1024;
@@ -120,6 +121,6 @@ export type SavedStore = ReturnType<typeof createSavedStore>;
 let device: SavedStore | null = null;
 /** This device's store: one for the whole app. */
 export const deviceSaved = (): SavedStore => (device ??= createSavedStore(inShell() ? nativeBackend() : browserBackend()));
-/** The person's Revoke of an applet, or signing out of its vault: what it saved goes from this device, so a draft isn't
- *  left behind for whatever is allowed there next. */
-export const forgetSaved = (subject: string): void => { void deviceSaved().clear(subject).catch(() => {}); };
+/** The person's Revoke of an applet, or signing out of its vault: what it saved goes from this device, and the files it
+ *  kept (shell/keptFiles.ts), so a draft isn't left behind for whatever is allowed there next. */
+export const forgetSaved = (subject: string): void => { void deviceSaved().clear(subject).catch(() => {}); void deviceFiles().clear(subject).catch(() => {}); };

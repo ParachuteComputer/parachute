@@ -62,6 +62,8 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
   let inFlight = 0;
+  /** Posts signed in this session: sending one, its signing's tap already paid for it. */
+  const signedHere = new Set<string>();
   const opened = native.open(session, opts.applet, opts.services, opts.hubs);
   // a failed open is said once per call that needed it, never an unhandled rejection
   opened.catch(() => {});
@@ -122,6 +124,52 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       const t = setTimeout(done, 15_000);
       c.subscribe(id, filters, (e) => { if (got.length < max) got.push(e); }, done, () => { clearTimeout(t); resolve(got); }, true);
     });
+  }
+
+  /** What a post may be, before it is signed or sent: a kind it may publish there, its rooms, a bot's approval only
+   *  with the grant and a tap (`tap`: not for one signed in this session, whose signing took the tap), a reaction, edit
+   *  or deletion only of events in its rooms, a deletion only of the person's own. */
+  async function checked(s: RelayService, raw: unknown, tap: boolean) {
+    const t = checkPublish(s, raw);
+    if (!t.ok) throw new BrokerError("out_of_scope", t.error);
+    // any kind: a bot may read whatever it is shown in a room (services.rs checks the same)
+    if (isCommandApproval(t.value.content)) {
+      // a bot's approval (Hermes's /approve) is an approval: the grant, and a tap
+      if (!s.approvals) throw new BrokerError("not_granted", "answering a bot's approval needs the approvals grant");
+      if (tap) paid("an approval needs your tap in the applet");
+    }
+    const me = (await opened).pubkey;
+    if (s.rooms?.length && [7, 40003, 5].includes(t.value.kind)) {
+      // a reaction, edit or deletion acts on an event: it must be in one of its rooms (read from the relay, as signed)
+      const ids = t.value.tags.filter((x) => x[0] === "e").map((x) => x[1]);
+      const found = ids.length ? await queryOnce(s, [{ ids }], ids.length) : [];
+      for (const id of ids) {
+        const e = found.find((x) => x.id === id);
+        const room = e?.tags.find((x) => x[0] === "h")?.[1];
+        if (!e || !verifyEvent(e as Parameters<typeof verifyEvent>[0]) || !room || !s.rooms.some((r) => r.id === room)) throw new BrokerError("out_of_scope", "it may act only on events in its rooms");
+      }
+    }
+    if (t.value.kind === 5) {
+      // a deletion only of the person's own events, of a kind this applet may publish, read from the relay first
+      const ids = t.value.tags.filter((x) => x[0] === "e").map((x) => x[1]);
+      const found = await queryOnce(s, [{ ids }], ids.length);
+      for (const id of ids) {
+        const e = found.find((x) => x.id === id);
+        // checked as signed (a relay could hand back anything), the person's, of a kind this applet may publish
+        if (!e || !verifyEvent(e as Parameters<typeof verifyEvent>[0]) || e.pubkey !== me || !s.publish.includes(e.kind) || e.kind === 5) throw new BrokerError("out_of_scope", "it may delete only your own posts of its kinds");
+      }
+    }
+    return t.value;
+  }
+  /** A post signed before, sent again as it is: whole, signed by the person, and one it may publish there now. */
+  async function resent(s: RelayService, raw: object): Promise<SignedEvent> {
+    const e = raw as Record<string, unknown>;
+    const keys = ["id", "pubkey", "created_at", "kind", "content", "tags", "sig"];
+    if (Object.keys(e).length !== keys.length || !keys.every((k) => k in e) || typeof e.id !== "string" || typeof e.sig !== "string" || typeof e.pubkey !== "string" || !Number.isInteger(e.created_at)) throw new BrokerError("bad_params", "a signed event is {id, pubkey, created_at, kind, content, tags, sig}");
+    await checked(s, { kind: e.kind, content: e.content, tags: e.tags }, !signedHere.has(e.id));
+    const ev = { id: e.id, pubkey: e.pubkey, created_at: e.created_at as number, kind: e.kind as number, content: e.content as string, tags: (e.tags as string[][]).map((t) => [...t]), sig: e.sig };
+    if (ev.pubkey !== (await opened).pubkey || !verifyEvent({ ...ev } as Parameters<typeof verifyEvent>[0])) throw new BrokerError("out_of_scope", "only a post you signed, as it was signed");
+    return ev;
   }
 
   const bytesIn = (n: number) => {
@@ -210,38 +258,27 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       return queryOnce(s, f.value);
     },
 
+    /** Sign a post without sending it (an applet that keeps what it sends until it goes: a retry is the same event, so
+     *  a relay that already has it answers "duplicate", never a second copy). The same checks as a publish. */
+    async sign(p: { service: string; event: unknown }) {
+      const s = relayOf(p.service);
+      const t = await checked(s, p.event, true);
+      const ev = await native.signEvent(session, s.id, t);
+      signedHere.add(ev.id);
+      return ev;
+    },
+
+    /** Sign and send a post; or send one signed before (by `sign` or an earlier publish), as it is: checked again, it
+     *  must be the person's, in its kinds and rooms. */
     async publish(p: { service: string; event: unknown }) {
       const s = relayOf(p.service);
-      const t = checkPublish(s, p.event);
-      if (!t.ok) throw new BrokerError("out_of_scope", t.error);
-      // any kind: a bot may read whatever it is shown in a room (services.rs checks the same)
-      if (isCommandApproval(t.value.content)) {
-        // a bot's approval (Hermes's /approve) is an approval: the grant, and a tap
-        if (!s.approvals) throw new BrokerError("not_granted", "answering a bot's approval needs the approvals grant");
-        paid("an approval needs your tap in the applet");
+      let ev: SignedEvent;
+      if (p.event && typeof p.event === "object" && "sig" in p.event) {
+        ev = await resent(s, p.event);
+      } else {
+        ev = await native.signEvent(session, s.id, await checked(s, p.event, true));
+        signedHere.add(ev.id);
       }
-      const me = (await opened).pubkey;
-      if (s.rooms?.length && [7, 40003, 5].includes(t.value.kind)) {
-        // a reaction, edit or deletion acts on an event: it must be in one of its rooms (read from the relay, as signed)
-        const ids = t.value.tags.filter((x) => x[0] === "e").map((x) => x[1]);
-        const found = ids.length ? await queryOnce(s, [{ ids }], ids.length) : [];
-        for (const id of ids) {
-          const e = found.find((x) => x.id === id);
-          const room = e?.tags.find((x) => x[0] === "h")?.[1];
-          if (!e || !verifyEvent(e as Parameters<typeof verifyEvent>[0]) || !room || !s.rooms.some((r) => r.id === room)) throw new BrokerError("out_of_scope", "it may act only on events in its rooms");
-        }
-      }
-      if (t.value.kind === 5) {
-        // a deletion only of the person's own events, of a kind this applet may publish, read from the relay first
-        const ids = t.value.tags.filter((x) => x[0] === "e").map((x) => x[1]);
-        const found = await queryOnce(s, [{ ids }], ids.length);
-        for (const id of ids) {
-          const e = found.find((x) => x.id === id);
-          // checked as signed (a relay could hand back anything), the person's, of a kind this applet may publish
-          if (!e || !verifyEvent(e as Parameters<typeof verifyEvent>[0]) || e.pubkey !== me || !s.publish.includes(e.kind) || e.kind === 5) throw new BrokerError("out_of_scope", "it may delete only your own posts of its kinds");
-        }
-      }
-      const ev = await native.signEvent(session, s.id, t.value);
       const r = await conn(s).publish(ev); // conn() refuses once closed
       return { ...r, id: ev.id, event: ev };
     },

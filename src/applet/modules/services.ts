@@ -45,6 +45,7 @@ export function createServicesModule(broker: () => Promise<Broker | null>, why: 
         run: wrap((x, p: Record<string, unknown>) => x.unsubscribe(p as { service: string; sub?: string; subs?: string[] })) },
       query: { cap: null, validate: shape(["service", "filters"], (p) => str(p.service, 40)), run: wrap((x, p: Record<string, unknown>) => x.query(p as { service: string; filters: unknown })) },
       publish: { cap: null, validate: shape(["service", "event"], (p) => str(p.service, 40)), run: wrap((x, p: Record<string, unknown>) => x.publish(p as { service: string; event: unknown })) },
+      sign: { cap: null, validate: shape(["service", "event"], (p) => str(p.service, 40)), run: wrap((x, p: Record<string, unknown>) => x.sign(p as { service: string; event: unknown })) },
       loadPrivate: { cap: null, validate: shape(["service", "d"], (p) => str(p.service, 40) && str(p.d, 40)), run: wrap((x, p: Record<string, unknown>) => x.loadPrivate(p as { service: string; d: string })) },
       savePrivate: { cap: null, validate: shape(["service", "d", "text"], (p) => str(p.service, 40) && str(p.d, 128) && typeof p.text === "string"), run: wrap((x, p: Record<string, unknown>) => x.savePrivate(p as { service: string; d: string; text: string })) },
       upload: { cap: null, validate: shape(["service", "bytes", "type"], (p) => str(p.service, 40) && p.bytes instanceof ArrayBuffer && str(p.type, 100)), run: wrap((x, p: Record<string, unknown>) => x.upload(p as { service: string; bytes: ArrayBuffer; type: string })) },

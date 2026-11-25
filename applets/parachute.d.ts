@@ -195,6 +195,10 @@ declare module "parachute" {
     get(key: string): Promise<unknown>;
     set(key: string, value: unknown): Promise<unknown>;
     keys(): Promise<string[]>;
+    /** A file kept on this device until you let it go (what it hasn't sent yet), 25 MB each, 100 MB in all; null removes it. */
+    setFile(key: string, bytes: ArrayBuffer | ArrayBufferView | null): Promise<null>;
+    getFile(key: string): Promise<ArrayBuffer | null>;
+    fileKeys(): Promise<string[]>;
   };
   /** As you on Techne, with `fields.techne` (docs/design/TECHNE.md, level 8): reads at once, and asks you the first
    *  time it uses a write (post, follow). `call` answers the method's output, or rejects with Techne's refusal. */
@@ -202,6 +206,7 @@ declare module "parachute" {
     me(): Promise<{ did: string; handle?: string }>;
     call<T = unknown>(method: string, o?: { params?: Record<string, string | number | boolean>; input?: unknown }): Promise<T>;
   };
+  export type SignedEvent = { id: string; pubkey: string; created_at: number; kind: number; content: string; tags: string[][]; sig: string };
   export const services: {
     me(): Promise<{ pubkey: string }>;
     fetch(id: string, path: string, init?: { method?: string; headers?: Record<string, string>; body?: unknown; as?: "text" | "json" | "bytes" }): Promise<{ status: number; headers: Record<string, string>; body: unknown }>;
@@ -209,7 +214,10 @@ declare module "parachute" {
       subscribe(filters: Record<string, unknown>[], onEvents: (events: unknown[]) => void, onEose?: () => void): () => void;
       subscribeMany(filterSets: Record<string, unknown>[][], onEvents: (events: unknown[]) => void, onEose?: () => void): () => void;
       query(filters: Record<string, unknown>[]): Promise<unknown[]>;
-      publish(ev: { kind: number; content: string; tags?: string[][] }): Promise<{ ok: boolean; id: string; message?: string; event?: unknown }>;
+      /** Sign and send; or send an event signed before (by `sign`, or a publish's answer) as it is: a retry, never a copy. */
+      publish(ev: { kind: number; content: string; tags?: string[][] } | SignedEvent): Promise<{ ok: boolean; id: string; message?: string; event?: SignedEvent }>;
+      /** Sign without sending: keep it, then publish it (and again, the same event, if it didn't go). */
+      sign(ev: { kind: number; content: string; tags?: string[][] }): Promise<SignedEvent>;
       loadPrivate(prefix: string): Promise<unknown[]>;
       savePrivate(d: string, text: string): Promise<unknown>;
       onStatus(cb: (s: unknown) => void): () => void;

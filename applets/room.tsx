@@ -412,6 +412,10 @@ const CSS = `
 /* a wrapped row of actions keeps a finger's room between its lines, so each keeps its whole tap area */
 .room .acts { display: flex; gap: 4px 16px; flex-wrap: wrap; margin-top: 2px; }
 @media (pointer: coarse) { .room .acts { row-gap: 20px; } }
+.room .msg.unsent .body { border-style: dashed; }
+.room .msg.unsent .when { color: var(--muted); }
+.room .msg.unsent.failed .when, .room .msg.unsent .retry { color: var(--danger); }
+.room .msg.unsent .why { color: var(--muted); font-size: var(--fs-small); overflow-wrap: anywhere; }
 .room .file-chip { border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 1px 4px 1px 9px; font-size: var(--fs-small); }
 .room .pic { max-width: min(100%, 420px); max-height: 420px; height: auto; border-radius: 6px; display: block; margin: 6px 0; }
 .room .pic-wait { background: var(--surface); border: 1px solid var(--line); box-sizing: border-box; }
@@ -483,6 +487,151 @@ export function lastText(s: Store["s"], e: Ev) {
 
 // ── the room ──
 type Place = { get(): number | null; set(fromFoot: number | null): void };
+// ── what you sent that hasn't gone yet (T-476, Aaron 11-25: "it said not sent connection closed. Then my message was
+// gone"). A message, a picture or a voice note is kept on this device from the moment you send it: its words and tags
+// in storage (`out:<room>`), its files with storage.setFile, until the relay has it or you delete it. It shows in the
+// room at once ("Sending…"); if it can't go, it stays there, marked "Not sent – tap to retry", across leaving the room
+// and the app starting again. It is signed once, before it goes (relay.sign), and that very event is what every retry
+// sends: a relay that already has it answers "duplicate", so it is never there twice. A relay takes an event only
+// within 15 minutes of its time (Buzz): an older one is looked for by its id first, and signed again only when the
+// relay doesn't have it. Nothing is sent again by itself later: a retry is your tap. An app older than this (no
+// setFile, no sign) still keeps it while the applet runs, and sends it again as a new event. ──
+export type Outgoing = {
+  key: string; room: string; thread: string | null; at: number;
+  /** your words, and the tags it goes with (h, p, the thread's root): the files' lines and imeta are added once uploaded */
+  content: string; tags: string[][];
+  files: { file: string; name: string; type: string; w?: number; h?: number; imeta?: string[]; line?: string }[];
+  event?: Ev & { sig: string };
+  state: "sending" | "failed"; why?: string;
+};
+const RELAY_WINDOW_S = 14 * 60;
+const outbox = (() => {
+  const rooms = new Map<string, Outgoing[]>();
+  const loading = new Map<string, Promise<void>>();
+  const running = new Set<string>();
+  /** bytes kept only in memory, when this app keeps no files for applets (an older app) */
+  const held = new Map<string, ArrayBuffer>();
+  const subs = new Set<() => void>();
+  let rev = 0;
+  const bump = () => { rev++; subs.forEach((f) => f()); };
+  const keepsFiles = () => typeof (storage as any).setFile === "function";
+  const save = (room: string) => storage.set(`out:${room}`, rooms.get(room)?.length ? rooms.get(room) : null).catch(() => {});
+  const put = (o: Outgoing) => { const l = rooms.get(o.room) ?? []; const i = l.findIndex((x) => x.key === o.key); if (i >= 0) l[i] = o; else l.push(o); rooms.set(o.room, l); bump(); return save(o.room); };
+  const fileOf = async (key: string): Promise<ArrayBuffer | null> => held.get(key) ?? (keepsFiles() ? await (storage as any).getFile(key).catch(() => null) : null);
+  return {
+    sub(f: () => void) { subs.add(f); return () => { subs.delete(f); }; },
+    rev: () => rev,
+    of: (room: string) => rooms.get(room) ?? [],
+    /** what this device kept for the room, once: one left "sending" by an app that stopped is not sent, so it waits */
+    load(room: string) {
+      let p = loading.get(room);
+      if (!p) {
+        p = storage.get(`out:${room}`).then((v: unknown) => {
+          const kept = (Array.isArray(v) ? v : []).filter((o: any) => o && typeof o.key === "string" && o.room === room) as Outgoing[];
+          const now = rooms.get(room) ?? [];
+          for (const o of kept) if (!now.some((x) => x.key === o.key)) now.push(running.has(o.key) ? o : { ...o, state: "failed", why: o.why ?? "the app stopped before it went" });
+          rooms.set(room, now.sort((a, b) => a.at - b.at)); bump();
+        }, () => {});
+        loading.set(room, p);
+      }
+      return p;
+    },
+    /** a new one: its files kept first (so a message never points at bytes that aren't there), then itself */
+    async add(o: Outgoing, bytes: ArrayBuffer[]) {
+      for (const [i, f] of o.files.entries()) {
+        if (keepsFiles()) { try { await (storage as any).setFile(f.file, bytes[i]); continue; } catch { /* full, or refused: held in memory */ } }
+        held.set(f.file, bytes[i]);
+      }
+      await put(o);
+    },
+    /** gone: sent, or deleted by you (and its files with it) */
+    async drop(o: Outgoing) {
+      const l = (rooms.get(o.room) ?? []).filter((x) => x.key !== o.key);
+      rooms.set(o.room, l); bump();
+      await save(o.room);
+      for (const f of o.files) { held.delete(f.file); if (keepsFiles()) await (storage as any).setFile(f.file, null).catch(() => {}); }
+    },
+    file: fileOf,
+    /** Send it: upload what isn't, sign once, publish that event. Resolves the event when the relay has it, else null. */
+    async send(o: Outgoing, relay: any, svc: string): Promise<(Ev & { sig: string }) | null> {
+      if (running.has(o.key)) return null;
+      running.add(o.key);
+      let cur: Outgoing = { ...o, state: "sending", why: undefined };
+      try {
+        await put(cur);
+        const files = [...cur.files];
+        for (const [i, f] of files.entries()) {
+          if (f.imeta) continue;
+          const bytes = await fileOf(f.file);
+          if (!bytes) throw new Error("its file is no longer on this device");
+          const d: any = await services.upload(svc, bytes, f.type);
+          const type = d.type || f.type;
+          const imeta = ["imeta", `url ${d.url}`, `m ${type}`, `x ${d.sha256}`, `size ${d.size}`, ...(d.dim ? [`dim ${d.dim}`] : []), `filename ${f.name}`, ...(type.startsWith("image/") ? [`alt ${f.name}`] : [])];
+          // a voice note is the Uni app's: an empty message with an audio imeta, no line of its own
+          const line = type.startsWith("audio/") ? "" : type.startsWith("image/") ? `![image](${d.url})` : type.startsWith("video/") ? `![video](${d.url})` : `[${f.name}](${d.url})`;
+          files[i] = { ...f, imeta, line };
+          cur = { ...cur, files: [...files] }; await put(cur);
+        }
+        const template = () => ({ kind: 9, content: [cur.content, ...cur.files.map((f) => f.line)].filter(Boolean).join("\n"), tags: [...cur.tags, ...cur.files.map((f) => f.imeta!)] });
+        const canSign = typeof relay.sign === "function";
+        let ev = cur.event;
+        // past the relay's window it can't take this one: if it already has it, it went; else it is signed again
+        if (ev && now() - ev.created_at > RELAY_WINDOW_S) {
+          const had = ((await relay.query([{ ids: [ev.id], kinds: [9], "#h": [cur.room] }]).catch(() => [])) as Ev[]).some((x) => x.id === ev!.id);
+          if (had) { await this.drop(cur); return ev; }
+          ev = undefined;
+        }
+        if (!ev && canSign) { ev = await relay.sign(template()); cur = { ...cur, event: ev }; await put(cur); }
+        const r = await relay.publish(ev ?? template());
+        if (!r.ok) throw new Error(r.message || "the relay refused it");
+        await this.drop(cur);
+        return (r.event ?? ev) as Ev & { sig: string };
+      } catch (e: any) {
+        await put({ ...cur, state: "failed", why: String(e?.message ?? e).slice(0, 200) });
+        return null;
+      } finally { running.delete(o.key); }
+    },
+  };
+})();
+const newKey = () => `o${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+function useOutbox(room: string) {
+  const [, set] = useState(0);
+  useEffect(() => outbox.sub(() => set(outbox.rev())), []);
+  useEffect(() => { void outbox.load(room); }, [room]);
+  return outbox.of(room);
+}
+/** A file of yours not sent yet, drawn from this device's copy. */
+function KeptAttachment({ f }: { f: Outgoing["files"][number] }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let on = true, u: string | null = null;
+    outbox.file(f.file).then((b) => { if (on && b) { u = URL.createObjectURL(new Blob([b], { type: f.type })); setUrl(u); } }, () => {});
+    return () => { on = false; if (u) URL.revokeObjectURL(u); };
+  }, [f.file]);
+  const k = kindOf({ type: f.type } as Media);
+  if (!url) return <Loading>Loading {k === "audio" ? "voice note" : f.name}…</Loading>;
+  // its own shape, as a picture from the relay is drawn (Attachment): its place kept before it loads
+  const box = f.w && f.h ? { aspectRatio: `${f.w} / ${f.h}`, width: `min(${f.w}px, 100%, 420px, ${Math.round((420 * f.w) / f.h)}px)`, height: "auto" } : undefined;
+  if (k === "image") return <img className="pic" src={url} alt={f.name} width={f.w} height={f.h} style={box} />;
+  if (k === "video") return <video className="vid" src={url} controls playsInline />;
+  if (k === "audio") return <audio className="aud" src={url} controls aria-label={`Voice note ${f.name}`} />;
+  return <div className="file">📎 {f.name}</div>;
+}
+function Unsent({ o, retry, remove }: { o: Outgoing; retry: () => void; remove: () => void }) {
+  const [sure, setSure] = useState(false);
+  const failed = o.state === "failed";
+  return <article className={`msg mine unsent${failed ? " failed" : ""}`} data-key={o.key} aria-label={failed ? "You, not sent" : "You, sending"}>
+    <div><span className="who">You</span><span className="when">{failed ? "Not sent" : "Sending…"}</span></div>
+    {o.content && <div className="body"><Markdown text={o.content} /></div>}
+    {o.files.map((f) => <KeptAttachment key={f.file} f={f} />)}
+    {failed && <div className="acts">
+      <Button kind="quiet" small className="retry" onClick={retry} title={o.why}>Not sent – tap to retry</Button>
+      <Button kind="quiet" small onClick={() => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } remove(); }}>{sure ? "Tap again to delete" : "Delete"}</Button>
+      {o.why && <span className="why">{o.why}</span>}
+    </div>}
+  </article>;
+}
+
 type Props = { service: string; room: string; name?: string; at?: string; readAt?: number; onRead?: (latest: number) => void; onBack?: () => void;
   seed?: { msgs: Ev[]; names: Map<string, string>; me?: string }; place?: Place;
   /** the other rooms, as a row at the room's head: room to room in one tap (docs/LOOK.md) */
@@ -669,13 +818,18 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   // Yes · No · Not now under the newest message, when it is someone else's yes-or-no question and nothing else waits
   const chips = !thread && last && last.pubkey !== s.me && since === null && !posting && !openAsks(s, room) ? quickReplies(withoutFences(textOf(s, last))) : null;
 
-  const send = async (content: string, extra: string[][] = [], mentions: string[] = []) => {
-    setErr("");
+  /** A message's tags here: its room, who it names (you, the thread's author, your @mentions, Uni while it listens) and
+   *  its thread. */
+  const tagsFor = (mentions: string[]) => {
     const root = thread ? s.msgs.get(room)?.get(thread) : null;
     // muted: Uni isn't named, even as the thread's author (an @Uni of your own still names it)
     const rootAuthor = root && !(root.pubkey === uni && !toUni) ? [root.pubkey] : [];
     const p = [...new Set([s.me, ...rootAuthor, ...mentions, ...(toUni ? [uni!] : [])])].map((x) => ["p", x]);
-    const tg = [["h", room], ...p, ...(thread ? [["e", thread, "", "root"]] : []), ...extra];
+    return [["h", room], ...p, ...(thread ? [["e", thread, "", "root"]] : [])];
+  };
+  const send = async (content: string, extra: string[][] = [], mentions: string[] = []) => {
+    setErr("");
+    const tg = [...tagsFor(mentions), ...extra];
     // what you send is shown, as in any chat: the talk goes to its foot, wherever you had scrolled to (set before the
     // relay's answer: the line may come back by the subscription first)
     const was = atBottom.current;
@@ -685,6 +839,23 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     st.add(r.event); st.bump();
     return true;
   };
+  // what you send from the box: kept on this device and shown at once, until the relay has it (outbox, above)
+  const unsent = useOutbox(room);
+  const deliver = async (o: Outgoing) => { const ev = await outbox.send(o, relay, service); if (ev) { st.add(ev); st.bump(); } };
+  const queue = async (content: string, files: { name: string; type: string; bytes: ArrayBuffer; w?: number; h?: number }[], mentions: string[]) => {
+    setErr("");
+    const key = newKey();
+    const o: Outgoing = { key, room, thread, at: Date.now(), content, tags: tagsFor(mentions), files: files.map((f, i) => ({ file: `f:${key}:${i}`, name: f.name, type: f.type, ...(f.w && f.h ? { w: f.w, h: f.h } : {}) })), state: "sending" };
+    // what you send is shown, as in any chat: the talk goes to its foot
+    atBottom.current = true;
+    await outbox.add(o, files.map((f) => f.bytes));
+    void deliver(o);
+  };
+  // one the relay turns out to have (its own event came back, read or live): sent
+  const mineNow = s.msgs.get(room);
+  useEffect(() => { for (const o of unsent) if (o.event && o.state === "failed" && mineNow?.has(o.event.id)) void outbox.drop(o); });
+  const waiting = unsent.filter((o) => o.thread === thread && !(o.event && mineNow?.has(o.event.id)));
+  useEffect(() => { if (atBottom.current) toBottom(); }, [waiting.length]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Words posted as you to this room's Uni, as the Uni app's buttons post them: a quick reply (Uni named only while it
    *  listens), or Stop (always to Uni). In a thread, a reply to its root (or its newest, when the root isn't here). */
   const postAs = async (body: string) => {
@@ -746,6 +917,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
             return [sep, mark, <Message key={e.id} st={st} e={e} grouped={!!grouped} root={thread === e.id} marked={e.id === at} replies={thread ? 0 : replies.get(e.id)?.length ?? 0}
               openThread={() => setThread(e.id)} answer={answer} answeredBy={answered.get(e.id)} settled={settled.has(e.id)} send={send} change={change} />];
           })}
+          {waiting.map((o) => <Unsent key={o.key} o={o} retry={() => void deliver(o)} remove={() => void outbox.drop(o)} />)}
           {thread && shown.length <= 1 && <p className="day">No replies yet</p>}
         </div>
         {since !== null && <div className="turn" role="status" aria-label="Uni is working">
@@ -769,7 +941,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
       onWheel={() => { touched.current = true; }} onTouchStart={() => { touched.current = true; }} onPointerDown={() => { touched.current = true; }} onKeyDown={() => { touched.current = true; }}>{talk}</div>
     {/* at the foot, in view: what shows above may be the list's copy, and this says the room isn't live */}
     {readErr ? <div className="read-err"><Problem error={readErr} onRetry={() => setReadTry((n) => n + 1)}>Couldn't read the room</Problem></div> : null}
-    <Composer key={`${room}|${thread ?? ""}`} st={st} relay={relay} room={room} thread={thread} members={authors} send={send} typing={typing} setErr={setErr} sendErr={sendErr} name={name || "the room"}
+    <Composer key={`${room}|${thread ?? ""}`} st={st} relay={relay} room={room} thread={thread} members={authors} queue={queue} typing={typing} setErr={setErr} sendErr={sendErr} name={name || "the room"}
       muted={uniHere && !listening ? listenAgain : null} />
   </section></Svc.Provider>;
 }
@@ -970,7 +1142,7 @@ function PromptCard({ p, settled, send }: { p: Prompt; settled: boolean; send: (
 }
 
 /** A picture as the relay takes it: drawn again, so no camera metadata (place, device) goes with it. A GIF stays as it is. */
-async function plainImage(f: File): Promise<{ bytes: ArrayBuffer; type: string }> {
+async function plainImage(f: File): Promise<{ bytes: ArrayBuffer; type: string; w?: number; h?: number }> {
   if (!f.type.startsWith("image/") || f.type === "image/gif" || f.type === "image/svg+xml") return { bytes: await f.arrayBuffer(), type: f.type || "application/octet-stream" };
   const bmp = await createImageBitmap(f);
   const scale = Math.min(1, 2560 / Math.max(bmp.width, bmp.height));
@@ -979,15 +1151,14 @@ async function plainImage(f: File): Promise<{ bytes: ArrayBuffer; type: string }
   c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
   const type = f.type === "image/png" ? "image/png" : "image/jpeg";
   const blob: Blob = await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("couldn't read the picture"))), type, 0.88));
-  return { bytes: await blob.arrayBuffer(), type };
+  return { bytes: await blob.arrayBuffer(), type, w: c.width, h: c.height };
 }
 
 /** What one message may hold here: the app takes a call of at most 8 KB from an applet. */
 const MAX_TEXT = 7000;
 
-function Composer({ st, relay, room, thread, members, send, typing, setErr, sendErr, name, muted }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; send: (c: string, extra?: string[][], mentions?: string[]) => Promise<boolean>; typing: string[]; setErr: (e: string) => void; sendErr: string; name: string; muted: (() => void) | null }) {
+function Composer({ st, relay, room, thread, members, queue, typing, setErr, sendErr, name, muted }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; queue: (content: string, files: { name: string; type: string; bytes: ArrayBuffer; w?: number; h?: number }[], mentions: string[]) => Promise<void>; typing: string[]; setErr: (e: string) => void; sendErr: string; name: string; muted: (() => void) | null }) {
   const s = st.s;
-  const svc = useContext(Svc);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -1039,20 +1210,17 @@ function Composer({ st, relay, room, thread, members, send, typing, setErr, send
     setBusy(true);
     const began = edits.current;
     try {
-      const extra: string[][] = [];
-      const lines: string[] = [];
+      const kept: { name: string; type: string; bytes: ArrayBuffer; w?: number; h?: number }[] = [];
       for (const f of files) {
         if (f.size > 25 * 1024 * 1024) throw new Error(`${f.name} is over 25 MB`);
         const plain = await plainImage(f);
-        const d: any = await services.upload(svc, plain.bytes, plain.type);
-        const type = d.type || f.type;
-        extra.push(["imeta", `url ${d.url}`, `m ${type}`, `x ${d.sha256}`, `size ${d.size}`, ...(d.dim ? [`dim ${d.dim}`] : []), `filename ${f.name}`, ...(type.startsWith("image/") ? [`alt ${f.name}`] : [])]);
-        if (!type.startsWith("audio/")) lines.push(type.startsWith("image/") ? `![image](${d.url})` : type.startsWith("video/") ? `![video](${d.url})` : `[${f.name}](${d.url})`);
+        kept.push({ name: f.name, type: plain.type, bytes: plain.bytes, w: plain.w, h: plain.h });
       }
       const mentions = [...bound.current].filter(([n]) => body.includes(`@${n}`)).map(([, p]) => p);
-      const content = [body, ...lines].filter(Boolean).join("\n");
-      // sent: the field and its draft go, unless you wrote more meanwhile (then what you wrote stays)
-      if (await send(content, extra, mentions)) { setFiles([]); if (edits.current === began) { setText(""); bound.current.clear(); keepDraft(""); } }
+      // in the room now, kept on this device until it goes: the field and its draft go, unless you wrote more meanwhile
+      // (then what you wrote stays)
+      await queue(body, kept, mentions);
+      setFiles([]); if (edits.current === began) { setText(""); bound.current.clear(); keepDraft(""); }
     } catch (e: any) { setErr(`Not sent: ${e?.message ?? e}`); }
     setBusy(false);
   };
@@ -1064,15 +1232,12 @@ function Composer({ st, relay, room, thread, members, send, typing, setErr, send
     } catch (e: any) { setErr(`Nothing attached: ${e?.message ?? e}`); }
   };
   // a voice note, recorded on the shell's own sheet: sent as the Uni app sends one, an empty message with an audio imeta
-  // (no `duration`: Buzz takes one on video/mp4 only, and refuses the message otherwise)
+  // (no `duration`: Buzz takes one on video/mp4 only, and refuses the message otherwise). Kept on this device from here
+  // until the relay has it: a recording is never lost to a dropped connection
   const voiceMessage = async (r: { bytes: ArrayBuffer; type: string; duration: number }) => {
-    setBusy(true);
-    try {
-      const d: any = await services.upload(svc, r.bytes, r.type);
-      const type = d.type || r.type;
-      await send("", [["imeta", `url ${d.url}`, `m ${type}`, `x ${d.sha256}`, `size ${d.size}`, `filename voice.${type === "audio/mp4" ? "m4a" : type === "audio/ogg" ? "ogg" : "webm"}`]]);
-    } catch (e: any) { setErr(`Voice note not sent: ${e?.message ?? e}`); }
-    setBusy(false);
+    const base = (r.type || "").split(";")[0];
+    try { await queue("", [{ name: `voice.${base === "audio/mp4" ? "m4a" : base === "audio/ogg" ? "ogg" : "webm"}`, type: r.type, bytes: r.bytes }], []); }
+    catch (e: any) { setErr(`Voice note not kept: ${e?.message ?? e}`); }
   };
   return <div className="composer">
     <div className="in">

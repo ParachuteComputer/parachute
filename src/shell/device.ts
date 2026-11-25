@@ -5,6 +5,7 @@
 import { inShell } from "../vault/oauth";
 import type { StorageDeps } from "../applet/modules/storage";
 import { deviceSaved } from "./saved";
+import { deviceFiles } from "./keptFiles";
 import { ContractError, ERROR_CODES } from "../applet/contract";
 import { PICTURE_MAX, pictureType } from "../applet/files";
 
@@ -70,7 +71,9 @@ export async function saveFileOut(name: string, bytes: ArrayBuffer, type: string
 /** Where an applet's storage is kept: the saved store (shell/saved.ts), one per applet (its grant's subject). */
 export function storageFor(subject: string): StorageDeps {
   const store = deviceSaved();
+  const kept = deviceFiles();
   return {
+    files: { put: (key, bytes) => kept.put(subject, key, bytes), get: (key) => kept.get(subject, key), drop: (key) => kept.drop(subject, key), keys: () => kept.keys(subject) },
     read: () => store.load(subject),
     async write(all) {
       // what is gone from it is removed, the rest set: one write to the same store the kit's saved state uses
