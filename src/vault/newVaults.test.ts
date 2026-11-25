@@ -114,4 +114,20 @@ describe("whose a vault on offer opens as", () => {
       expect(opensAs(HUB, "playground").whose).toBe("theirs");
     } finally { delete w.__TAURI_INTERNALS__; stop(); }
   });
+
+  it("a key the hub no longer takes, or gone from the device, takes the admin word back; a hub out of reach doesn't", async () => {
+    mine();
+    noteAdmin(HUB, true);
+    const w = window as unknown as Record<string, unknown>;
+    let answer: { code: string; message: string } = { code: "unreachable", message: "the hub didn't answer" };
+    w.__TAURI_INTERNALS__ = { invoke: async (cmd: string) => { if (cmd === "hub_vaults") throw answer; throw new Error(cmd); } };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
+    try {
+      await relistVaults(0);
+      expect(opensAs(HUB, "playground").line).toBe("yours");
+      answer = { code: "unknown_key", message: "this hub doesn't know the key" };
+      await relistVaults(RELIST_MS);
+      expect(opensAs(HUB, "playground")).toEqual({ whose: "theirs", line: "someone else's" });
+    } finally { delete w.__TAURI_INTERNALS__; }
+  });
 });

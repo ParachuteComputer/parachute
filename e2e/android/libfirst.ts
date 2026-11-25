@@ -93,6 +93,8 @@ for (let i = 0; i < 3 && !(await visible(open as never)); i++) {
 }
 await until("library isn't offered on the list", () => visible(open as never), 5);
 await open.scrollIntoViewIfNeeded();
+await wait(1000);
+console.log("LINE:", JSON.stringify(await ui().getByRole("region", { name: "Your vaults not open here" }).innerText()));
 await ph.shot("list-not-open-here");
 await open.click();
 await throughHub("open-library");

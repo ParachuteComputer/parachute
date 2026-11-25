@@ -78,6 +78,7 @@ test("a vault made later, opened from the list: its applet asks on one card, and
   where = info.project.name;
   // the line says it opens as theirs
   const open = await offered(page, LIB, true, " · yours");
+  await open.scrollIntoViewIfNeeded();
   await shot(page, "list-not-open-here");
   const app = new URL(page.url()).origin;
   await open.click();

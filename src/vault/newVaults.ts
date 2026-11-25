@@ -12,7 +12,7 @@ import { beginSignIn, dropPending } from "./oauth";
 import { describe, everyVault } from "./parachute";
 import { listVaults, originOf } from "./store";
 import { isMine, whoseSaid } from "./whose";
-import { keySignIn, keysHere, listWithKey } from "../key/key";
+import { keySignIn, keysHere, listWithKey, type Refusal } from "../key/key";
 
 export const NEW_VAULTS_KEY = "parachute.newvaults.v1";
 /** At most this often per hub. */
@@ -99,16 +99,22 @@ export function subscribeNewVaults(f: () => void): () => void { listeners.add(f)
 export const newVaultsRev = () => rev;
 
 /** The vaults the person reaches on `hub` now, asked as the sign-in asks; null when this device can't ask. With the key,
- *  whether they reach every vault there is noted again (a device signed in before that was kept learns it here). */
+ *  whether they reach every vault there, and are its admin, is noted again (a device signed in before that was kept
+ *  learns it here); a key that is gone or refused there takes the admin word back (only the key's listing gives it). */
 async function reachable(hub: string): Promise<string[] | null> {
   if (keysHere()) {
     try {
       const listed = await listWithKey(await describe(hub));
       if (listed) { noteEvery(hub, listed.all); noteAdmin(hub, listed.all); return listed.vaults; }
-    } catch { /* no key here, or the hub refused it: the public list, where it is the person's */ }
+    } catch (e) {
+      // no key here, or the hub refused it: the public list, where it is the person's (a hub out of reach says nothing)
+      if (KEY_GONE.includes((e as Partial<Refusal> | null)?.code as Refusal["code"])) noteAdmin(hub, false);
+    }
   }
   return read().every.includes(hub) ? everyVault(hub) : null;
 }
+/** What the key's listing answers when the key is gone or the hub no longer takes it. */
+const KEY_GONE: readonly Refusal["code"][] = ["no_key", "unknown_key", "refused"];
 
 /** Ask each hub this device is signed in to which vaults the person reaches there (at most once a minute per hub). */
 export async function relistVaults(now = Date.now()): Promise<void> {
