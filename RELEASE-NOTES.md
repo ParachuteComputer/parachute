@@ -27,7 +27,10 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
 - **Your bundle.** The app opens on the home applet your bundle names (`Parachute/Bundles/<id>`; called an app record before 11-20), the bar is that
   record's pins in its order, then **Applets**: one list of the app's applets, and last **Settings**, on every screen
   (no record can take it off). Vaults are in Settings; a vault of yours the bundle draws from and this device doesn't read
-  yet also ends the list (**Not open here yet**, **Open library**), so its applets aren't missed. *Changed:* the
+  yet also ends the list (**Not open here yet**, **Open library**), so its applets aren't missed. Each line says whose
+  it opens as: on a Parachute you run (your key says you're its admin), **· yours**, so its applets can ask for what
+  yours can (Library's **Add a book** picks a file); elsewhere **· someone else's**. One you already opened as someone
+  else's stays so until you change it in Settings. *Changed:* the
   bar no longer puts your home first by itself: pin it (its **Pin**, in Applets or at its top) to keep it there.
 - **Pin, one tap.** Every applet has **Pin** on its row in Applets and in its own top bar; **Pinned** when it is on the
   bar, and a tap takes it off. Written to your bundle, so your other devices follow. (The list's long-press no longer
