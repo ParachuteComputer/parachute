@@ -933,7 +933,10 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
    *  while its tap is fresh, and isn't kept (false when it didn't go: its words stay in the box). */
   const queue = async (content: string, files: { name: string; type: string; bytes: ArrayBuffer; w?: number; h?: number }[], mentions: string[]): Promise<boolean> => {
     setErr("");
-    if (!files.length && isApproval(content)) return send(content, [], mentions);
+    if (isApproval(content)) {
+      if (files.length) throw new Error("send the approval on its own, without files");
+      return send(content, [], mentions);
+    }
     const key = newKey();
     // what goes is sent whole and signed, in one call of at most 8 KB: one that wouldn't fit is said now, and the
     // words stay in the box (each file adds its address, hash and name, twice over)
