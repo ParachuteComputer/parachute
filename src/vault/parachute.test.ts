@@ -162,6 +162,9 @@ group("the first vault, made with the sign-in's token", () => {
     await expect(createWithToken(door, "t", "practice", answering(200, taken))).rejects.toThrow("That vault name is already taken.");
     const inBand = { jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "Error: The vault limit is reached." }], isError: true } };
     await expect(createWithToken(door, "t", "x1", answering(200, inBand))).rejects.toThrow("The vault limit is reached.");
+    // a hub from 0.9.1 (one way to refuse, T-476): an isError result whose structuredContent carries the words
+    const one = { jsonrpc: "2.0", id: 1, result: { isError: true, structuredContent: { error_type: "vault_taken", message: "That vault name is already taken." }, content: [{ type: "text", text: JSON.stringify({ error_type: "vault_taken", message: "That vault name is already taken." }, null, 2) }] } };
+    await expect(createWithToken(door, "t", "practice", answering(200, one))).rejects.toThrow(/^That vault name is already taken\.$/);
     await expect(createWithToken(door, "t", "x1", answering(401, "no"))).rejects.toThrow("(401)");
     // an answer naming something that can't be a vault is never taken as the new home
     const odd = { jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify({ name: "../evil" }) }] } };

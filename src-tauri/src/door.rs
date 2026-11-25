@@ -342,17 +342,23 @@ pub fn tool_answer(status: u16, body: &str) -> Result<Value, Refusal> {
     }
     let json = if body.trim_start().starts_with('{') { body.to_string() } else { body.lines().find_map(|l| l.strip_prefix("data:")).map(|d| d.trim().to_string()).unwrap_or_default() };
     let v: Value = serde_json::from_str(&json).map_err(|_| refusal("refused", "The hub's answer couldn't be read."))?;
+    // The hub's own reason (core account-mcp.ts `error_type`): not this person's to do, or a name or vault it refuses.
+    // A hub from 0.9.1 says a refusal as an isError result with `structuredContent {error_type, message}` (T-476, one
+    // way to refuse); an older one as a JSON-RPC error with `data.error_type`, or bare isError text.
+    let code_of = |t: Option<&str>| match t {
+        Some("grant_not_permitted" | "key_required" | "unknown_tool") => "not_owner",
+        Some("invalid_name") => "invalid_name",
+        _ => "refused",
+    };
     if let Some(m) = v.pointer("/error/message").and_then(Value::as_str) {
-        // the hub's own reason (core account-mcp.ts `error_type`): not this person's to do, or a name or vault it refuses
-        let code = match v.pointer("/error/data/error_type").and_then(Value::as_str) {
-            Some("grant_not_permitted" | "key_required") => "not_owner",
-            Some("invalid_name") => "invalid_name",
-            _ => "refused",
-        };
-        return Err(refusal(code, m.chars().take(300).collect::<String>()));
+        return Err(refusal(code_of(v.pointer("/error/data/error_type").and_then(Value::as_str)), m.chars().take(300).collect::<String>()));
     }
     let text = v.pointer("/result/content/0/text").and_then(Value::as_str).unwrap_or("");
     if v.pointer("/result/isError").and_then(Value::as_bool) == Some(true) {
+        if let Some(t) = v.pointer("/result/structuredContent/error_type").and_then(Value::as_str) {
+            let m = v.pointer("/result/structuredContent/message").and_then(Value::as_str).unwrap_or("");
+            return Err(refusal(code_of(Some(t)), m.chars().take(300).collect::<String>()));
+        }
         // "Unknown tool": the tool isn't listed for this connection (it can't run any vault), or the hub has no sharing
         return Err(refusal(if text.starts_with("Unknown tool") { "not_owner" } else { "refused" }, text.chars().take(300).collect::<String>()));
     }
@@ -823,6 +829,13 @@ mod tests {
         assert_eq!(tool_answer(200, gone).unwrap_err().code, "refused");
         let unknown = r#"{"jsonrpc":"2.0","id":1,"result":{"isError":true,"content":[{"type":"text","text":"Unknown tool: invite-to-vault"}]}}"#;
         assert_eq!(tool_answer(200, unknown).unwrap_err().code, "not_owner");
+        // a hub from 0.9.1: one way to refuse, an isError result with structuredContent {error_type, message} (T-476)
+        let one = |t: &str, m: &str| format!(r#"{{"jsonrpc":"2.0","id":1,"result":{{"isError":true,"structuredContent":{{"error_type":"{t}","message":"{m}"}},"content":[{{"type":"text","text":"{{}}"}}]}}}}"#);
+        let r = tool_answer(200, &one("grant_not_permitted", "You cannot invite people to vault recipes.")).unwrap_err();
+        assert_eq!((r.code, r.message.as_str()), ("not_owner", "You cannot invite people to vault recipes."));
+        assert_eq!(tool_answer(200, &one("invalid_name", "name must be 1 to 40 characters")).unwrap_err().code, "invalid_name");
+        assert_eq!(tool_answer(200, &one("unknown_tool", "Unknown tool: invite-to-vault")).unwrap_err().code, "not_owner");
+        assert_eq!(tool_answer(200, &one("vault_not_installed", "Vault x is not installed")).unwrap_err().code, "refused");
         assert_eq!(tool_answer(401, "").unwrap_err().code, "unknown_key");
         assert!(invite_code_ok(&"a".repeat(43)) && !invite_code_ok("short") && !invite_code_ok(&format!("{}/x", "a".repeat(40))));
     }
