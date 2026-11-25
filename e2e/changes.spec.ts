@@ -4,7 +4,7 @@
 // back as a change of its own. Against the real hub: what the hub holds is read back after each step.
 // Deletes need a hub that lists deleted records to write access (core T-476). On an older hub (CI installs core from
 // npm) Changes says deleted records aren't listed, and the test checks that instead of the delete.
-import { expect, test, type FrameLocator } from "@playwright/test";
+import { expect, test, type FrameLocator } from "./test";
 import { signIn } from "./helpers";
 import { api, cli, hubState, VAULT } from "./hub";
 

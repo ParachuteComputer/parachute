@@ -2,7 +2,7 @@
 // the open bundle's record in the home vault: the person changes them by long-press, their agent by writing that record
 // (the settings note's are still read, as an alias, while there is no record). A home applet set only by a write opens
 // on start after the person's own tap, never by itself.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { bundleOf, clearBarAndHome, ui, writeBundle } from "./helpers";
 import { api, hubState, mcp, VAULT } from "./hub";
 

@@ -6,7 +6,7 @@
 // the door must list in its public_urls (the app itself sends from its native side).
 import { readFileSync } from "node:fs";
 import { randomBytes, createHash } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";

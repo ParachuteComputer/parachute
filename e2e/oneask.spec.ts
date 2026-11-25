@@ -5,7 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { getPublicKey } from "nostr-tools/pure";
 import { api, hubState, VAULT } from "./hub";
 import { installApplet, ui } from "./helpers";

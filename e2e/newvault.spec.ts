@@ -5,7 +5,7 @@
 // itself (the shared sign-in would be retired by it), so it runs with the sign-in specs, last.
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { approveUntilBack, moreVaults, openMore, signIn, ui } from "./helpers";
 import { api, cli, hubState, mintToken } from "./hub";
 

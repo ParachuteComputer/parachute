@@ -5,7 +5,7 @@
 // Needs a hub where write access may define a type over REST (core #139); on an older one it skips, unless
 // E2E_CORE_NEXT=1 says this hub is a core that must have it (CI's 0.9.0-pre.2 leg). In the `packs` project (a 403 refreshes the sign-in).
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, mintToken, VAULT } from "./hub";
 import { signIn } from "./helpers";
 import { RECEIPTS } from "../src/kit/packs";

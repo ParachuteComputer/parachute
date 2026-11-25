@@ -1,7 +1,7 @@
 // Signals (docs/design/APP-RECORD.md "Signals"; src/services/signals.ts): an applet declares what counts as something
 // for the person, and the bar shows the count while the applet is closed, counted without running it. Here Ideas
 // counts notes someone else adds to Ideas/: the vault's own live subscription, against the real hub.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { barOf, ui } from "./helpers";
 import { api, hubState, mintToken, record, VAULT } from "./hub";
 

@@ -2,7 +2,7 @@
 // to the menu bar. Which should be updating the Bundle as we go right?"). Pin, unpin and move, written to the open
 // bundle's record in the home vault, so every device of the person's follows; a bundle someone else offers is copied
 // into one of the person's own first.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });

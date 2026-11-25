@@ -1,7 +1,7 @@
 // Another Parachute in yours (docs/design/EMBED.md, docs/OTHER-PARACHUTES.md), on two real hubs: the person's own
 // (kitchen) and Techne's, where their key is a member with read access. Techne's vault is added as someone else's.
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, ORG_VAULT, techneState, VAULT } from "./hub";
 import { signInWithKey, ui, vaultRow } from "./helpers";
 

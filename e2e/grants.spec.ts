@@ -5,7 +5,7 @@
 // search, in the type list and in its history. Ending it in the list makes its very next request fail; the row stays, ended.
 // Needs a hub with typed keys (core uni/t476-typed-keys or later); an older hub (core from npm) skips, unless
 // E2E_CORE_NEXT=1 says it is a core that has it (CI's 0.9.0-pre.2 leg).
-import { expect, test, type FrameLocator, type Page } from "@playwright/test";
+import { expect, test, type FrameLocator, type Page } from "./test";
 import { signIn } from "./helpers";
 import { api, cli, hubState, VAULT } from "./hub";
 

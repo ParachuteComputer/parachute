@@ -3,7 +3,7 @@
 // its requests, moves its files and its private notes, and refuses everything it didn't declare. The applet never sees
 // the key. A changed address or changed code asks again. The servers are fakes with real checks (e2e/services/servers.ts);
 // the key is the test signer's (a build with VITE_E2E_SIGNER=1), which signs what the shell's policy hands it.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";

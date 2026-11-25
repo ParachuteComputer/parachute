@@ -57,8 +57,11 @@ async function startHub(vault: string, host: string, onStarted: (h: HubState) =>
   execFileSync(BIN, ["bootstrap", "--embedded", "--home", env.PARACHUTE_HOME, "--username", "owner", "--password-file", join(home, "pw"), "--vault", vault, "--json"], { env, stdio: "pipe" });
   const port = await freePort(), vaultPort = await freePort();
   const origin = `http://${host}:${port}`;
+  // a clock a spec can move on (e2e/clock.ts): the hub runs on Bun, which preloads it
+  const clock = join(home, "clock");
   const child = spawn(BIN, ["serve", "--embedded", "--home", env.PARACHUTE_HOME, "--listen", `127.0.0.1:${port}`, "--vault-listen", `127.0.0.1:${vaultPort}`],
-    { env: { ...env, PARACHUTE_HUB_ORIGIN: origin }, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    { env: { ...env, PARACHUTE_HUB_ORIGIN: origin, PARACHUTE_E2E_CLOCK: clock, BUN_OPTIONS: `${process.env.BUN_OPTIONS ?? ""} --preload ${join(import.meta.dirname, "clock.ts")}`.trim() },
+      stdio: ["ignore", "pipe", "pipe"], detached: true });
   const started: HubState = { origin, password, home, pid: child.pid!, token: "" };
   // from here on, teardown can find the hub and its home even if the rest of setup fails
   onStarted(started);
@@ -90,7 +93,15 @@ export async function account(h: Pick<HubState, "home" | "origin">, tool: string
   return JSON.parse(body.result!.content[0].text);
 }
 
+/** Every spec takes `test` from e2e/test.ts, which keeps the saved sign-ins as a device keeps its own. */
+function everySpecKeepsSignIns() {
+  const direct = readdirSync(import.meta.dirname).filter((f) => f.endsWith(".ts") && f !== "test.ts")
+    .filter((f) => /import\s*\{[^}]*\btest\b[^}]*\}\s*from\s*["']@playwright\/test["']/.test(readFileSync(join(import.meta.dirname, f), "utf8")));
+  if (direct.length) throw new Error(`take test from "./test", not "@playwright/test" (e2e/test.ts keeps the saved sign-ins): ${direct.join(", ")}`);
+}
+
 export default async function globalSetup() {
+  everySpecKeepsSignIns();
   const state: Partial<State> = { key: newKey() };
   const keep = () => writeFileSync(STATE, JSON.stringify(state), { mode: 0o600 });
   try {
@@ -130,6 +141,23 @@ export default async function globalSetup() {
 /** A token with another scope on the e2e hub (e.g. `vault:kitchen:admin`, to change what a tag is). */
 export function mintToken(scope: string, h: Pick<HubState, "home" | "origin"> = hubState(), more: string[] = []): string {
   return cli(h, ["auth", "mint-token", "--scope", scope, ...more, "--json"]).token as string;
+}
+
+/** Put a hub's clock `aheadMs` ahead of the real time (e2e/clock.ts): the hub's and its vault's, and wait until both are. */
+export async function moveClock(h: Pick<HubState, "home">, aheadMs: number) {
+  const file = join(h.home, "clock");
+  const keepers = (() => { try { return readdirSync(`${file}.d`); } catch { return []; } })();
+  if (keepers.length < 2) throw new Error(`the hub and its vault keep no e2e clock (e2e/clock.ts wasn't preloaded): ${keepers.length}`);
+  writeFileSync(file, String(aheadMs));
+  const moved: string[] = [];
+  for (const pid of keepers) {
+    try { process.kill(Number(pid), "SIGUSR2"); moved.push(pid); } catch { rmSync(join(`${file}.d`, pid), { force: true }); /* gone (a vault restarted) */ }
+  }
+  const at = (pid: string) => { try { return readFileSync(join(`${file}.d`, pid), "utf8"); } catch { return null; } };
+  for (const until = Date.now() + 10_000; moved.some((pid) => at(pid) !== String(aheadMs));) {
+    if (Date.now() > until) throw new Error("the hub's clock didn't move");
+    await new Promise((r) => setTimeout(r, 50));
+  }
 }
 
 export function hubState(): State { return JSON.parse(readFileSync(STATE, "utf8")) as State; }

@@ -3,7 +3,7 @@
 // insert it as a quote with a source link, ask Uni (creating a `reference` with `state: asked` and never editing the
 // piece), check a published piece's read-only metadata, and verify typing into a long piece stays within the same
 // keystroke-to-paint budget as a plain textarea on a phone's CPU.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { appletRecord } from "../applets/record.ts";
 import { api, hubState, record, VAULT } from "./hub";
 

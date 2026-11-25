@@ -2,7 +2,7 @@
 // searches it in calls that each fit the frame's request budget (contract.ts maxRequestBytes), instead of one call
 // naming every room, which the shell refuses ("Couldn't read your rooms: too_large"). Against the fake relay, so CI
 // runs it: the rooms are put straight into its store.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { VAULT } from "./hub";
 import { installApplet, ui } from "./helpers";

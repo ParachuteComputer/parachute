@@ -4,7 +4,7 @@
 // a room opens Rooms at that room (app.open with the launch a notification's tap carries).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { getPublicKey } from "nostr-tools/pure";
 import * as nip44 from "nostr-tools/nip44";
 import { api, hubState, VAULT } from "./hub";

@@ -4,7 +4,7 @@
 // in Settings makes the next one ask again. A hostile applet can't reach a method nobody listed, a write its card
 // doesn't name, a write without a tap, or the AppView as a plain service. The AppView is a stand-in with Techne's method
 // shapes (e2e/services/techne.ts); the key is the test signer's (VITE_E2E_SIGNER=1).
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { api, hubState, record, VAULT } from "./hub";
 import { installApplet, ui } from "./helpers";

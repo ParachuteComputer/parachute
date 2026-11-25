@@ -1,7 +1,7 @@
 // Techne's Events component on the person's home (docs/design/EMBED.md): a pointer in the home vault, the embed in the
 // home applet's record, each running in its own sealed frame with its own card. On two real hubs.
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, ORG_VAULT, techneState, VAULT } from "./hub";
 import { signInWithKey } from "./helpers";
 

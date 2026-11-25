@@ -3,7 +3,7 @@
 // a frame written by an agent asks first; a newer built-in frame is offered, never written over theirs; a frame that
 // stops gives way to the built-in one; and a hostile frame from the vault is as sealed as the built-in one.
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, mcp, VAULT } from "./hub";
 import { ui } from "./helpers";
 

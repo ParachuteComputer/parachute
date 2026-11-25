@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, VAULT } from "./hub";
 import { expectInVault, ui } from "./helpers";
 

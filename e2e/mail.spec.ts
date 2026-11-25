@@ -9,7 +9,7 @@
 // it; the test's unlock is window.__parachuteE2EUnlock (src/services/e2eNative.ts), cancelled unless it says "pass".
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 import { corsProxy, mailAs } from "./services/client";

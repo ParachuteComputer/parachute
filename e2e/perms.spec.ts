@@ -5,7 +5,7 @@
 // marks what is new. The servers are fakes (e2e/services/servers.ts); Uni's key is on the device's trusted list.
 // SHOTS=<dir>: screenshots of each card and the word counts, for PERMS.md.
 import { mkdirSync, writeFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { api, hubState, VAULT } from "./hub";
 import { installApplet, ui } from "./helpers";

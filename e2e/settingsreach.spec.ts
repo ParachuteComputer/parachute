@@ -1,7 +1,7 @@
 // Settings in a few plain groups, and what Parachute holds of each vault in words (T-476, Aaron 11-22: "it's still
 // talking about how we have access to all of these vaults"): one line a vault, what it holds and what for; why, whose it
 // is and its actions behind a tap on it (src/views/reachWords.ts, docs/ACCESS.md).
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, mintToken, MORE_VAULTS } from "./hub";
 import { vaultRow } from "./helpers";
 

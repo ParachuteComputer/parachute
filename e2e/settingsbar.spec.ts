@@ -1,7 +1,7 @@
 // Settings is one tap away from every place (T-476, Aaron 11-22: "on the bottom bar settings is not there by default"):
 // the shell ends the bar with it, whatever the open bundle's bar says, and holds it on screen however full the bar is,
 // at a phone's width (the foot) and a computer's (the sidebar down the left edge).
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { clearBarAndHome, writeBundle } from "./helpers";
 import { api, hubState, VAULT } from "./hub";
 

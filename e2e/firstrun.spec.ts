@@ -5,7 +5,7 @@
 // Allow there is the person's choice of it as home on this device.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, mintToken, MORE_VAULTS, VAULT } from "./hub";
 
 type Row = { id: string };

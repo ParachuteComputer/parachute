@@ -1,7 +1,7 @@
 // An applet written the way a chat AI with the Parachute MCP writes one: one `create-note` call, with the arguments
 // from docs/WRITE-AN-APPLET.md, and nothing else. The app then shows it, asks, transpiles and runs it.
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 

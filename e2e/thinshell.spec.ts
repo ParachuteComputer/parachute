@@ -2,7 +2,7 @@
 // little else. It opens on the record's home, the bar is the record's pins (then Applets, the app's one way to the
 // rest), and the list at `/` is the app's applets, not the vaults. A record that doesn't load, or a home that throws,
 // never locks the person out: the plain list, a calm line, and Settings.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { ui } from "./helpers";
 import { api, hubState, record, VAULT } from "./hub";
 

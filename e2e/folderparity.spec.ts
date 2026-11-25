@@ -1,7 +1,7 @@
 // A folder-scoped applet speaks the hub's own query words (T-476, docs/WRITE-AN-APPLET.md "Reading"): order, page and
 // filter by a field, its folders' tags, a note's links, and a long note's write, through the real frame against a real
 // hub. What stays out: a note in another folder (by its links, or by a tag only it carries).
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 

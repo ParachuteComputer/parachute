@@ -3,7 +3,7 @@
 // time, by an agent's MCP calls as the doc gives them); then importing instead, refused until Techne is trusted.
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, hubState, ORG_VAULT, record, techneState, VAULT } from "./hub";
 import { signInWithKey, ui, vaultRow } from "./helpers";
 

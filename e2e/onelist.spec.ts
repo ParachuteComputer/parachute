@@ -7,7 +7,7 @@
 // a core that must have it (CI's 0.9.0-pre.2 leg; the red run).
 import { createHash, randomBytes } from "node:crypto";
 import { schnorr } from "@noble/curves/secp256k1.js";
-import { expect, test, type FrameLocator, type Locator, type Page } from "@playwright/test";
+import { expect, test, type FrameLocator, type Locator, type Page } from "./test";
 import { signIn } from "./helpers";
 import { api, cli, hubState, VAULT } from "./hub";
 import { keyDoor, newKey, pubOf } from "./keys";

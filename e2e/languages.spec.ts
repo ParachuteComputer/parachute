@@ -5,7 +5,7 @@
 // through vault.file (the sound by the audio gate); a word typed in IAST is saved in Devanagari, with its cards.
 // WALKTHROUGH_DIR=<dir> keeps a screenshot of each step (WALKTHROUGH.md).
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { appletRecord } from "../applets/record.ts";
 import { api, hubState, mintToken, record, VAULT } from "./hub";
 

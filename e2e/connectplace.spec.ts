@@ -1,7 +1,7 @@
 // Connect an AI is a setting, not an applet (T-476, Aaron 11-23: "I even see 'Connect your AI' listed as an applet,
 // which itself is a bit confusing to me"): the list of applets doesn't hold it; Settings has it, one tap away, and it
 // opens the same Connect screen.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { ui } from "./helpers";
 
 test.use({ storageState: "e2e/.signed-in.json" });

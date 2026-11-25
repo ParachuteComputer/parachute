@@ -3,7 +3,7 @@
 // (a place opened from the bar, a press, a drawer, a toast, a drag); a finger drags nothing, and a drag far enough does at
 // once what letting go would; and an applet's own motion asks the kit's still() first. The same moves flowing do move,
 // so the check would see motion if there were any.
-import { devices, expect, test, type Browser, type Page } from "@playwright/test";
+import { devices, expect, test, type Browser, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });

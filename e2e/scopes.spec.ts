@@ -5,7 +5,7 @@
 //   the Allow counts only once the hub said yes; revoking Journal gives that back: the token that could write is dead
 //   at the hub, and what the app holds reads only.
 // Runs last (signs-in project): signing in again retires the shared sign-in.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { api, cli, hubState, MORE_VAULTS, mintToken, ORG_VAULT, record, techneState, VAULT, type HubState } from "./hub";
 import { approveUntilBack, fromAppletMenu, held, moreVaults, openVault, signIn, signInWithKey, ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";

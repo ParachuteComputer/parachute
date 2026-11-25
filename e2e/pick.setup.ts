@@ -1,7 +1,7 @@
 // A sign-in of the pick walks' own (e2e/vaultpick.spec.ts), last in the run, through the hub's key door: no password
 // (a fourth password sign-in in one run meets the hub's limit), and the sign-ins the specs before it shared are left as
 // they were. The person's own vaults, each opened and let write, as the shared start does.
-import { expect, test as setup } from "@playwright/test";
+import { expect, test as setup } from "./test";
 import { hubState, MORE_VAULTS, VAULT } from "./hub";
 import { letWrite, openVault, signInWithKey } from "./helpers";
 

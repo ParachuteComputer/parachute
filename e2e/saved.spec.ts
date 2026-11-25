@@ -1,7 +1,7 @@
 // Saved state (docs/WRITE-AN-APPLET.md "Saved state"): what an applet saves through the kit survives the app closing.
 // Journal's entry box and the entry it had open come back in a new page of the same browser profile (the app closed
 // and opened again); the draft is in the box before anything is typed, and saving the entry clears it.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { fromAppletMenu, ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";

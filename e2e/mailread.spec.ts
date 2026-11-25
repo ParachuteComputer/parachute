@@ -8,7 +8,7 @@
 // BUZZ_KEYS, and STALWART with MAIL_SECRETS (up.sh writes them).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type FrameLocator, type Locator, type Page } from "@playwright/test";
+import { expect, test, type FrameLocator, type Locator, type Page } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 import { corsProxy, importMail } from "./services/client";

@@ -3,7 +3,7 @@
 // own applet and its card asks; an update signed with a release key runs, a forged one doesn't.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { finalizeEvent, generateSecretKey } from "nostr-tools/pure";
 import { createHash } from "node:crypto";
 import { api, hubState, VAULT } from "./hub";

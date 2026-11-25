@@ -1,7 +1,7 @@
 // A React project of several files (e2e/fixtures/bundled: a context, two views, a helper, the npm package `ms`), made
 // into one record by scripts/bundle-applet.ts's bundler, runs in the sealed frame against a real hub.
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { bundleApplet } from "../src/applet/bundle";
 import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";

@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
-import { expect, test, type CDPSession, type Page } from "@playwright/test";
+import { expect, test, type CDPSession, type Page } from "./test";
 import { getPublicKey } from "nostr-tools/pure";
 import { api, hubState, mintToken } from "./hub";
 import { person } from "./services/client";

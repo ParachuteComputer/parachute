@@ -4,7 +4,7 @@
 // applet (HTML, today's tsx and an older next's tsx), and a home vault the app can't reach, which is what Aaron's Mac
 // showed (docs/INSTALL-MAC.md, "If something goes wrong").
 import { readFileSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { installApplet, ui } from "./helpers";
 import { hubState, VAULT } from "./hub";
 

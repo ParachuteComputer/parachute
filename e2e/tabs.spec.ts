@@ -1,6 +1,6 @@
 // The kit's Tabs on a phone: more places than fit stay on one line and scroll sideways, the one shown kept in view
 // (Mail's Inbox · 5, Waiting · 2, Later, Drafts, Sent, Junk wrapped to two lines before).
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { api, hubState, record, VAULT } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });
