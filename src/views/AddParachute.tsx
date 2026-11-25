@@ -75,7 +75,7 @@ export default function AddParachute({ first = false }: { first?: boolean }) {
             <p>This hub doesn't know your key yet. Ask its owner to link it to your account; this is your key's public half:</p>
             {key && <Npub npub={key.npub} />}
           </> : refusal.code === "no_door" ? <p>This hub doesn't take a key to sign in. Use another way below.</p>
-            : <p>{refusal.message || `The sign-in didn't finish (${refusal.code}).`}</p>}
+            : <p>{refusal.message}</p>}
         </div>}
         {key ? <>
           <button className="primary" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in with your key"}</button>
