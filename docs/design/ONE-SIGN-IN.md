@@ -110,11 +110,17 @@ real test.
    person reaches, as the sign-in asks it: with the key, the hub's `list-vaults`, signed by the shell; without a key,
    the hub's public list (`/.well-known/parachute.json`), but only on a hub where the sign-in found the person reaches
    every vault (they run it: `covered: "all"` by key; without one, they said Mine, had more than one vault there, and
-   their list held every vault the public list names, under the 60-vault cut). That mark changes only at a sign-in. A vault
+   their list held every vault the public list names, under the 60-vault cut). That mark changes at a sign-in, and with
+   the key at each listing. A vault
    there that this device doesn't hold is counted under that Parachute (*N more vaults there, not open
    here*, and at the foot of the list when the open bundle draws from it), and a tap there shows it as **Open playground** (the same line as each vault the sign-in didn't read). The tap is the consent step for that vault alone (`vault:<name>:read`): the hub asks
-   once, unless the person's grant already covers it; a vault made since the sign-in comes in as someone else's (the hub
-   doesn't say whose; another account may have made it), and Settings makes it the person's. **Not now** keeps it off
+   once, unless the person's grant already covers it. Whose it comes in as (the hub doesn't say): where the key's own
+   listing found the person the hub's admin (`covered: "all"` for a key) and they hold a vault there they call theirs,
+   theirs, as the sign-in's own pick ticks every vault there to begin with, and its line says so (*Open library ·
+   yours*), so the tap says so too (11-24: Library in Aaron's `library`, made after he signed in, came in as someone
+   else's, so it could ask for no file). Anywhere else someone else's, and its line says that: without the key, reaching
+   every vault is no sign of running the hub (a member given every vault reaches them all too), and another hub's
+   later vault may be one shared with them. Settings changes it either way. **Not now** keeps it off
    Settings on this device until the next sign-in there; signing out of a vault in Settings makes it an Open line again
    (`parachute.newvaults.v1`, which also keeps the hubs the person reaches every vault of). Code:
    `src/vault/newVaults.ts`.

@@ -12,7 +12,7 @@ import { MAX_VAULTS } from "./address";
 import { listVaults, originOf, saveVault, vaultUrlOf, type VaultRecord } from "./store";
 import { setWhose, whoseOf, whoseSaid } from "./whose";
 import { homeRecordsWithKey, keySignIn, keysHere, listWithKey, type Refusal } from "../key/key";
-import { noteEvery, noteListed, undismissOn } from "./newVaults";
+import { noteAdmin, noteEvery, noteListed, undismissOn } from "./newVaults";
 import { holdHome, homeVault, setHome } from "../shell/frameSource";
 import { deviceGrants } from "../applet/grants";
 import { noteOwnWrite } from "./writeAsk";
@@ -105,7 +105,7 @@ export async function startSignIn(hub: string, whose: "mine" | "theirs", withKey
   // the shell signs one `list-vaults` request with the key, to the hub's own account MCP; a hub that can't answer it
   // (an older one, or one whose account MCP is elsewhere) gets the listing sign-in instead, through the same key door
   const listed: Listed | null = await listWithKey(parachute);
-  if (listed) noteEvery(hub, listed.all);
+  if (listed) { noteEvery(hub, listed.all); noteAdmin(hub, listed.all); }
   if (listed && !listed.vaults.length) throw { code: "no_vaults", message: "Your key is known there, but no vault is yours yet. Ask the hub's owner to give you one." } satisfies Refusal;
   const door = async (b: Parameters<typeof beginSignIn>[0]) => {
     const authorize = await beginSignIn(b, f);

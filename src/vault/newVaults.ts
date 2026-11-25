@@ -10,14 +10,18 @@
 // vaults they waved away (Not now, or signed out of on purpose), so those don't come back.
 import { beginSignIn, dropPending } from "./oauth";
 import { describe, everyVault } from "./parachute";
+import { MAX_VAULTS } from "./address";
 import { listVaults, originOf } from "./store";
-import { whoseSaid } from "./whose";
-import { keySignIn, keysHere, listWithKey } from "../key/key";
+import { isMine, whoseSaid } from "./whose";
+import { keySignIn, keysHere, listWithKey, type Refusal } from "../key/key";
 
 export const NEW_VAULTS_KEY = "parachute.newvaults.v1";
 /** At most this often per hub. */
 export const RELIST_MS = 60_000;
-type Kept = { every: string[]; dismissed: string[]; listed: Record<string, string[]> };
+/** `every`: hubs where the person reaches every vault (the public list is theirs to read); `admin`: hubs where the key's
+ *  own listing found them the hub's admin (core's `covered: "all"` for a key is an admin's only), what "yours" is
+ *  inferred from (`opensAs`). */
+type Kept = { every: string[]; admin: string[]; dismissed: string[]; listed: Record<string, string[]> };
 
 const read = (): Kept => {
   try {
@@ -25,8 +29,8 @@ const read = (): Kept => {
     const strs = (x: unknown) => (Array.isArray(x) ? x.filter((s): s is string => typeof s === "string").slice(-500) : []);
     const listed: Record<string, string[]> = {};
     if (v?.listed && typeof v.listed === "object" && !Array.isArray(v.listed)) for (const [h, names] of Object.entries(v.listed).slice(0, 50)) listed[h] = strs(names);
-    return { every: strs(v?.every), dismissed: strs(v?.dismissed), listed };
-  } catch { return { every: [], dismissed: [], listed: {} }; }
+    return { every: strs(v?.every), admin: strs(v?.admin), dismissed: strs(v?.dismissed), listed };
+  } catch { return { every: [], admin: [], dismissed: [], listed: {} }; }
 };
 const write = (k: Kept) => { try { localStorage.setItem(NEW_VAULTS_KEY, JSON.stringify(k)); } catch { /* lasts this session */ } };
 const keyOf = (hub: string, vault: string) => `${originOf(hub)} ${vault}`;
@@ -51,12 +55,18 @@ export function noteListed(hub: string, vaults: readonly string[]) {
 const askedAt = new Map<string, number>();
 
 /** The sign-in learned whether the person reaches every vault on `hub` (they run it). */
-export function noteEvery(hub: string, every: boolean) {
+export function noteEvery(hub: string, every: boolean) { noteIn("every", hub, every); }
+
+/** The key's own listing of `hub` (signed by the shell): whether it found the person the hub's admin. */
+export function noteAdmin(hub: string, admin: boolean) { noteIn("admin", hub, admin); }
+
+function noteIn(list: "every" | "admin", hub: string, on: boolean) {
   const k = read();
   const h = originOf(hub);
-  const was = k.every.includes(h);
-  if (was === every) return;
-  write({ ...k, every: every ? [...k.every, h] : k.every.filter((x) => x !== h) });
+  if (k[list].includes(h) === on) return;
+  write({ ...k, [list]: on ? [...k[list], h] : k[list].filter((x) => x !== h) });
+  // what the Open lines say follows (opensAs)
+  told();
 }
 
 /** A vault the person doesn't want offered again: they said Not now, or signed out of it. */
@@ -89,16 +99,25 @@ export const listedVaults = (hub: string): string[] => listedOn(originOf(hub));
 export function subscribeNewVaults(f: () => void): () => void { listeners.add(f); return () => { listeners.delete(f); }; }
 export const newVaultsRev = () => rev;
 
-/** The vaults the person reaches on `hub` now, asked as the sign-in asks; null when this device can't ask. */
+/** The vaults the person reaches on `hub` now, asked as the sign-in asks; null when this device can't ask. With the key,
+ *  whether they reach every vault there, and are its admin, is noted again (a device signed in before that was kept
+ *  learns it here); a key that is gone or refused there takes the admin word back (only the key's listing gives it). */
 async function reachable(hub: string): Promise<string[] | null> {
   if (keysHere()) {
     try {
       const listed = await listWithKey(await describe(hub));
-      if (listed) return listed.vaults;
-    } catch { /* no key here, or the hub refused it: the public list, where it is the person's */ }
+      // (a list cut at MAX_VAULTS isn't every vault for the public list, as at sign-in)
+      if (listed) { noteEvery(hub, listed.all && listed.vaults.length < MAX_VAULTS); noteAdmin(hub, listed.all); return listed.vaults; }
+    } catch (e) {
+      // no key here, or the hub refused it: the public list, where it is the person's (a hub out of reach says nothing)
+      if (KEY_GONE.includes((e as Partial<Refusal> | null)?.code as Refusal["code"])) noteAdmin(hub, false);
+    }
   }
   return read().every.includes(hub) ? everyVault(hub) : null;
 }
+/** What the key's listing answers when the key is gone or the hub no longer knows it (not "refused": the door also says
+ *  that for a moment's limit or an answer it couldn't read, and a tap in that moment would keep "someone else's"). */
+const KEY_GONE: readonly Refusal["code"][] = ["no_key", "unknown_key"];
 
 /** Ask each hub this device is signed in to which vaults the person reaches there (at most once a minute per hub). */
 export async function relistVaults(now = Date.now()): Promise<void> {
@@ -112,15 +131,37 @@ export async function relistVaults(now = Date.now()): Promise<void> {
   }));
 }
 
+/** Does the person run this Parachute: the key's own listing found them its admin, and they said it is theirs (a vault
+ *  of theirs is held here)? Reaching every vault isn't enough: without a key that is read from what a sign-in could
+ *  list, which a member given every vault also can. */
+export function runsHub(hub: string): boolean {
+  const h = originOf(hub);
+  return read().admin.includes(h) && listVaults().some((v) => originOf(v.issuer) === h && isMine(v));
+}
+
+export type OpenLine = "yours" | "someone else's" | "someone else's, trusted";
+
+/** Whose a vault on offer opens as, and what its Open line says of it (`said`: nothing, the person said so already):
+ *  what the person said of it; else, on a Parachute they run, theirs, as the sign-in's own pick ticks every vault there
+ *  to begin with, and its line says "yours", so the tap that opens it says so too (a vault another admin of the hub
+ *  made is one to wave away, or to change in Settings); elsewhere someone else's, and its line says that (a vault
+ *  offered later there may be one someone shared with them), until the person says otherwise in Settings. */
+export function opensAs(hub: string, vault: string): { whose: "mine" | "theirs"; line: OpenLine | null } {
+  const said = whoseSaid({ issuer: originOf(hub), vault });
+  if (said === "mine") return { whose: "mine", line: null };
+  // trusted stays trusted (signInFlow keep() never changes what was said); its line says so
+  if (said === "trusted") return { whose: "theirs", line: "someone else's, trusted" };
+  if (said === null && runsHub(hub)) return { whose: "mine", line: "yours" };
+  return { whose: "theirs", line: "someone else's" };
+}
+
 /** Open a vault on offer: the hub's consent to read it alone (its sign-in, then its Approve, unless the person's grant
- *  there already covers it), and back to the sign-in's return. Resolves to the address to open. Whose it is: what the
- *  person said at sign-in (of the Parachute, or of that vault on a hub they run); a vault made later is someone
- *  else's until they say otherwise in Settings (the hub doesn't say whose; another account may have made it). */
+ *  there already covers it), and back to the sign-in's return. Resolves to the address to open. Whose it is: `opensAs`
+ *  (the hub doesn't say whose). */
 export async function startAddVault(hub: string, vault: string): Promise<string> {
   const h = originOf(hub);
   if (!newVaultsOn(h).includes(vault)) throw new Error("That vault isn't on offer here.");
-  const said = whoseSaid({ issuer: h, vault });
-  const whose: "mine" | "theirs" = said === "mine" ? "mine" : "theirs";
+  const { whose } = opensAs(h, vault);
   const parachute = await describe(h);
   const b = { parachute, step: "open" as const, vault, level: "read" as const, why: "open" as const, whose };
   if (keysHere()) {
