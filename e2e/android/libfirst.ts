@@ -82,7 +82,8 @@ console.log(await ph.adb(`push /work/book.epub '/sdcard/Download/A Small Garden.
 
 // 4. the list asks the hub again a minute on: library is offered at its end
 const bar = () => p().getByRole("navigation", { name: "Bar" });
-const open = ui().getByRole("button", { name: `Open ${LIB}`, exact: true });
+// the key's own listing found the person the hub's admin: the line says it opens as theirs
+const open = ui().getByRole("button", { name: `Open ${LIB} · yours`, exact: true });
 for (let i = 0; i < 3 && !(await visible(open as never)); i++) {
   await wait(62_000);
   await bar().getByRole("link", { name: /Settings/ }).click();

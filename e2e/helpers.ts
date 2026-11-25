@@ -95,7 +95,7 @@ export async function openVault(page: Page, vault: string, onConsent?: (page: Pa
   await page.goto("/settings");
   const app = new URL(page.url()).origin;
   // (a vault that opens as someone else's says so on its line)
-  const line = page.getByRole("button", { name: new RegExp(`^Open ${vault}( · someone else's)?$`) });
+  const line = page.getByRole("button", { name: new RegExp(`^Open ${vault}( · (yours|someone else's))?$`) });
   // behind the line that counts them, once it is drawn
   await expect(page.locator("details.parachute-more summary").or(line).first()).toBeVisible();
   await openMore(page);

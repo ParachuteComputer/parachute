@@ -46,9 +46,9 @@ export type FramePlace = { vault: string; noteId: string };
 /** One of the person's Parachutes (docs/design/ONE-SIGN-IN.md): a hub this device is signed in to (its vaults are the
  *  ones whose `issuer` is `hub`), or one their list names that this device isn't (`signedIn` false). The home's first.
  *  `fresh`: vaults made there since this device signed in, which it may add (vault/newVaults.ts). */
-/** `fresh`: the person's vaults there this device doesn't read; `theirs`: those of them that open as someone else's
- *  (vault/newVaults.ts `opensAs`: a hub they don't run), marked on their line. */
-export type FrameParachute = { hub: string; host: string; name: string; home: boolean; signedIn: boolean; fresh?: string[]; theirs?: string[] };
+/** `fresh`: the person's vaults there this device doesn't read; `lines`: what the Open line of each says of whose it
+ *  opens as (vault/newVaults.ts `opensAs`), when it says anything. */
+export type FrameParachute = { hub: string; host: string; name: string; home: boolean; signedIn: boolean; fresh?: string[]; lines?: Record<string, "yours" | "someone else's"> };
 /** `look`: "notes" when the open bundle's home is Notes (docs/SIMPLE.md), else the list. `app: "simple"` says the same
  *  for frames written before 11-20, until 2026-12-20. */
 /** `notice: "bundle-record"`: the bundle this device chose didn't load (its record is malformed or gone); the list says

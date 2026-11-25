@@ -134,7 +134,7 @@ function VaultsToAdd({ hub, name }: { hub: string; name: string }) {
       <ul className="parachute-new plain" aria-label={`Vaults to open on ${name}`}>
         {fresh.map((v) => (
           <li key={v}>
-            <button type="button" className="parachute-new-add" disabled={busy} onClick={() => add(v)}>Open <b>{v}</b>{opensAs(hub, v) === "theirs" && <span className="quiet"> · someone else's</span>}</button>
+            <button type="button" className="parachute-new-add" disabled={busy} onClick={() => add(v)}>Open <b>{v}</b>{((l) => l && <span className="quiet"> · {l}</span>)(opensAs(hub, v).line)}</button>
             <button type="button" className="quiet-button" disabled={busy} aria-label={`Not now: ${v}`} onClick={() => dismissVault(hub, v)}>Not now</button>
           </li>
         ))}

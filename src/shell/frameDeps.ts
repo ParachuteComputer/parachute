@@ -44,8 +44,8 @@ export const homeNow = () => {
       // the person's vaults there this device doesn't read: for the list, the ones the open bundle would list applets
       // from (it ends with them, a tap each: T-476, his Library sat in one unseen); Notes reads every vault, so all
       const fresh = newVaultsOn(p.hub).filter((vault) => bundle.look === "notes" || homeHub === undefined || offersIn(bundle, { hub: originOf(p.hub), vault }, originOf(homeHub)));
-      const theirs = fresh.filter((vault) => opensAs(p.hub, vault) === "theirs");
-      return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh } : {}), ...(theirs.length ? { theirs } : {}) };
+      const lines = Object.fromEntries(fresh.flatMap((vault) => { const l = opensAs(p.hub, vault).line; return l ? [[vault, l]] : []; }));
+      return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh, lines } : {}) };
     }), ...(bundle.look === "notes" ? { look: "notes" as const, app: "simple" as const } : {}),
     ...(bundle.live ? { barTheirs: true as const } : {}), ...(() => { const own = barOwnIds(b.entries, bundle.look); return own.length ? { barOwn: own } : {}; })(), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
     ...viewerNow(), ...officialNow() };

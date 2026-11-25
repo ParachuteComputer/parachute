@@ -27,11 +27,15 @@ const frame = (page: Page) => page.frameLocator("iframe.applet-frame:visible");
 
 
 /** Signed in with the key to the person's own Parachute (they run it); then `vault` made there, with Library and
- *  Languages put in as his apply.sh puts them; a minute on, the list offers it at its end: its Open line. */
-async function offered(page: Page, vault: string) {
+ *  Languages put in as his apply.sh puts them; a minute on, the list offers it at its end: its Open line (`said`: what
+ *  the line says after the vault's name). `admin`: what the key's own listing finds on the phone and the Mac, that the
+ *  person is the hub's admin (vault/newVaults.ts `noteAdmin`; the web build has no key, so it is kept here as the app
+ *  keeps it: e2e/android/libfirst.ts walks the key's own listing). */
+async function offered(page: Page, vault: string, admin: boolean, said: string) {
   const h = hubState();
   await page.clock.install();
   await signInWithKey(page, h, VAULT, "Mine");
+  if (admin) await page.evaluate((hub) => { const k = "parachute.newvaults.v1"; const v = JSON.parse(localStorage.getItem(k) ?? "{}"); localStorage.setItem(k, JSON.stringify({ ...v, admin: [...(v.admin ?? []), hub] })); }, h.origin);
   cli(h, ["vault", "create", vault, "--json", "--no-mirror"]);
   const dir = mkdtempSync(join(tmpdir(), "libfirst-"));
   try {
@@ -40,7 +44,7 @@ async function offered(page: Page, vault: string) {
   } finally { rmSync(dir, { recursive: true, force: true }); }
   await page.clock.fastForward("01:05");
   await page.goto("/");
-  const open = ui(page).getByRole("button", { name: `Open ${vault}`, exact: true });
+  const open = ui(page).getByRole("button", { name: `Open ${vault}${said}`, exact: true });
   await expect(open).toBeVisible({ timeout: 20_000 });
   return open;
 }
@@ -72,7 +76,8 @@ test("a vault made later, opened from the list: its applet asks on one card, and
   test.setTimeout(240_000);
   const h = hubState();
   where = info.project.name;
-  const open = await offered(page, LIB);
+  // the line says it opens as theirs
+  const open = await offered(page, LIB, true, " · yours");
   await shot(page, "list-not-open-here");
   const app = new URL(page.url()).origin;
   await open.click();
@@ -121,7 +126,7 @@ test("a vault this device already opened as someone else's: Mine in Settings, Li
   test.setTimeout(240_000);
   const h = hubState();
   where = `${info.project.name}-already`;
-  const open = await offered(page, ALREADY);
+  const open = await offered(page, ALREADY, true, " · yours");
   const app = new URL(page.url()).origin;
   // as a build before this one kept it: someone else's
   await page.evaluate(({ hub, vault }) => { const k = "parachute.whose.v1"; const v = JSON.parse(localStorage.getItem(k) ?? "{}"); localStorage.setItem(k, JSON.stringify({ whose: { ...(v.whose ?? {}), [`${hub} ${vault}`]: "theirs" }, ask: v.ask ?? [] })); }, { hub: h.origin, vault: ALREADY });

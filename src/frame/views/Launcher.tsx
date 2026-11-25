@@ -250,7 +250,7 @@ export function VaultsToOpen({ p }: { p: FrameParachute }) {
     <ul className="parachute-new plain" aria-label={`Vaults to open on ${p.name}`}>
       {p.fresh.map((v) => (
         <li key={v}>
-          <button type="button" className="parachute-new-add" disabled={busy} onClick={() => add(v)}>Open <b>{v}</b>{p.theirs?.includes(v) && <span className="quiet"> · someone else's</span>}</button>
+          <button type="button" className="parachute-new-add" disabled={busy} onClick={() => add(v)}>Open <b>{v}</b>{p.lines?.[v] && <span className="quiet"> · {p.lines[v]}</span>}</button>
           <button type="button" className="quiet-button" disabled={busy} aria-label={`Not now: ${v}`} onClick={() => void dismissVault(p.hub, v).catch(() => undefined)}>Not now</button>
         </li>
       ))}
