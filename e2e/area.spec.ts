@@ -74,7 +74,7 @@ test("an area's applet: Garden's room beside Garden's notes, its grant one room 
     // talking there: alice's message lands in Garden, naming Uni (listening)
     await talk.getByLabel(`Message Garden ${stamp}`).fill(`Shall we sow the kale ${stamp}`);
     await talk.getByRole("button", { name: "Send message" }).click();
-    await expect(talk.getByRole("log").locator("article.mine", { hasText: `Shall we sow the kale ${stamp}` })).toBeVisible({ timeout: 15_000 });
+    await expect(talk.getByRole("log").locator("article.mine:not(.unsent)", { hasText: `Shall we sow the kale ${stamp}` })).toBeVisible({ timeout: 15_000 });
     const sent = (await bob.query({ kinds: [9], "#h": [rooms.Garden], authors: [alice], limit: 10 })).find((e) => e.content.includes(`sow the kale ${stamp}`));
     expect(sent?.tags).toContainEqual(["p", bob.pubkey]);
 
