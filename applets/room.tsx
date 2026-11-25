@@ -575,7 +575,7 @@ const outbox = (() => {
     for (const o of kept) {
       const l = rooms.get(o.room) ?? [];
       // its files were only in memory: gone with the app, unless it was signed with them already (it goes as signed)
-      if (!l.some((x) => x.key === o.key)) l.push({ ...o, state: "failed", why: o.kept === false && !o.event ? "its file was only in memory, and went when the app stopped" : o.why ?? "the app stopped before it went" });
+      if (!l.some((x) => x.key === o.key)) l.push({ ...o, state: "failed", why: o.kept === false && !o.event && o.files.some((f) => !f.imeta) ? "its file was only in memory, and went when the app stopped" : o.why ?? "the app stopped before it went" });
       rooms.set(o.room, l.sort((a, b) => a.at - b.at));
     }
     bump();
@@ -687,7 +687,8 @@ const outbox = (() => {
           catch (e: any) { if (e?.code !== "not_granted" || !/approval/.test(String(e?.message))) throw e; cur = { ...cur, approval: true }; }
         }
         const r = await relay.publish(ev ?? template());
-        if (!r.ok) throw new Error(r.message || "the relay refused it");
+        // a relay that already has it may say so as a refusal ("duplicate:"): it is there all the same
+        if (!r.ok && !/^duplicate:/i.test(r.message ?? "")) throw new Error(r.message || "the relay refused it");
         // written away later only when signed (its event coming back takes a leftover away); else at once
         await this.drop(cur, !!ev);
         return (r.event ?? ev) as Ev & { sig: string };
@@ -708,12 +709,14 @@ function useOutbox(room: string) {
 /** A file of yours not sent yet, drawn from this device's copy. */
 function KeptAttachment({ f }: { f: Outgoing["files"][number] }) {
   const [url, setUrl] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
   useEffect(() => {
     let on = true, u: string | null = null;
-    outbox.file(f.file).then((b) => { if (on && b) { u = URL.createObjectURL(new Blob([b], { type: f.type })); setUrl(u); } }, () => {});
+    outbox.file(f.file).then((b) => { if (!on) return; if (!b) { setMissing(true); return; } u = URL.createObjectURL(new Blob([b], { type: f.type })); setUrl(u); }, () => { if (on) setMissing(true); });
     return () => { on = false; if (u) URL.revokeObjectURL(u); };
   }, [f.file]);
   const k = kindOf({ type: f.type } as Media);
+  if (missing) return <div className="file">{k === "audio" ? "The recording" : f.name} is no longer on this device</div>;
   if (!url) return <Loading>Loading {k === "audio" ? "voice note" : f.name}…</Loading>;
   // its own shape, as a picture from the relay is drawn (Attachment): its place kept before it loads
   const box = f.w && f.h ? { aspectRatio: `${f.w} / ${f.h}`, width: `min(${f.w}px, 100%, 420px, ${Math.round((420 * f.w) / f.h)}px)`, height: "auto" } : undefined;
