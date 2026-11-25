@@ -32,7 +32,7 @@ import { AskWhose, WhoseLine } from "./Whose";
 import { useParachutes, type ParachuteLine } from "../shell/parachutes";
 import { listHub } from "../shell/homeSettings";
 import { askVault, signOutOf } from "../vault/signInFlow";
-import { dismissVault, newVaultsOn, newVaultsRev, startAddVault, subscribeNewVaults } from "../vault/newVaults";
+import { dismissVault, newVaultsOn, newVaultsRev, opensAs, startAddVault, subscribeNewVaults } from "../vault/newVaults";
 import BundleChoice from "./BundleChoice";
 import BundleSections from "./BundleSections";
 import { appletsNeedingWrite, forgetOwnWrite, giveBack, heldLevel, ownWrite } from "../vault/reach";
@@ -134,7 +134,7 @@ function VaultsToAdd({ hub, name }: { hub: string; name: string }) {
       <ul className="parachute-new plain" aria-label={`Vaults to open on ${name}`}>
         {fresh.map((v) => (
           <li key={v}>
-            <button type="button" className="parachute-new-add" disabled={busy} onClick={() => add(v)}>Open <b>{v}</b></button>
+            <button type="button" className="parachute-new-add" disabled={busy} onClick={() => add(v)}>Open <b>{v}</b>{opensAs(hub, v) === "theirs" && <span className="quiet"> · someone else's</span>}</button>
             <button type="button" className="quiet-button" disabled={busy} aria-label={`Not now: ${v}`} onClick={() => dismissVault(hub, v)}>Not now</button>
           </li>
         ))}

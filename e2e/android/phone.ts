@@ -32,7 +32,9 @@ export async function phone(worldFile: string): Promise<Phone> {
       rmSync(join(work, "cmd.out"), { force: true });
       writeFileSync(join(work, "cmd"), `$ADB ${args}\n`);
       for (let i = 0; i < 240 && !existsSync(join(work, "cmd.out")); i++) await wait(250);
-      return existsSync(join(work, "cmd.out")) ? readFileSync(join(work, "cmd.out"), "utf8") : "";
+      const said = existsSync(join(work, "cmd.out")) ? readFileSync(join(work, "cmd.out"), "utf8") : "";
+      console.log(`${new Date().toISOString().slice(11, 19)} adb ${args.slice(0, 60)}: ${said.length} bytes`);
+      return said;
     },
   };
 }

@@ -9,11 +9,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { approveUntilBack, signInWithKey, ui } from "./helpers";
+import { approveUntilBack, signInWithKey, ui, vaultRow } from "./helpers";
 import { cli, hubState, mintToken, VAULT } from "./hub";
 
 const SHOTS = process.env.LIBFIRST_SHOTS || "";
 const LIB = "library";
+/** A vault a device opened as someone else's before this build (Aaron's `library` on his phone). */
+const ALREADY = "books";
 let n = 0, where = "";
 async function shot(page: Page, name: string) {
   if (!SHOTS) return;
@@ -23,28 +25,54 @@ async function shot(page: Page, name: string) {
 }
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame:visible");
 
-test.afterAll(() => { try { cli(hubState(), ["vault", "remove", LIB, "--yes"]); } catch { /* gone already */ } });
+
+/** Signed in with the key to the person's own Parachute (they run it); then `vault` made there, with Library and
+ *  Languages put in as his apply.sh puts them; a minute on, the list offers it at its end: its Open line. */
+async function offered(page: Page, vault: string) {
+  const h = hubState();
+  await page.clock.install();
+  await signInWithKey(page, h, VAULT, "Mine");
+  cli(h, ["vault", "create", vault, "--json", "--no-mirror"]);
+  const dir = mkdtempSync(join(tmpdir(), "libfirst-"));
+  try {
+    writeFileSync(join(dir, "token"), mintToken(`vault:${vault}:write`), { mode: 0o600 });
+    execFileSync("node", [join(import.meta.dirname, "..", "scripts", "install-applets.ts"), "--hub", h.origin, "--vault", vault, "--token-file", join(dir, "token"), "--applet", "library", "--applet", "languages", "--apply"], { stdio: "pipe" });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+  await page.clock.fastForward("01:05");
+  await page.goto("/");
+  const open = ui(page).getByRole("button", { name: `Open ${vault}`, exact: true });
+  await expect(open).toBeVisible({ timeout: 20_000 });
+  return open;
+}
+
+/** Library on the list, and its card. */
+async function libraryCard(page: Page) {
+  const library = ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Library/ });
+  await expect(library).toBeVisible({ timeout: 20_000 });
+  await library.click();
+  const card = page.getByRole("region", { name: /asking for access/ });
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  return card;
+}
+
+/** Allow on the card, and the hub's pages after it (how many): back on the applet, which runs. */
+async function allow(page: Page, app: string) {
+  const h = hubState();
+  const at = new URL(page.url()).pathname;
+  await page.getByRole("button", { name: "Allow" }).click();
+  const hub = await page.waitForURL((u) => u.origin === h.origin, { timeout: 5000 }).then(() => true, () => false);
+  const asked = hub ? await approveUntilBack(page, h.origin, app, undefined, at) : 0;
+  await expect(frame(page).getByRole("heading", { name: "Library" })).toBeVisible({ timeout: 30_000 });
+  return asked;
+}
+
+test.afterAll(() => { for (const v of [LIB, ALREADY]) { try { cli(hubState(), ["vault", "remove", v, "--yes"]); } catch { /* gone already */ } } });
 
 test("a vault made later, opened from the list: its applet asks on one card, and Add a book opens the picker", async ({ page }, info) => {
   test.setTimeout(240_000);
   const h = hubState();
   where = info.project.name;
-  await page.clock.install();
-  // signed in with the key, the Parachute his own: the vaults there now are his
-  await signInWithKey(page, h, VAULT, "Mine");
-  // later, on the hub: the library vault, and Library and Languages in it as his apply.sh puts them
-  cli(h, ["vault", "create", LIB, "--json", "--no-mirror"]);
-  const dir = mkdtempSync(join(tmpdir(), "libfirst-"));
-  try {
-    writeFileSync(join(dir, "token"), mintToken(`vault:${LIB}:write`), { mode: 0o600 });
-    execFileSync("node", [join(import.meta.dirname, "..", "scripts", "install-applets.ts"), "--hub", h.origin, "--vault", LIB, "--token-file", join(dir, "token"), "--applet", "library", "--applet", "languages", "--apply"], { stdio: "pipe" });
-  } finally { rmSync(dir, { recursive: true, force: true }); }
-
-  // a minute on, the list again: it asks the hub, and library is offered at its end
-  await page.clock.fastForward("01:05");
-  await page.goto("/");
-  const open = ui(page).getByRole("button", { name: `Open ${LIB}`, exact: true });
-  await expect(open).toBeVisible({ timeout: 20_000 });
+  const open = await offered(page, LIB);
   await shot(page, "list-not-open-here");
   const app = new URL(page.url()).origin;
   await open.click();
@@ -87,4 +115,46 @@ test("a vault made later, opened from the list: its applet asks on one card, and
   expect(asked).toBe(1);
   expect(more).toBe(1);
   await expect(page.getByRole("region", { name: /asking for access/ })).toHaveCount(0);
+});
+
+test("a vault this device already opened as someone else's: Mine in Settings, Library asks once more, and Add a book opens the picker", async ({ page }, info) => {
+  test.setTimeout(240_000);
+  const h = hubState();
+  where = `${info.project.name}-already`;
+  const open = await offered(page, ALREADY);
+  const app = new URL(page.url()).origin;
+  // as a build before this one kept it: someone else's
+  await page.evaluate(({ hub, vault }) => { const k = "parachute.whose.v1"; const v = JSON.parse(localStorage.getItem(k) ?? "{}"); localStorage.setItem(k, JSON.stringify({ whose: { ...(v.whose ?? {}), [`${hub} ${vault}`]: "theirs" }, ask: v.ask ?? [] })); }, { hub: h.origin, vault: ALREADY });
+  await page.reload();
+  // its line says so: it opens as someone else's
+  const marked = ui(page).getByRole("button", { name: `Open ${ALREADY} · someone else's`, exact: true });
+  await expect(marked).toBeVisible({ timeout: 20_000 });
+  await expect(open).toHaveCount(0);
+  await marked.click();
+  await page.waitForURL((u) => u.origin === h.origin || u.pathname === "/oauth/callback");
+  await approveUntilBack(page, h.origin, app);
+  await expect(await libraryCard(page)).toContainText(/someone else's vault/);
+  await allow(page, app);
+  await frame(page).getByRole("button", { name: "Add a book" }).click();
+  await expect(frame(page).getByText(/Could not open the picker: not_granted/)).toBeVisible();
+  await shot(page, "before-not-granted");
+
+  // what Aaron does once: Settings, the vault, Whose: Mine, and its card's own button
+  await page.goto("/settings");
+  const row = await vaultRow(page, ALREADY);
+  await row.getByRole("combobox", { name: `Whose ${ALREADY} is` }).selectOption("mine");
+  const sheet = page.getByRole("dialog", { name: `Is ${ALREADY} yours?` });
+  await shot(page, "whose-mine");
+  await sheet.getByRole("button", { name: `${ALREADY} is mine` }).click();
+  await expect(sheet).toHaveCount(0);
+  // Library asks once more (it now asks for the picker); the hub already lets Parachute change notes there
+  await page.goto("/");
+  const card = await libraryCard(page);
+  await expect(card).toContainText(`From your vault ${ALREADY}`);
+  await expect(card).toContainText(/files you pick/);
+  await shot(page, "card-again");
+  expect(await allow(page, app)).toBe(0);
+  await frame(page).getByRole("button", { name: "Add a book" }).click();
+  await expect(page.getByRole("dialog", { name: /Library asks for a file/ })).toBeVisible();
+  await shot(page, "picker");
 });

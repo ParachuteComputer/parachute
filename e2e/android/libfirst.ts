@@ -40,6 +40,9 @@ async function throughHub(label: string) {
 }
 
 console.log("app at", p().url());
+// nothing waits for ever: a step that can't happen fails the walk
+for (const c of ph.browser.contexts()) { c.setDefaultTimeout(30_000); for (const pg of c.pages()) pg.setDefaultTimeout(30_000); }
+setTimeout(() => { console.error("FAILED: the walk took over 15 minutes"); process.exit(1); }, 15 * 60_000).unref();
 // a phone has a screen lock: the key signs behind it (keyring levels), and Android's own unlock asks for it
 const PIN = "1357";
 console.log(await ph.adb(`shell locksettings set-pin ${PIN}`));
@@ -135,9 +138,38 @@ if (!(await visible(sheet))) {
   const toast = await applet().locator("body").innerText().catch(() => "");
   await fail(`Add a book didn't open the picker${/Could not open the picker[^\n]*/.exec(toast)?.[0] ? `: "${/Could not open the picker[^\n]*/.exec(toast)![0]}"` : ""}`);
 }
-await sheet.getByRole("button", { name: /Choose|Pick|file/i }).first().click();
+await sheet.getByRole("button", { name: /Choose a file/ }).click();
 await wait(4000);
 await ph.shot("android-picker");
+// Android's own picker: the book, by its name on the screen, tapped as a finger (the screen is read again until it shows)
+async function tapText(text: string): Promise<boolean> {
+  const where = async () => {
+    const xml = await ph.adb("shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; $ADB shell cat /sdcard/ui.xml");
+    const at = xml.indexOf(`text="${text}"`);
+    return at < 0 ? null : /bounds="(\[\d+,\d+\]\[\d+,\d+\])"/.exec(xml.slice(at))?.[1] ?? null;
+  };
+  for (let i = 0; i < 10; i++) {
+    // the picker settles its layout a moment after it shows (its chips come and go): tap only where it stays
+    const first = await where();
+    await wait(1500);
+    const now = await where();
+    if (first && now === first) {
+      const [x1, y1, x2, y2] = (now.match(/\d+/g) ?? []).map(Number);
+      await ph.adb(`shell input tap ${Math.round((x1 + x2) / 2)} ${Math.round((y1 + y2) / 2)}`);
+      await wait(2500);
+      // gone: the picker answered the app
+      if (!/documentsui/.test(await ph.adb("shell dumpsys window | grep -E 'mCurrentFocus'"))) return true;
+    }
+  }
+  return false;
+}
+if (!(await tapText("A Small Garden.epub"))) {
+  await ph.adb("shell input keyevent KEYCODE_BACK");
+  await fail("the book isn't in Android's picker");
+}
+console.log("picked in Android's picker");
+await until("the book isn't on its way", async () => /Waiting for an AI/.test(await applet().getByRole("region", { name: "Being added" }).innerText()), 60);
+await ph.shot("book-on-its-way");
 console.log(`hub screens: ${hubScreens}, system unlocks: ${unlocks}`);
-console.log("PASSED: Library opened the first time and Add a book opened the picker");
+console.log("PASSED: Library opened the first time, and a book picked in Android's picker is on its way");
 process.exit(0);
