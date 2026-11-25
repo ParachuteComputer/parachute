@@ -207,6 +207,38 @@ describe("cleanSheet", () => {
     // and when our reading and the browser's could still differ (a rule nested in a declaration list), none of it
     expect(cleanSheet(".a{color:red; & .b{position:fixed}}", none)).toBe("");
   });
+  it("a condition or a string that only names a position or a url() keeps the sheet (closing review, T-476)", () => {
+    expect(cleanSheet("@supports (position: sticky) { .hdr { top: 0 } } .b { color: blue }", none)).toBe("@supports (position: sticky){.hdr{top: 0}}.b{color: blue}");
+    expect(cleanSheet('.a { content: "position: fixed" } .b { color: blue }', none)).toBe('.a{content: "position: fixed"}.b{color: blue}');
+    // and a condition can't carry a rule out of sight
+    expect(cleanSheet("@media x } :host{position:fixed} .z{color:red}", none)).not.toMatch(/:host/);
+  });
+  it("strings and url()s are read as tokens everywhere: neither a quoted url() nor a { in a selector's string hides a rule (review of #225)", () => {
+    const host = ":host{contain:none;position:fixed;inset:0;z-index:2147483647;background:red}";
+    const pic = (u: string) => (u.startsWith("data:") ? u : null);
+    for (const css of [
+      `.a{background:url(data:image/png;base64,AAAA)} .z[title="{"]{} ${host} .y{content:"}`,
+      `.z[title="{"]{} :is(@a,:host){contain:none;background:red} .y{content:"}`,
+      `.a{background:url(data:image/png;base64,AAAA)} .z[title="{"]{} .b{color:red; div{position:fixed}} .y{content:"}`,
+      '!z"{"{}@import "http://host/evil.css"; .y{content:"}',
+    ]) {
+      const out = cleanSheet(css, pic);
+      expect(out, css).not.toMatch(/:host|position:\s*fixed|@import/i);
+    }
+    // a function whose name ends in url( isn't a url(: a quote in it opens a string, for us as for the browser
+    expect(cleanSheet(`@media (min-width:1px) and xurl("x) {} .a{color:red} ${host} .b{content:"}`, pic)).not.toMatch(/:host|position:\s*fixed/i);
+    expect(cleanSheet(`.a{background:xurl("x) ${host}")} .b{color:blue}`, pic)).not.toMatch(/:host|position:\s*fixed/i);
+    expect(cleanSheet(`.a{b:xurl(x"y)} ${host} .c{content:"}`, pic)).not.toMatch(/:host|position:\s*fixed/i);
+    expect(cleanSheet(`@media (min-width:1px){.a{b:xurl(x"y)}} ${host} .c{content:"}`, pic)).not.toMatch(/:host|position:\s*fixed/i);
+    // as the browser reads it: after `xurl(x` the quote opens a string to the line's end, so no rule follows
+    expect(cleanSheet('.q:is(xurl(x"y)){} .z{color:red}', none)).toBe("");
+    // a url( with a long run of spaces before its quote is still a quoted one
+    expect(cleanSheet(`.a{background:url(${" ".repeat(80)}"x)") ; color: red} .b{color:blue}`, none)).toBe(".a{background:none; color: red}.b{color:blue}");
+    // a condition is plain: one with a string, a url( or a bracket left open goes, with what is in it
+    expect(cleanSheet('@media "x" {.a{color:red}} @media (a {.b{color:red}} .c{color:blue}', none)).toBe(".c{color:blue}");
+    // a { in a selector's string is a string: the rule after it is its own, and stays
+    expect(cleanSheet('.z[title="{"]{color:red} .b{color:blue}', none)).toBe('.z[title="{"]{color:red}.b{color:blue}');
+  });
   it("a comment is a space: taking one out can't make a new comment, or :host (second security review)", () => {
     expect(cleanSheet("://**/* c */host{contain:none;margin-top:-180px} .b{color:blue}", none)).not.toMatch(/:\s*host|:\/\*/);
     expect(cleanSheet(".a{position: /**/ fixed; color: red}", none)).toBe(".a{color: red}");
@@ -218,6 +250,48 @@ describe("cleanSheet", () => {
   });
   it("a quoted url( with space before its quote is read as quoted", () => {
     expect(cleanSheet('.a{background:url( "x)")} .b{color:blue}', none)).toBe(".a{background:none}.b{color:blue}");
+  });
+  it("a long run of spaces, or many url(, can't make the cleaning slow (no backtracking through it; third review of #225)", () => {
+    const ws = " ".repeat(190_000);
+    const letters = "a".repeat(190_000);
+    for (const css of [`.a{background:url(${ws}`, `.a{color:${ws}red}`, `.a{position:${ws}fixed}`, `.a{b:${"url( ".repeat(45_000)}}`, `p{b:${"url(".repeat(47_500)}}`, `@${letters}#{}`, `p{color:${ws}transparent;x:y}`]) {
+      const t0 = performance.now();
+      cleanSheet(css, none);
+      expect(performance.now() - t0, css.slice(0, 30)).toBeLessThan(1500);
+    }
+    for (const html of [`<p style="background:url(${ws}">x</p>`, `<p style="${"url(".repeat(120_000)}">x</p>`, `<img src="https://x.example/p.png" width="1${" ".repeat(480_000)}x">`]) {
+      const t1 = performance.now();
+      expect(cleanMail(html, HIDDEN).root).toBeTruthy();
+      expect(performance.now() - t1, html.slice(0, 30)).toBeLessThan(1500);
+    }
+  });
+  it("CSS nested deeper than 32 (which crashes the browser's style pass) leaves the sheet out; 32 is kept", () => {
+    expect(cleanSheet(`p{${"a{".repeat(10_000)}color:red${"}".repeat(10_001)}`, none)).toBe("");
+    expect(cleanSheet(`${":is(".repeat(10_000)}p${")".repeat(10_000)}{color:red}`, none)).toBe("");
+    expect(cleanSheet(`${"(]".repeat(5_000)}p{color:red}`, none)).toBe("");
+    expect(cleanSheet(`${":is(".repeat(30)}p${")".repeat(30)}{color:red}`, none)).toBe(`${":is(".repeat(30)}p${")".repeat(30)}{color:red}`);
+  });
+  it("depth counts a condition's brackets and a style attribute's too; a rule nested in a rule may hold no at-rule (fourth review of #225)", () => {
+    expect(cleanSheet(`@supports selector(${":is(".repeat(10_000)}p${")".repeat(10_000)}){.a{color:red}} .b{color:blue}`, none)).toBe("");
+    expect(cleanSheet(`@media ${"(".repeat(5_000)}x${")".repeat(5_000)}{.a{color:red}}`, none)).toBe("");
+    expect(cleanSheet("@media (min-width:1px) and (max-width:2px){.a{color:red}}", none)).toBe("@media (min-width:1px) and (max-width:2px){.a{color:red}}");
+    const deep = cleanMail(`<p style="color: ${"var(--a, ".repeat(10_000)}red${")".repeat(10_000)}">x</p>`, HIDDEN);
+    const host = document.createElement("div"); host.append(deep.root);
+    expect(host.querySelector("p")!.hasAttribute("style")).toBe(false);
+    expect(cleanSheet("p{@scope{:scope{margin-left:77px}}} .b{color:blue}", none)).toBe("");
+    expect(cleanSheet("@media all{p{@starting-style{opacity:0}}}", none)).toBe("");
+  });
+  it("a stray } before an at-rule drops only that rule; an @ inside a value is no at-rule (fifth review of #225)", () => {
+    expect(cleanSheet(".a{color:red}} @media (max-width:600px){.b{width:100%}} .c{color:green}", none)).toBe(".a{color:red}.c{color:green}");
+    expect(cleanSheet(".a{font-family:@MS PGothic, serif} .b{color:blue}", none)).toBe(".a{font-family:@MS PGothic, serif}.b{color:blue}");
+  });
+  it("an element unwrapped with a great many children doesn't take the stack", () => {
+    const { host } = drawn(`<canvas>${"<br>".repeat(125_000)}</canvas><p>after</p>`);
+    expect(host.querySelectorAll("br")).toHaveLength(125_000);
+  }, 30_000);
+  it("<!-- or --> in front of an at-rule doesn't hide it: it goes", () => {
+    expect(cleanSheet("<!--@font-face{font-family:Zed;src:local(Arial)} .b{color:blue}", none)).toBe(".b{color:blue}");
+    expect(cleanSheet("-->@property --text{syntax:'*'} .b{color:blue}", none)).toBe(".b{color:blue}");
   });
   it("@media nested past 8 deep, or more CSS than 200,000 characters, is left out; neither takes the stack", () => {
     const deep = `${"@media a{".repeat(20000)}.x{color:red}${"}".repeat(20000)} .ok{color:blue}`;
@@ -252,7 +326,8 @@ describe("the last walk takes out what the steps before it should have", () => {
     root.innerHTML = '<p onclick="x()">a</p><a href="javascript:x()">b</a><span href="https://x">c</span><img src="https://x/y.png"><img src="data:text/html,x"><div style="background:url(https://x)">d</div><div title="javascript:x">e</div><table background="https://x/t.png"></table><img srcset="https://x/2x.png 2x"><a target="_top" ping="https://x/p">f</a>';
     // an SVG <a> has an allowed name in another namespace
     root.append(document.createElementNS("http://www.w3.org/2000/svg", "a"));
-    const script = document.createElement("script"); root.append(script);
+    // a script goes whole: its words are code, not words to keep
+    const script = document.createElement("script"); script.textContent = "steal()"; root.append(script);
     expect(lastWalk(root)).toBe(13);
     expect(root.innerHTML).toBe("<p>a</p><a>b</a><span>c</span><img><img><div>d</div><div>e</div><table></table><img><a>f</a>");
   });
@@ -266,9 +341,10 @@ describe("the last walk takes out what the steps before it should have", () => {
 });
 
 describe("cleanMail's last walk runs", () => {
-  it("an element DOMPurify keeps but a mail has no use for goes, counted", () => {
-    const { c, host } = drawn('<p>words</p><canvas width="9"></canvas><spacer type="block"></spacer>');
+  it("an element DOMPurify keeps but a mail has no use for goes, its words staying; counted", () => {
+    const { c, host, text } = drawn('<p>words</p><canvas width="9"><p>Your order #123 total $40</p></canvas><spacer type="block"></spacer>');
     expect(host.querySelector("canvas, spacer")).toBeNull();
+    expect(text).toContain("Your order #123 total $40");
     expect(c.refused).toBe(2);
   });
 });

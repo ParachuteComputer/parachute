@@ -159,12 +159,13 @@ describe("the calls, refused without their word", () => {
     const log: string[] = [];
     const r = createRouter([createAppModule(["pictures"], appDeps(log), () => t)]);
     expect(await r.call("app", "picture", { url: "https://cdn.example.org/a.png" }, {})).toMatchObject({ type: "image/png" });
+    expect(await r.call("app", "picture", { url: "https://[2606:2800:21f:cb07:6820:80da:af6b:8b2c]/p.jpg" }, {})).toMatchObject({ type: "image/png" });
     for (const url of ["http://127.0.0.1/a.png", "http://localhost/a.png", "http://10.1.2.3/a.png", "http://192.168.0.9/x", "http://172.20.0.1/x", "http://169.254.169.254/latest/meta-data", "http://100.88.1.2/x",
       "https://uni.tail1234.ts.net/api/x.png", "https://nas.local/x.png", "https://box.internal/x", "http://[::1]/x", "http://[fd12::1]/x", "http://[::ffff:7f00:1]/x", "https://intranet/x.png",
-      "mailto:a@b.org", "javascript:alert(1)", "data:image/png;base64,AAAA", "blob:https://x/1", "https://user:pw@cdn.example.org/a.png", "ftp://cdn.example.org/a.png", "http://[fec0::1]/x", "http://[64:ff9b:1::a00:1]/x", "http://[::7f00:1]/x", "http://2130706433/x", "http://0x7f.1/x"])
+      "mailto:a@b.org", "javascript:alert(1)", "data:image/png;base64,AAAA", "blob:https://x/1", "https://user:pw@cdn.example.org/a.png", "ftp://cdn.example.org/a.png", "http://[fec0::1]/x", "http://[64:ff9b:1::a00:1]/x", "http://[::7f00:1]/x", "http://2130706433/x", "http://0x7f.1/x", "http://[2002:c0a8:101::]/x", "http://[2001:db8::1]/x", "http://[2001:0:4136:e378::1]/x", "http://[100::1]/x"])
       expect(await code(r.call("app", "picture", { url }, {})), url).toBe("bad_params");
     expect(await code(r.call("app", "picture", { url: "https://cdn.example.org/a.png", extra: 1 }, {}))).toBe("bad_params");
-    for (let i = 0; i < 119; i++) await r.call("app", "picture", { url: `https://cdn.example.org/${i}.png` }, {});
+    for (let i = 0; i < 118; i++) await r.call("app", "picture", { url: `https://cdn.example.org/${i}.png` }, {});
     expect(await code(r.call("app", "picture", { url: "https://cdn.example.org/over.png" }, {}))).toBe("rate_limited");
     t += 60_001;
     expect(await code(r.call("app", "picture", { url: "https://cdn.example.org/later.png" }, {}))).toBe("ok");

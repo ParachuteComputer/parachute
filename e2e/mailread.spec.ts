@@ -26,7 +26,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR
 
 test.beforeAll(async () => {
   const pw = readFileSync(join(SECRETS!, "alice.pw"), "utf8").trim();
-  for (const f of ["apple-invite", "google-invite", "stripe-receipt", "substack-newsletter", "calendar-invite", "forwarded-thread", "plain-only", "cid-images", "hostile"]) {
+  for (const f of ["apple-invite", "google-invite", "stripe-receipt", "substack-newsletter", "calendar-invite", "forwarded-thread", "plain-only", "cid-images", "hostile", "iphone-mixed", "wide-table"]) {
     const mime = readFileSync(join(FIX, `${f}.eml`), "utf8").replace(/^Subject: (.*)$/m, `Subject: $1 ${stamp}`).replace(/\r?\n/g, "\r\n");
     await importMail(STALWART!, "alice@test.test", pw, Buffer.from(mime));
   }
@@ -217,6 +217,25 @@ test("inline cid: pictures show at once, from the message itself; they aren't li
     await expect(m.app.getByRole("button", { name: /Save (logo|squash)\.png/ })).toHaveCount(0);
     await opens(page, c, "Hours and directions", "https://oakstreet.example.test/hours");
     expect(m.fetched).toEqual([]);
+  } finally { await m.done(); }
+});
+
+test("a phone's photo between two parts shows where it was; a mail four phones wide scrolls to its last column", async ({ page }) => {
+  test.setTimeout(90_000);
+  const m = await openMail(page);
+  try {
+    const p = await m.read("iphone-mixed.eml");
+    const photo = p.getByRole("img", { name: "IMG_0412.png" });
+    await expect(photo).toBeVisible();
+    expect(await photo.evaluate((i: HTMLImageElement) => i.src.startsWith("blob:") && i.naturalWidth === 160)).toBe(true);
+    inOrder(await shown(bodyIn(p)), ["Look how the raised beds came out", "Cedar, no paint"]);
+    await m.back();
+    const w = await m.read("wide-table.eml");
+    // narrowed as far as it goes, the rest scrolls sideways (not cut off): its last column's link is reached and opens
+    const last = w.getByRole("link", { name: "Return it" });
+    await last.scrollIntoViewIfNeeded();
+    await expect(last).toBeInViewport();
+    await opens(page, w, "Return it", "https://tools.example.test/return");
   } finally { await m.done(); }
 });
 

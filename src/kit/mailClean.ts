@@ -80,29 +80,36 @@ const ESCAPED = "\uffff";
 /** CSS with its comments out, and each escape marked. */
 function plainCss(css: string): string {
   // a comment becomes a space, never nothing: taken out, `://**/* c */host` would join into a new comment and `:host`
-  return css.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, " ").replace(/\\(?:[0-9a-f]{1,6}\s?|[\s\S])/gi, ESCAPED);
+  // `<!--` and `-->` mean nothing to the browser between rules, so neither may stand in front of an at-rule unseen
+  return css.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, " ").replace(/<!--|-->/g, " ").replace(/\\(?:[0-9a-f]{1,6}\s?|[\s\S])/gi, ESCAPED);
 }
 // CSS's own whitespace, not JavaScript's \s (which takes U+00A0, inside an address to CSS)
-const URL_TOKEN = /url\([ \t\n\r\f]*(?:"([^"\n\r\f]*)"|'([^'\n\r\f]*)'|([^)"' \t\n\r\f]*))[ \t\n\r\f]*\)/gi;
+// its whitespace taken whole each side (a lookahead and its backreference: no backtracking through a long run of
+// spaces). A url( that ends a longer name (`xurl(`) is read as one too: whatever it leaves, the last look refuses a
+// url() the cleaning didn't write, so the sheet goes rather than being read two ways.
+const URL_TOKEN = /url\((?=([ \t\n\r\f]*))\1(?:"([^"\n\r\f]*)"|'([^'\n\r\f]*)'|([^()"' \t\n\r\f]*))(?=([ \t\n\r\f]*))\5\)/gi;
 /** A url() the cleaning didn't write: a blob: or data: picture in quotes is the only kind it writes. */
 const FOREIGN_URL = /url\((?!"(?:blob:|data:image\/))/i;
 /** Ways CSS loads or runs something that aren't url(): taken out with their declaration. */
 const CSS_BAD = /expression\s*\(|behavior\s*:|-moz-binding|javascript:|vbscript:|(?:image-set|image|src|cross-fade|element)\s*\(/i;
 /** A position but static, relative or absolute (fixed, sticky, a var() that may be either): out of the flow onto the
  *  screen, a mail's "cover" over its own words or a bar over the app's. */
-const PINNED = /^position\s*:(?!\s*(?:static|relative|absolute)\s*(?:!\s*important)?\s*$)/i;
+const pinned = (d: string) => {
+  const name = /^position\s*:/i.exec(d);
+  return !!name && !["static", "relative", "absolute"].includes(d.slice(name[0].length).replace(/!\s*important\s*$/i, "").trim().toLowerCase());
+};
 const PINNED_ANYWHERE = /(?<![\w-])position[ \t\n\r\f]*:(?![ \t\n\r\f]*(?:static|relative|absolute)\b)/i;
 /** How deep @media and the like may nest, and how much CSS a mail may have: past either, its CSS is left out (a deep
  *  nest would take the cleaning's stack, and the browser's). */
 const NEST_MAX = 8;
 export const CSS_MAX = 200_000;
-const COLOURS = /(?:^|[;{\s])(?:background(?:-color)?|color)\s*:\s*(?!\s*(?:transparent|inherit|initial|unset|none|currentcolor)\s*(?:!important)?\s*(?:;|$))/i;
+const COLOURS = /(?:^|[;{\s])(?:background(?:-color)?|color)\s*:(?!\s*(?:transparent|inherit|initial|unset|none|currentcolor)\s*(?:!important\s*)?(?:;|$))/i;
 
 /** One declaration list (a style attribute, a rule's block): each url() asked of `pic` (none if it may not draw), and
  *  each declaration that would load or run something another way dropped. */
 function cleanDeclarations(css: string, pic: (src: string) => string | null): string {
-  const withUrls = css.replace(URL_TOKEN, (_m, a, b, c) => { const got = pic(String(a ?? b ?? c ?? "").trim()); return got ? `url("${got.replace(/["\\\n]/g, "")}")` : "none"; });
-  return splitOutside(withUrls, ";").map((d) => d.trim()).filter((d) => d && !CSS_BAD.test(d) && !PINNED.test(d) && !FOREIGN_URL.test(d) && closed(d)).join("; ");
+  const withUrls = css.replace(URL_TOKEN, (_m, _w, a, b, c) => { const got = pic(String(a ?? b ?? c ?? "").trim()); return got ? `url("${got.replace(/["\\\n]/g, "")}")` : "none"; });
+  return splitOutside(withUrls, ";").map((d) => d.trim()).filter((d) => d && !CSS_BAD.test(d) && !pinned(d) && !FOREIGN_URL.test(d) && closed(d)).join("; ");
 }
 /** Where a string or an unquoted url() that starts at `i` ends, as the browser's CSS tokenizer reads them: a string
  *  ends at its quote or at a line break (which it doesn't take); an unquoted url( at its `)`, whatever quotes are in it.
@@ -114,11 +121,18 @@ function tokenEnd(s: string, i: number): number {
     return s.length;
   }
   if (c === "u" || c === "U") {
-    // url( and its whitespace, then not a quote (no backtracking into the whitespace: `url( "x)")` is a quoted one)
-    const open = /^url\([ \t\n\r\f]*/i.exec(s.slice(i, i + 64));
-    if (open && s[i + open[0].length] !== '"' && s[i + open[0].length] !== "'") { const close = s.indexOf(")", i); return close < 0 ? s.length : close + 1; }
+    // url( and its whitespace, then not a quote (`url( "x)")` is a quoted one, a function with a string)
+    const j = urlOpen(s, i);
+    if (j >= 0 && s[j] !== '"' && s[j] !== "'") { const close = s.indexOf(")", i); return close < 0 ? s.length : close + 1; }
   }
   return -1;
+}
+/** Where a url( that starts at `i` has its first character after its whitespace, or -1. */
+function urlOpen(s: string, i: number): number {
+  if (s.slice(i, i + 4).toLowerCase() !== "url(") return -1;
+  let j = i + 4;
+  while (j < s.length && (s[j] === " " || s[j] === "\t" || s[j] === "\n" || s[j] === "\r" || s[j] === "\f")) j++;
+  return j;
 }
 /** Every string in it closes on its line (one that doesn't would run on over the rules after it). */
 function closed(s: string): boolean {
@@ -158,6 +172,12 @@ function blockEnd(s: string, open: number): number {
   }
   return s.length;
 }
+const plainCondition = (p: string) => {
+  if (!/^@[\w \t\n\r\f(),.:%/<>=!*+-]*$/i.test(p) || /url\(|:host|::?slotted|::?part\b/i.test(p)) return false;
+  let depth = 0;
+  for (const c of p) { if (c === "(") depth++; else if (c === ")" && --depth < 0) return false; }
+  return depth === 0;
+};
 const KEEP_AT = /^@(?:media|supports|layer|container|document|-moz-document)\b/i;
 const FRAMES_AT = /^@(?:-webkit-|-moz-|-o-)?keyframes\b/i;
 /** A mail's style sheet: its rules kept with their declarations cleaned; @media and the like kept with what is in them;
@@ -165,41 +185,88 @@ const FRAMES_AT = /^@(?:-webkit-|-moz-|-o-)?keyframes\b/i;
  *  host (`:host`, `::slotted`, `::part`) dropped, so nothing reaches the app; `html`, `body` and `:root` mean the root. */
 export function cleanSheet(css: string, pic: (src: string) => string | null): string {
   if (css.length > CSS_MAX) return "";
-  const out = cleanRules(css, pic, 0);
-  // a last look at the whole: if a rule for the host, a url() it didn't write or a position out of the flow is in it
-  // anywhere (a parse of ours that differs from the browser's), none of it is kept
-  return /:host|::?slotted|::?part\b/i.test(out) || FOREIGN_URL.test(out) || PINNED_ANYWHERE.test(out) ? "" : out;
+  const { out, seen } = cleanRules(css, pic, 0);
+  // a last look at the whole, as the browser will read it (`seen`: each string blanked, each kept at-rule's condition
+  // left out): if a rule for the host, a url() it didn't write, or a position out of the flow is in it anywhere (a
+  // reading of ours that differs from the browser's), none of it is kept
+  // (a kept condition's brackets are in `seen`, its words not; an at-keyword left in `seen` is one nested in a rule,
+  // as CSS nesting allows: @scope, @starting-style, none of them ours)
+  return /:host|::?slotted|::?part\b/i.test(seen) || FOREIGN_URL.test(seen) || PINNED_ANYWHERE.test(seen) || tooDeep(seen) || /(?:^|[{};])[ \t\n\r\f]*@[\w-]/.test(seen) ? "" : out;
 }
-function cleanRules(css: string, pic: (src: string) => string | null, depth: number): string {
-  const s = plainCss(css);
-  let out = "", i = 0, semi = -2, open = -2;
-  while (i < s.length) {
-    // the next semicolon and brace, each looked for again only once it is behind (looking each time would read the
-    // sheet once a rule)
-    if (semi !== -1 && semi < i) semi = s.indexOf(";", i);
-    if (open !== -1 && open < i) open = s.indexOf("{", i);
-    // a statement without a block ends at its semicolon, and goes: an @import, an @charset, or anything else before
-    // the next rule that isn't one
-    if (semi >= 0 && (open < 0 || semi < open)) { i = semi + 1; continue; }
-    if (open < 0) break;
-    const prelude = s.slice(i, open).trim(), end = blockEnd(s, open), body = s.slice(open + 1, end);
-    i = end + 1;
-    if (prelude.startsWith("@")) {
-      if (KEEP_AT.test(prelude) && depth < NEST_MAX) out += `${prelude}{${cleanRules(body, pic, depth + 1)}}`;
-      else if (FRAMES_AT.test(prelude)) out += `${prelude}{${frames(body, pic)}}`;
-      continue;
-    }
-    if (!prelude || prelude.includes(ESCAPED) || /:host|::?slotted|::?part\b/i.test(prelude)) continue;
-    const selector = prelude.replace(/(?<![\w.#:-])(?:html|body)(?![\w-])|:root\b/gi, ".pa-mail-doc");
-    out += `${selector}{${cleanDeclarations(body, pic)}}`;
+/** Braces, brackets and parentheses nested deeper than this: the browser's own style pass slows to seconds and then
+ *  crashes (CSS nesting, a selector of :is( in :is( …), so such a sheet is left out. */
+const DEPTH_MAX = 32;
+function tooDeep(seen: string): boolean {
+  const open: string[] = [];
+  const pairs: Record<string, string> = { "}": "{", ")": "(", "]": "[" };
+  for (const c of seen) {
+    if (c === "{" || c === "(" || c === "[") { open.push(c); if (open.length > DEPTH_MAX) return true; }
+    else if (pairs[c]) { const at = open.lastIndexOf(pairs[c]); if (at >= 0) open.length = at; }
+  }
+  return false;
+}
+/** A style attribute, cleaned; nested past DEPTH_MAX (var( in var( …), none of it. */
+function styleOf(raw: string | null | undefined, pic: (src: string) => string | null): string {
+  const style = cleanDeclarations(plainCss(raw ?? ""), pic);
+  return tooDeep(blank(style)) ? "" : style;
+}
+/** The first `{` or `;` at or after `i` outside strings and url()s: where a statement's prelude ends (-1: none). */
+function statementEnd(s: string, i: number): number {
+  for (let j = i; j < s.length; j++) {
+    const end = tokenEnd(s, j);
+    if (end >= 0) { j = end - 1; continue; }
+    if (s[j] === "{" || s[j] === ";") return j;
+  }
+  return -1;
+}
+/** CSS for the last look: each string blanked (it says nothing that applies); a url() kept whole, quoted or not (the
+ *  last look checks what it loads). Read with the same tokenizer as the rules. */
+function blank(s: string): string {
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const q = urlOpen(s, i);
+    if (q >= 0 && (s[q] === '"' || s[q] === "'")) { const end = tokenEnd(s, q); out += s.slice(i, end); i = end - 1; continue; }
+    const end = tokenEnd(s, i);
+    if (end < 0) { out += s[i]; continue; }
+    out += s[i] === '"' || s[i] === "'" ? '""' : s.slice(i, end);
+    i = end - 1;
   }
   return out;
+}
+function cleanRules(css: string, pic: (src: string) => string | null, depth: number): { out: string; seen: string } {
+  const s = plainCss(css);
+  let out = "", seen = "", i = 0;
+  while (i < s.length) {
+    const at = statementEnd(s, i);
+    if (at < 0) break;
+    // a statement without a block ends at its semicolon, and goes: an @import, an @charset, or anything else before
+    // the next rule that isn't one
+    if (s[at] === ";") { i = at + 1; continue; }
+    const prelude = s.slice(i, at).trim(), end = blockEnd(s, at), body = s.slice(at + 1, end);
+    i = end + 1;
+    if (prelude.startsWith("@")) {
+      // a condition is plain words, numbers and brackets that close: no string, url(, brace, escape or the host's name
+      // (any of them could put our reading out of step with the browser's, and the last look leaves conditions out)
+      if (!plainCondition(prelude)) continue;
+      if (KEEP_AT.test(prelude) && depth < NEST_MAX) { const inner = cleanRules(body, pic, depth + 1); out += `${prelude}{${inner.out}}`; seen += `@${prelude.replace(/[^()[\]]/g, "")}{${inner.seen}}`; }
+      else if (FRAMES_AT.test(prelude)) { const f = frames(body, pic); out += `${prelude}{${f}}`; seen += `@{${blank(f)}}`; }
+      continue;
+    }
+    // a selector with a stray } in it (one too many before it) is no selector: the browser drops that rule, and so do we
+    if (!prelude || prelude.includes(ESCAPED) || blank(prelude).includes("}") || /:host|::?slotted|::?part\b/i.test(prelude)) continue;
+    const selector = prelude.replace(/(?<![\w.#:-])(?:html|body)(?![\w-])|:root\b/gi, ".pa-mail-doc");
+    const rule = `${selector}{${cleanDeclarations(body, pic)}}`;
+    out += rule;
+    seen += blank(rule);
+  }
+  return { out, seen };
 }
 function frames(body: string, pic: (src: string) => string | null): string {
   let out = "", i = 0;
   while (i < body.length) {
-    const open = body.indexOf("{", i);
+    const open = statementEnd(body, i);
     if (open < 0) break;
+    if (body[open] === ";") { i = open + 1; continue; }
     const end = blockEnd(body, open);
     out += `${body.slice(i, open).trim()}{${cleanDeclarations(body.slice(open + 1, end), pic)}}`;
     i = end + 1;
@@ -207,7 +274,7 @@ function frames(body: string, pic: (src: string) => string | null): string {
   return out;
 }
 
-const px = (v: string | null | undefined) => { const m = /^\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i.exec(v ?? ""); return m ? Number(m[1]) : null; };
+const px = (v: string | null | undefined) => { const m = /^\s*(\d+(?:\.\d+)?)\s*(?:px\s*)?$/i.exec(v ?? ""); return m ? Number(m[1]) : null; };
 /** A picture there only to tell its sender the mail was opened: drawn 3 px or less, or not drawn at all. */
 function tracker(img: Element): boolean {
   const style = (img.getAttribute("style") ?? "").toLowerCase();
@@ -217,6 +284,8 @@ function tracker(img: Element): boolean {
     || /^\s*none\s*$/.test(decl("display") ?? "") || /^\s*hidden\s*$/.test(decl("visibility") ?? "") || /^\s*0(?:\.0*)?\s*$/.test(decl("opacity") ?? "");
 }
 
+/** What the last walk takes out whole, with what is in it. */
+const NEVER_TAGS = new Set("script style template iframe frame frameset object embed applet form input button textarea select option optgroup datalist output svg math noscript noembed noframes link meta base video audio source track dialog map area portal".split(" "));
 /** The tags the last walk allows (DOMPurify's HTML set, less FORBID_TAGS; details and summary are ours, for quotes). */
 const ALLOWED = new Set("a abbr acronym address article aside b bdi bdo big blink blockquote br caption center cite code col colgroup data dd del details dfn dir div dl dt em figcaption figure font footer h1 h2 h3 h4 h5 h6 header hgroup hr i img ins kbd label legend li main mark marquee menu meter nav nobr ol p picture pre progress q rp rt ruby s samp section small span strike strong sub summary sup table tbody td tfoot th thead time tr tt u ul var wbr fieldset".split(" "));
 
@@ -263,7 +332,7 @@ export function cleanMail(html: string, pictures: Pictures): Clean {
     } else el.removeAttribute("src");
     if (el.hasAttribute("background")) { const got = pic(el.getAttribute("background") ?? ""); if (got) el.setAttribute("background", got); else el.removeAttribute("background"); }
     if (el.hasAttribute("style")) {
-      const style = cleanDeclarations(plainCss(el.getAttribute("style") ?? ""), pic);
+      const style = styleOf(el.getAttribute("style"), pic);
       if (style) el.setAttribute("style", style); else el.removeAttribute("style");
       if (COLOURS.test(style)) colored = true;
     }
@@ -278,7 +347,7 @@ export function cleanMail(html: string, pictures: Pictures): Clean {
   const bg = body?.getAttribute("bgcolor"), ink = body?.getAttribute("text");
   if (bg && /^#?[0-9a-z]{3,20}$/i.test(bg)) own.push(`background-color: ${bg}`);
   if (ink && /^#?[0-9a-z]{3,20}$/i.test(ink)) own.push(`color: ${ink}`);
-  const bodyStyle = cleanDeclarations(plainCss(body?.getAttribute("style") ?? ""), pic);
+  const bodyStyle = styleOf(body?.getAttribute("style"), pic);
   if (bodyStyle) own.push(bodyStyle);
   if (own.length) { root.setAttribute("style", own.join("; ")); if (COLOURS.test(root.getAttribute("style")!)) colored = true; }
   root.append(frag);
@@ -294,7 +363,17 @@ export function cleanMail(html: string, pictures: Pictures): Clean {
 export function lastWalk(root: Element): number {
   let refused = 0;
   for (const el of Array.from(root.querySelectorAll("*"))) {
-    if (!ALLOWED.has(el.localName) || el.namespaceURI !== "http://www.w3.org/1999/xhtml") { el.remove(); refused++; continue; }
+    if (!root.contains(el)) continue; // went with an element above it
+    if (el.namespaceURI !== "http://www.w3.org/1999/xhtml" || NEVER_TAGS.has(el.localName)) { el.remove(); refused++; continue; }
+    // one a mail has no use for (a <canvas>, a <spacer>) goes, and its words stay where they were
+    if (!ALLOWED.has(el.localName)) {
+      // moved out a child at a time (spread into one call, a great many would take the stack)
+      const words = document.createDocumentFragment();
+      while (el.firstChild) words.appendChild(el.firstChild);
+      el.replaceWith(words);
+      refused++;
+      continue;
+    }
     for (const a of Array.from(el.attributes)) {
       const v = a.value.trim();
       const bad = /^on/i.test(a.name) || NEVER_ATTR.includes(a.name)
