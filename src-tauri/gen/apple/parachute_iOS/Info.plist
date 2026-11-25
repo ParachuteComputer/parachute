@@ -44,8 +44,6 @@
 	<string>Parachute records a voice note when you press Record.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Parachute uses the camera when you scan another device&apos;s pairing code or take a photo for a note.</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Parachute asks for Face ID before it approves something in your name.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
