@@ -2,7 +2,7 @@
 // tested in e2e/services.spec.ts and src-tauri/tests). What is held here: a subscription made before the sign-in goes
 // out once; a live subscription stays open however many events pass through it; nothing connects after close.
 import { describe, expect, it, vi } from "vitest";
-import { createBroker, TAP_AGAIN } from "./broker";
+import { APPROVAL_GOES_AT_ONCE, createBroker, TAP_AGAIN } from "./broker";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import type { Native, SignedEvent } from "./native";
 import type { Service } from "../applet/services";
@@ -103,25 +103,32 @@ describe("a post signed before, sent as it is (a retry keeps its id: T-476)", ()
     await expect(b.publish({ service: "rooms", event: { ...ev, extra: 1 } })).rejects.toMatchObject({ code: "bad_params" });
   });
 
-  it("a bot's /approve signed earlier and sent again from storage needs its own tap; one signed in this session was paid for when signed", async () => {
+  it("a bot's /approve is never signed to keep (it could go later, untapped); one handed back signed needs a tap every time", async () => {
     const svc: Service = { ...relay, approvals: { from: ["c".repeat(64)] } } as Service;
     let taps = 0;
     const shell = { tap: () => (taps-- > 0 ? true as const : false), secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null };
     FakeSocket.all = []; FakeSocket.refuse = false;
-    const mk = () => createBroker({ native: real(), session: "s", applet: { name: "Rooms", subject: "v\u0000n" }, services: [svc], hubs: [], emit: () => {}, socket: (u) => new FakeSocket(u) as unknown as WebSocket, shell });
-    const b = mk();
+    const b = createBroker({ native: real(), session: "s", applet: { name: "Rooms", subject: "v\u0000n" }, services: [svc], hubs: [], emit: () => {}, socket: (u) => new FakeSocket(u) as unknown as WebSocket, shell });
+    made.push(b);
     taps = 1;
-    const ev = await b.sign({ service: "rooms", event: { kind: 9, content: "/approve", tags: [["h", "r"]] } });
-    // the same session sends it without another tap
+    await expect(b.sign({ service: "rooms", event: { kind: 9, content: "/approve", tags: [["h", "r"]] } })).rejects.toMatchObject({ code: "not_granted", message: APPROVAL_GOES_AT_ONCE });
+    await expect(b.sign({ service: "rooms", event: { kind: 9, content: "@Uni /deny", tags: [["h", "r"]] } })).rejects.toMatchObject({ code: "not_granted" });
+    // signed and sent at its tap, as before
+    taps = 1;
+    const first = b.publish({ service: "rooms", event: { kind: 9, content: "/approve", tags: [["h", "r"]] } });
+    await tick(5);
+    const sock = FakeSocket.all[0];
+    await signIn(sock);
+    await tick(5);
+    const ev = sent(sock)[0];
+    sock.from(["OK", ev.id, false, "error: try later"]);
+    await expect(first).resolves.toMatchObject({ ok: false });
+    // that event handed back to go again: a tap again, each time
+    await expect(b.publish({ service: "rooms", event: { ...ev } })).rejects.toMatchObject({ code: "not_granted" });
+    taps = 1;
     void b.publish({ service: "rooms", event: { ...ev } });
     await tick(5);
-    // a new session (the app started again) holds it from storage: the retry is a tap
-    const later = mk();
-    await expect(later.publish({ service: "rooms", event: { ...ev } })).rejects.toMatchObject({ code: "not_granted" });
-    taps = 1;
-    void later.publish({ service: "rooms", event: { ...ev } });
-    await tick(5);
-    b.close(); later.close();
+    expect(sent(sock).map((e) => e.id)).toEqual([ev.id, ev.id]);
   });
 });
 
@@ -213,6 +220,34 @@ describe("the broker's relay connection", () => {
       // the relay had it from the first time
       second.from(["OK", sent[1].id, true, "duplicate:"]);
       await expect(posted).resolves.toMatchObject({ ok: true, id: sent[1].id });
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("the same event published twice while it waits: one send, and both are told its answer (a second tap)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const n = native();
+      n.signEvent = async (_s, _v, t) => ({ ...ev("same"), ...t, pubkey: "a".repeat(64) });
+      const { b } = setup(n);
+      const one = b.publish({ service: "rooms", event: { kind: 9, content: "hi", tags: [["h", "r"]] } });
+      const two = b.publish({ service: "rooms", event: { kind: 9, content: "hi", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(1);
+      FakeSocket.refuse = true;
+      FakeSocket.all[0].onclose?.();
+      await vi.advanceTimersByTimeAsync(15_500);
+      await expect(one).resolves.toMatchObject({ ok: false });
+      await expect(two).resolves.toMatchObject({ ok: false });
+      FakeSocket.refuse = false;
+      const three = b.publish({ service: "rooms", event: { kind: 9, content: "hi", tags: [["h", "r"]] } });
+      const four = b.publish({ service: "rooms", event: { kind: 9, content: "hi", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(10);
+      const sock = FakeSocket.all[FakeSocket.all.length - 1];
+      await signIn(sock, () => vi.advanceTimersByTimeAsync(1));
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sock.sent.filter((m) => Array.isArray(m) && m[0] === "EVENT")).toHaveLength(1);
+      sock.from(["OK", "same", true, ""]);
+      await expect(three).resolves.toMatchObject({ ok: true });
+      await expect(four).resolves.toMatchObject({ ok: true });
     } finally { vi.useRealTimers(); }
   });
 

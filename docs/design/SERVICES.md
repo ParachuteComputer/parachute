@@ -173,10 +173,11 @@ waits (15 s) for the next sign-in and is sent again, the same event (a relay tha
 and only when that wait runs out is it told it failed, and then never sent later. Woken (the network back, the app in
 front), a connection waiting out its growing pause tries at once, and one that was away over 20 s is asked for a sign
 of life (a read of nothing) and replaced if none comes in 4 s: a socket can die unseen while a phone sleeps (T-476).
-`sign` is `publish` without the sending: the same checks, the signed event back. An applet that keeps what it sends
-(Rooms) signs once, keeps the event, and publishes that event on every try; a signed event handed to `publish` is
-checked again (whole, the person's, its signature, in its kinds and rooms; a bot's approval needs a tap unless this
-session signed it) and sent as it is, never signed again. `loadPrivate` asks the relay for the person's
+`sign` is `publish` without the sending: the same checks, the signed event back, except that it never signs a bot's
+approval (`/approve`, `/deny`): one held could be sent minutes later with no tap, so an approval is signed and sent
+together at its tap. An applet that keeps what it sends (Rooms) signs once, keeps the event, and publishes that event on
+every try; a signed event handed to `publish` is checked again (whole, the person's, its signature, in its kinds and
+rooms; a bot's approval needs a tap every time) and sent as it is, never signed again. `loadPrivate` asks the relay for the person's
 own events of the entry's kind and `t`, keeps those whose `d` starts with the prefix, and has Rust open each
 (`svc_private_open` recomputes the event's id and checks its signature, then checks author, kind, `t` and `d` itself: a hostile relay can't hand it a forged event wrapping someone else's ciphertext); `savePrivate` has Rust seal and sign
 it (`svc_private_save`). An applet can't hand the shell ciphertext to open.

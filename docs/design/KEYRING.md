@@ -262,7 +262,9 @@ alone are refused. Not room-scoped, said on the card's notes: media on that rela
   note would show up as a note and sync everywhere. Beside it, files it holds until they are sent
   (`storage.setFile(key, bytes)`, `getFile(key)`, `fileKeys()`; null removes one): 25 MB each, 100 MB in all, in the
   app's data folder (a browser: IndexedDB), gone with the rest on Revoke. Rooms keeps a recording or a picture there
-  from the moment it is sent until the relay has it (T-476), so a dropped connection never loses it.
+  from the moment it is sent until the relay has it (T-476), so a dropped connection never loses it. An applet allowed
+  `storage` before this holds files too without a new Allow: its card says so, marked New, the next time it shows (its
+  next code change shows it anyway).
 - **Vault attachments** (new call `vault.attach(noteId, bytes, type, {transcribe})`): adds a file to a note the applet
   may `update` (its access rule governs it), through the hub's own upload and attach routes; `transcribe` asks the hub
   to transcribe audio.
@@ -318,7 +320,7 @@ denial until Android removed the app). While they are off, Settings → Notifica
 |---|---|
 | An applet declares its own key as an approver | `from` counts only for keys on the device's trusted list, added by the person behind the unlock. |
 | An applet approves on its own | Every approve needs a tap in its frame; the grace belongs to the applet that earned it and each use shows the shell's line. |
-| An applet posts Hermes's `/approve` | Only an applet with the `approvals` grant, during a tap, until Hermes takes sealed answers. The text is read as leniently as Hermes reads it (white space, controls, invisible characters and leading mentions such as `@Uni` dropped first). **Not closed:** while Hermes waits on a prompt it also takes bare words ("yes", "ok", "approve", 👍) as an approval, and refusing those would stop ordinary chat; any applet that may post in that room can say them. This ends when Hermes takes only sealed answers from the approval key. |
+| An applet posts Hermes's `/approve` | Only an applet with the `approvals` grant, during a tap (each time it is sent: `services.sign` won't sign one to hold, and one handed back signed needs a fresh tap), until Hermes takes sealed answers. The text is read as leniently as Hermes reads it (white space, controls, invisible characters and leading mentions such as `@Uni` dropped first). **Not closed:** while Hermes waits on a prompt it also takes bare words ("yes", "ok", "approve", 👍) as an approval, and refusing those would stop ordinary chat; any applet that may post in that room can say them. This ends when Hermes takes only sealed answers from the approval key. |
 | A "tap" that isn't one | A tap is the browser's user activation in the applet's frame: a keystroke counts too, so a hostile applet with the grant can spend the person's typing on an answer (one per activation, and a powerful one still asks for the unlock). |
 | An applet without the grant gets an approval signature | `Role::Approval` signs only through `services.answer`/`secret` and http `approve` ops, each refused without the grant line; tested with a separate key (its pubkey never appears) and with the same key (no kind 13 is ever signed). |
 | An applet asks to join a network on its own | A tap in its frame, then the device's join level (the passcode and the unlock by default) on the shell's own sheet and prompt, every time; the applet never sees the passcode. An applet that only names the enroller's address gets everyday requests, without the join tag the enroller requires. |

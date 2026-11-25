@@ -50,7 +50,7 @@ export class RelayConn {
     this.connect();
     // the app back in front, or the network back: don't wait out the growing pause
     if (typeof window !== "undefined" && typeof document !== "undefined") {
-      const online = () => this.wake();
+      const online = () => this.wake(true);
       const seen = () => { if (document.visibilityState === "hidden") this.hiddenAt = Date.now(); else this.wake(); };
       window.addEventListener("online", online);
       document.addEventListener("visibilitychange", seen);
@@ -59,12 +59,14 @@ export class RelayConn {
   }
 
   /** The device is back (in front, or online): a connection waiting to try again tries now; an open one that was away
-   *  a while is asked for a sign of life, and dropped for a new one when none comes. */
-  wake() {
+   *  a while is asked for a sign of life, and dropped for a new one when none comes. `network`: the network itself came
+   *  back, so a socket still trying to connect over the old one is given up for a new one. */
+  wake(network = false) {
     if (this.closedForGood) return;
     const away = this.hiddenAt && Date.now() - this.hiddenAt > AWAY_MS;
     this.hiddenAt = 0;
-    if (this.connectNow()) return;
+    if (!this.ws && this.againTimer) { this.tries = 0; this.connectNow(); return; }
+    if (network && this.ws && !this.open) { this.drop("the network changed"); return; }
     if (this.ws && this.open && this.authed && away && !this.probe) {
       // a read of nothing: any relay answers it with EOSE at once
       const id = `p${Math.random().toString(36).slice(2, 10)}`;
@@ -73,10 +75,10 @@ export class RelayConn {
     }
   }
 
-  /** Waiting out a pause before trying again: try now. */
+  /** Waiting out a pause before trying again: try now (the pause still grows if this try fails too). */
   private connectNow() {
     if (this.ws || !this.againTimer || this.closedForGood) return false;
-    clearTimeout(this.againTimer); this.againTimer = null; this.tries = 0;
+    clearTimeout(this.againTimer); this.againTimer = null;
     this.connect();
     return true;
   }
@@ -89,7 +91,7 @@ export class RelayConn {
     try { ws.close(); } catch { /* gone */ }
     this.closed(why);
     // it was this side that gave up on it, not the relay: a new one at once
-    this.connectNow();
+    this.tries = 0; this.connectNow();
   }
 
   private connect() {
@@ -231,15 +233,16 @@ export class RelayConn {
 
   publish(ev: SignedEvent): Promise<{ ok: boolean; message: string }> {
     return new Promise((resolve) => {
+      // the same event asked again while it waits (a second tap): one wait, and both are told its answer
       const was = this.waiting.get(ev.id);
+      if (was) { const first = was.resolve; was.resolve = (r) => { first(r); resolve(r); }; if (!this.authed) this.connectNow(); return; }
       const timer = setTimeout(() => {
+        const w = this.waiting.get(ev.id);
         this.waiting.delete(ev.id);
         // told it failed: if it was still waiting for a sign-in, it doesn't go out later
         this.posts = this.posts.filter((m) => !(Array.isArray(m) && m[0] === "EVENT" && (m[1] as SignedEvent)?.id === ev.id));
-        resolve({ ok: false, message: this.authed ? "no answer from the relay" : "can't reach the relay" });
+        w?.resolve({ ok: false, message: this.authed ? "no answer from the relay" : "can't reach the relay" });
       }, OK_WAIT_MS);
-      // the same event asked again while it waits (a second tap): one wait, both told its answer
-      if (was) { clearTimeout(was.timer); const first = was.resolve; this.waiting.set(ev.id, { ev, resolve: (r) => { first(r); resolve(r); }, timer }); return; }
       this.waiting.set(ev.id, { ev, resolve, timer });
       // signed in: it goes now; else after the sign-in (`ready` sends every publish waiting), and a connection waiting
       // out its pause tries at once (a person is waiting on this)

@@ -494,8 +494,11 @@ type Place = { get(): number | null; set(fromFoot: number | null): void };
 // and the app starting again. It is signed once, before it goes (relay.sign), and that very event is what every retry
 // sends: a relay that already has it answers "duplicate", so it is never there twice. A relay takes an event only
 // within 15 minutes of its time (Buzz): an older one is looked for by its id first, and signed again only when the
-// relay doesn't have it. Nothing is sent again by itself later: a retry is your tap. An app older than this (no
-// setFile, no sign) still keeps it while the applet runs, and sends it again as a new event. ──
+// relay has finished saying it doesn't have it (away, it stays as it is). A bot's approval (/approve) is signed only as
+// it goes, at your tap (the shell's rule), so it goes as a new event each try. Nothing is sent again by itself later: a
+// retry is your tap. An app older than this (no setFile, no sign) still keeps it while the applet runs, and sends it
+// again as a new event. Files left behind by an app that stopped between keeping them and listing them are let go the
+// first time the outbox is read. ──
 export type Outgoing = {
   key: string; room: string; thread: string | null; at: number;
   /** your words, and the tags it goes with (h, p, the thread's root): the files' lines and imeta are added once uploaded */
@@ -503,8 +506,22 @@ export type Outgoing = {
   files: { file: string; name: string; type: string; w?: number; h?: number; imeta?: string[]; line?: string }[];
   event?: Ev & { sig: string };
   state: "sending" | "failed"; why?: string;
+  /** false: this device couldn't keep it (its storage is full): it is here only until the app stops */
+  kept?: boolean;
 };
 const RELAY_WINDOW_S = 14 * 60;
+/** Whether the relay has this message: true or false once its read is done, null when it couldn't say (away, or no
+ *  answer in 15 s). */
+function relayHas(relay: any, id: string, room: string): Promise<boolean | null> {
+  return new Promise((res) => {
+    let found = false, done = false, stop: (() => void) | null = null;
+    const end = (v: boolean | null) => { if (done) return; done = true; clearTimeout(t); stop?.(); res(v); };
+    const t = setTimeout(() => end(null), 15_000);
+    try { stop = relay.subscribe([{ ids: [id], kinds: [9], "#h": [room] }], (evs: Ev[]) => { if (evs.some((e) => e.id === id)) found = true; }, () => end(found)); }
+    catch { end(null); }
+    if (done) stop?.();
+  });
+}
 const outbox = (() => {
   const rooms = new Map<string, Outgoing[]>();
   const loading = new Map<string, Promise<void>>();
@@ -514,9 +531,32 @@ const outbox = (() => {
   const subs = new Set<() => void>();
   let rev = 0;
   const bump = () => { rev++; subs.forEach((f) => f()); };
+  /** files being kept for a message not listed yet: the sweep leaves them */
+  const adding = new Set<string>();
+  let swept = false;
   const keepsFiles = () => typeof (storage as any).setFile === "function";
-  const save = (room: string) => storage.set(`out:${room}`, rooms.get(room)?.length ? rooms.get(room) : null).catch(() => {});
+  /** whether the room's list is on this device now; when it can't be (its storage full), each one says so */
+  const save = async (room: string) => {
+    const l = rooms.get(room) ?? [];
+    const ok = await storage.set(`out:${room}`, l.length ? l : null).then(() => true, () => false);
+    if (l.some((o) => (o.kept !== false) !== ok)) { rooms.set(room, l.map((o) => ({ ...o, kept: ok }))); bump(); }
+  };
   const put = (o: Outgoing) => { const l = rooms.get(o.room) ?? []; const i = l.findIndex((x) => x.key === o.key); if (i >= 0) l[i] = o; else l.push(o); rooms.set(o.room, l); bump(); return save(o.room); };
+  /** once a session: files no message lists (an app that stopped between keeping a file and listing its message) go */
+  const sweep = async () => {
+    if (swept || !keepsFiles()) return;
+    swept = true;
+    try {
+      const listed = new Set<string>([...adding]);
+      for (const l of rooms.values()) for (const o of l) for (const f of o.files) listed.add(f.file);
+      for (const k of (await storage.keys()) as string[]) {
+        if (!k.startsWith("out:")) continue;
+        const v = await storage.get(k);
+        for (const o of Array.isArray(v) ? v : []) for (const f of Array.isArray(o?.files) ? o.files : []) if (typeof f?.file === "string") listed.add(f.file);
+      }
+      for (const k of (await (storage as any).fileKeys()) as string[]) if (k.startsWith("f:") && !listed.has(k) && !adding.has(k)) await (storage as any).setFile(k, null).catch(() => {});
+    } catch { swept = false; }
+  };
   const fileOf = async (key: string): Promise<ArrayBuffer | null> => held.get(key) ?? (keepsFiles() ? await (storage as any).getFile(key).catch(() => null) : null);
   return {
     sub(f: () => void) { subs.add(f); return () => { subs.delete(f); }; },
@@ -527,10 +567,11 @@ const outbox = (() => {
       let p = loading.get(room);
       if (!p) {
         p = storage.get(`out:${room}`).then((v: unknown) => {
-          const kept = (Array.isArray(v) ? v : []).filter((o: any) => o && typeof o.key === "string" && o.room === room) as Outgoing[];
+          const kept = (Array.isArray(v) ? v : []).filter((o: any) => o && typeof o.key === "string" && o.room === room && Array.isArray(o.files)) as Outgoing[];
           const now = rooms.get(room) ?? [];
-          for (const o of kept) if (!now.some((x) => x.key === o.key)) now.push(running.has(o.key) ? o : { ...o, state: "failed", why: o.why ?? "the app stopped before it went" });
+          for (const o of kept) if (!now.some((x) => x.key === o.key)) now.push({ ...o, state: "failed", why: o.why ?? "the app stopped before it went" });
           rooms.set(room, now.sort((a, b) => a.at - b.at)); bump();
+          void sweep();
         }, () => {});
         loading.set(room, p);
       }
@@ -538,11 +579,14 @@ const outbox = (() => {
     },
     /** a new one: its files kept first (so a message never points at bytes that aren't there), then itself */
     async add(o: Outgoing, bytes: ArrayBuffer[]) {
+      let kept = true;
       for (const [i, f] of o.files.entries()) {
+        adding.add(f.file);
         if (keepsFiles()) { try { await (storage as any).setFile(f.file, bytes[i]); continue; } catch { /* full, or refused: held in memory */ } }
-        held.set(f.file, bytes[i]);
+        held.set(f.file, bytes[i]); kept = false;
       }
-      await put(o);
+      await put(kept ? o : { ...o, kept: false });
+      for (const f of o.files) adding.delete(f.file);
     },
     /** gone: sent, or deleted by you (and its files with it) */
     async drop(o: Outgoing) {
@@ -556,7 +600,8 @@ const outbox = (() => {
     async send(o: Outgoing, relay: any, svc: string): Promise<(Ev & { sig: string }) | null> {
       if (running.has(o.key)) return null;
       running.add(o.key);
-      let cur: Outgoing = { ...o, state: "sending", why: undefined };
+      // what this device holds now (the copy drawn may be older: a tap on a list drawn before a save landed)
+      let cur: Outgoing = { ...(rooms.get(o.room)?.find((x) => x.key === o.key) ?? o), state: "sending", why: undefined };
       try {
         await put(cur);
         const files = [...cur.files];
@@ -573,15 +618,21 @@ const outbox = (() => {
           cur = { ...cur, files: [...files] }; await put(cur);
         }
         const template = () => ({ kind: 9, content: [cur.content, ...cur.files.map((f) => f.line)].filter(Boolean).join("\n"), tags: [...cur.tags, ...cur.files.map((f) => f.imeta!)] });
-        const canSign = typeof relay.sign === "function";
         let ev = cur.event;
-        // past the relay's window it can't take this one: if it already has it, it went; else it is signed again
+        // past the relay's window it can't take this one: if it already has it, it went; signed again only once the
+        // relay has said it doesn't (a read it finished: away, it waits as it is)
         if (ev && now() - ev.created_at > RELAY_WINDOW_S) {
-          const had = ((await relay.query([{ ids: [ev.id], kinds: [9], "#h": [cur.room] }]).catch(() => [])) as Ev[]).some((x) => x.id === ev!.id);
+          const had = await relayHas(relay, ev.id, cur.room);
+          if (had === null) throw new Error("can't reach the relay");
           if (had) { await this.drop(cur); return ev; }
           ev = undefined;
+          cur = { ...cur, event: undefined };
         }
-        if (!ev && canSign) { ev = await relay.sign(template()); cur = { ...cur, event: ev }; await put(cur); }
+        if (!ev && typeof relay.sign === "function") {
+          // a bot's approval is signed only as it goes (the shell refuses to sign one to keep): it goes as it is
+          try { ev = await relay.sign(template()); cur = { ...cur, event: ev }; await put(cur); }
+          catch (e: any) { if (e?.code !== "not_granted" || !/approval/.test(String(e?.message))) throw e; }
+        }
         const r = await relay.publish(ev ?? template());
         if (!r.ok) throw new Error(r.message || "the relay refused it");
         await this.drop(cur);
@@ -627,7 +678,7 @@ function Unsent({ o, retry, remove }: { o: Outgoing; retry: () => void; remove: 
     {failed && <div className="acts">
       <Button kind="quiet" small className="retry" onClick={retry} title={o.why}>Not sent – tap to retry</Button>
       <Button kind="quiet" small onClick={() => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } remove(); }}>{sure ? "Tap again to delete" : "Delete"}</Button>
-      {o.why && <span className="why">{o.why}</span>}
+      {o.why && <span className="why">{o.why}{o.kept === false ? " · this device couldn't keep it: it is here until the app stops" : ""}</span>}
     </div>}
   </article>;
 }
@@ -914,7 +965,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
             const grouped = !sep && prev && prev.pubkey === e.pubkey && e.created_at - prev.created_at < 300 && !thread;
             lastDay = day; prev = e;
             const mark = !thread && !newShown && firstUnread.current && e.created_at > firstUnread.current && e.pubkey !== s.me ? (newShown = true, <p className="new" key={`n${e.id}`}>New</p>) : null;
-            return [sep, mark, <Message key={e.id} st={st} e={e} grouped={!!grouped} root={thread === e.id} marked={e.id === at} replies={thread ? 0 : replies.get(e.id)?.length ?? 0}
+            return [sep, mark, <Message key={e.id} st={st} e={e} grouped={!!grouped} root={thread === e.id} marked={e.id === at} replies={thread ? 0 : replies.get(e.id)?.length ?? 0} unsent={thread ? 0 : unsent.filter((o) => o.thread === e.id && o.state === "failed").length}
               openThread={() => setThread(e.id)} answer={answer} answeredBy={answered.get(e.id)} settled={settled.has(e.id)} send={send} change={change} />];
           })}
           {waiting.map((o) => <Unsent key={o.key} o={o} retry={() => void deliver(o)} remove={() => void outbox.drop(o)} />)}
@@ -946,7 +997,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   </section></Svc.Provider>;
 }
 
-function Message({ st, e, grouped, root, marked, replies, openThread, answer, answeredBy, settled, send, change }: { st: Store; e: Ev; grouped: boolean; root: boolean; marked: boolean; replies: number; openThread: () => void;
+function Message({ st, e, grouped, root, marked, replies, unsent = 0, openThread, answer, answeredBy, settled, send, change }: { st: Store; e: Ev; grouped: boolean; root: boolean; marked: boolean; replies: number; unsent?: number; openThread: () => void;
   answer: (ask: Ev, a: "pick" | "did" | "seen" | "later", pick?: { id: string; label: string }) => void; answeredBy?: Ev; settled: boolean; send: (c: string) => Promise<boolean>; change: (e: Ev, text: string | null) => Promise<boolean> }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [sure, setSure] = useState(false);
@@ -973,6 +1024,8 @@ function Message({ st, e, grouped, root, marked, replies, openThread, answer, an
     {media.map((m) => <Attachment key={m.sha} m={m} />)}
     <div className="acts">
       {!root && <Button kind="quiet" small onClick={openThread}>{replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : "Reply"}</Button>}
+      {/* a reply of yours that didn't go waits in its thread: said here too, so it isn't missed from the main line */}
+      {!root && unsent > 0 && <Button kind="quiet" small className="retry" onClick={openThread}>{unsent === 1 ? "1 reply not sent" : `${unsent} replies not sent`}</Button>}
       {mine && !ask && editing === null && <Button kind="quiet" small onClick={() => setEditing(body)}>Edit</Button>}
       {mine && <Button kind="quiet" small onClick={async () => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } await change(e, null); }}>{sure ? "Tap again to delete" : "Delete"}</Button>}
     </div>
@@ -1154,8 +1207,9 @@ async function plainImage(f: File): Promise<{ bytes: ArrayBuffer; type: string; 
   return { bytes: await blob.arrayBuffer(), type, w: c.width, h: c.height };
 }
 
-/** What one message may hold here: the app takes a call of at most 8 KB from an applet. */
-const MAX_TEXT = 7000;
+/** What one message may hold here: the app takes a call of at most 8 KB from an applet, and a message kept until it
+ *  goes is sent again whole, signed (its id, key and signature, its tags), so room is left for those. */
+const MAX_TEXT = 6000;
 
 function Composer({ st, relay, room, thread, members, queue, typing, setErr, sendErr, name, muted }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; queue: (content: string, files: { name: string; type: string; bytes: ArrayBuffer; w?: number; h?: number }[], mentions: string[]) => Promise<void>; typing: string[]; setErr: (e: string) => void; sendErr: string; name: string; muted: (() => void) | null }) {
   const s = st.s;

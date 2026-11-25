@@ -156,8 +156,15 @@ fn write_keys(dir: &Path, subject: &str, keys: &[String]) -> Result<(), Refusal>
     synced_write(&files_dir(dir, subject).join("keys.json"), serde_json::to_string(keys).unwrap_or_else(|_| "[]".into()).as_bytes()).map_err(|_| no("storage", "The files this applet keeps can't be listed."))
 }
 
+/** One change to the files at a time (the key list is read, changed and written whole). */
+static FILES_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+fn files_lock() -> std::sync::MutexGuard<'static, ()> {
+    FILES_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /** Keep `bytes` under `key` (replacing what was there). */
 pub fn put_file(dir: &Path, subject: &str, key: &str, bytes: &[u8]) -> Result<(), Refusal> {
+    let _one = files_lock();
     if !key_ok(key) {
         return Err(no("bad_request", "A file's key is 1 to 100 characters."));
     }
@@ -192,6 +199,7 @@ pub fn get_file(dir: &Path, subject: &str, key: &str) -> Result<Option<Vec<u8>>,
 
 /** Forget the file under `key` (nothing there: nothing to do). */
 pub fn drop_file(dir: &Path, subject: &str, key: &str) -> Result<(), Refusal> {
+    let _one = files_lock();
     if !key_ok(key) {
         return Ok(());
     }
@@ -210,6 +218,7 @@ pub fn drop_file(dir: &Path, subject: &str, key: &str) -> Result<(), Refusal> {
 
 /** Every file it keeps, gone (Revoke, signing out of its vault). */
 pub fn clear_files(dir: &Path, subject: &str) -> Result<(), Refusal> {
+    let _one = files_lock();
     match std::fs::remove_dir_all(files_dir(dir, subject)) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),

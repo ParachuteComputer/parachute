@@ -32,6 +32,8 @@ export type Shell = { tap: () => boolean | "again"; secret: (v: SecretView) => P
 /** A second tap within an activation's few seconds: also after a cancelled unlock (nothing was approved, but the tap
  *  was used; the same request may also be inside Rust's cooldown). Said plainly, not "needs your tap". */
 export const TAP_AGAIN = "Tap again in a moment: one tap pays for one approval.";
+/** `sign` refuses a bot's approval: it is signed and sent together, at its tap (publish). */
+export const APPROVAL_GOES_AT_ONCE = "an approval is signed only as it is sent, at your tap";
 const NO_SHELL: Shell = { tap: () => false, secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null };
 
 /** A native call that may ask this device's passcode: tried without, then with what the person types on the shell's
@@ -62,8 +64,6 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
   let inFlight = 0;
-  /** Posts signed in this session: sending one, its signing's tap already paid for it. */
-  const signedHere = new Set<string>();
   const opened = native.open(session, opts.applet, opts.services, opts.hubs);
   // a failed open is said once per call that needed it, never an unhandled rejection
   opened.catch(() => {});
@@ -127,16 +127,16 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
   }
 
   /** What a post may be, before it is signed or sent: a kind it may publish there, its rooms, a bot's approval only
-   *  with the grant and a tap (`tap`: not for one signed in this session, whose signing took the tap), a reaction, edit
-   *  or deletion only of events in its rooms, a deletion only of the person's own. */
-  async function checked(s: RelayService, raw: unknown, tap: boolean) {
+   *  with the grant and a tap (each time it is sent), a reaction, edit or deletion only of events in its rooms, a
+   *  deletion only of the person's own. */
+  async function checked(s: RelayService, raw: unknown) {
     const t = checkPublish(s, raw);
     if (!t.ok) throw new BrokerError("out_of_scope", t.error);
     // any kind: a bot may read whatever it is shown in a room (services.rs checks the same)
     if (isCommandApproval(t.value.content)) {
       // a bot's approval (Hermes's /approve) is an approval: the grant, and a tap
       if (!s.approvals) throw new BrokerError("not_granted", "answering a bot's approval needs the approvals grant");
-      if (tap) paid("an approval needs your tap in the applet");
+      paid("an approval needs your tap in the applet");
     }
     const me = (await opened).pubkey;
     if (s.rooms?.length && [7, 40003, 5].includes(t.value.kind)) {
@@ -166,7 +166,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
     const e = raw as Record<string, unknown>;
     const keys = ["id", "pubkey", "created_at", "kind", "content", "tags", "sig"];
     if (Object.keys(e).length !== keys.length || !keys.every((k) => k in e) || typeof e.id !== "string" || typeof e.sig !== "string" || typeof e.pubkey !== "string" || !Number.isInteger(e.created_at)) throw new BrokerError("bad_params", "a signed event is {id, pubkey, created_at, kind, content, tags, sig}");
-    await checked(s, { kind: e.kind, content: e.content, tags: e.tags }, !signedHere.has(e.id));
+    await checked(s, { kind: e.kind, content: e.content, tags: e.tags });
     const ev = { id: e.id, pubkey: e.pubkey, created_at: e.created_at as number, kind: e.kind as number, content: e.content as string, tags: (e.tags as string[][]).map((t) => [...t]), sig: e.sig };
     if (ev.pubkey !== (await opened).pubkey || !verifyEvent({ ...ev } as Parameters<typeof verifyEvent>[0])) throw new BrokerError("out_of_scope", "only a post you signed, as it was signed");
     return ev;
@@ -262,10 +262,9 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
      *  a relay that already has it answers "duplicate", never a second copy). The same checks as a publish. */
     async sign(p: { service: string; event: unknown }) {
       const s = relayOf(p.service);
-      const t = await checked(s, p.event, true);
-      const ev = await native.signEvent(session, s.id, t);
-      signedHere.add(ev.id);
-      return ev;
+      // a bot's approval is signed only as it goes, at its tap: held, it could be sent minutes later, untapped
+      if (p.event && typeof p.event === "object" && isCommandApproval(String((p.event as { content?: unknown }).content ?? ""))) throw new BrokerError("not_granted", APPROVAL_GOES_AT_ONCE);
+      return native.signEvent(session, s.id, await checked(s, p.event));
     },
 
     /** Sign and send a post; or send one signed before (by `sign` or an earlier publish), as it is: checked again, it
@@ -275,10 +274,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       let ev: SignedEvent;
       if (p.event && typeof p.event === "object" && "sig" in p.event) {
         ev = await resent(s, p.event);
-      } else {
-        ev = await native.signEvent(session, s.id, await checked(s, p.event, true));
-        signedHere.add(ev.id);
-      }
+      } else ev = await native.signEvent(session, s.id, await checked(s, p.event));
       const r = await conn(s).publish(ev); // conn() refuses once closed
       return { ...r, id: ev.id, event: ev };
     },
