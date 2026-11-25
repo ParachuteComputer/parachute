@@ -4,9 +4,9 @@
 // pack (the docs page's steps, here by the same applier over the MCP tools) leaves the same vault, and the app's Add
 // after it changes nothing; a vault with its own `task` type keeps its fields and says so.
 // Needs a hub where write access may define a type over REST (core #139); on an older one it skips.
-// In its own project, `packs`, after every other: a 403 from the hub (the person's own `task` type; a server before
-// #139) makes the app refresh its sign-in, which rotates the saved session's refresh token the other specs share. And
-// since the `signs-in` specs retire that saved session, each test here signs in for itself.
+// In its own project, `packs`, after the `signs-in` specs, which retire the saved session the others share: so each test
+// here signs in for itself. (A 403 from the hub, the person's own `task` type or a server before #139, makes the app
+// refresh its sign-in.)
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "./test";
 import { api, hubState, mcp, mintToken, VAULT } from "./hub";
