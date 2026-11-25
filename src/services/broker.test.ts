@@ -16,7 +16,8 @@ class FakeSocket {
   onopen: (() => void) | null = null;
   onmessage: ((m: { data: string }) => void) | null = null;
   onclose: (() => void) | null = null;
-  constructor(public url: string) { FakeSocket.all.push(this); if (!FakeSocket.hang) setTimeout(() => (FakeSocket.refuse ? this.onclose?.() : this.onopen?.()), 0); }
+  opened = false;
+  constructor(public url: string) { FakeSocket.all.push(this); if (!FakeSocket.hang) setTimeout(() => { if (FakeSocket.refuse) this.onclose?.(); else { this.opened = true; this.onopen?.(); } }, 0); }
   send(s: string) { this.sent.push(JSON.parse(s)); }
   close() { setTimeout(() => this.onclose?.(), 0); }
   from(m: unknown) { this.onmessage?.({ data: JSON.stringify(m) }); }
@@ -364,6 +365,22 @@ describe("the broker's relay connection", () => {
       sock.from(["CLOSED", probe[1], "rate-limited: slow down"]);
       await vi.advanceTimersByTimeAsync(10_000);
       expect(FakeSocket.all).toHaveLength(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("a relay that lets the socket open and then closes it before any sign-in is asked less and less often, not each second", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+      // each socket opens, then the relay closes it at once
+      for (let t = 0; t < 31_000; t += 100) {
+        await vi.advanceTimersByTimeAsync(100);
+        const last = FakeSocket.all[FakeSocket.all.length - 1];
+        if (last?.opened && !(last as unknown as { shut?: boolean }).shut) { (last as unknown as { shut: boolean }).shut = true; last.onclose?.(); }
+      }
+      // 1 + 2 + 4 + 8 + 16 s of pauses: six sockets in 31 s, where resetting at each open would make about thirty
+      expect(FakeSocket.all.length).toBeLessThanOrEqual(6);
     } finally { vi.useRealTimers(); }
   });
 

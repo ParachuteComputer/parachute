@@ -489,7 +489,7 @@ export function lastText(s: Store["s"], e: Ev) {
 type Place = { get(): number | null; set(fromFoot: number | null): void };
 // ── what you sent that hasn't gone yet (T-476, Aaron 11-25: "it said not sent connection closed. Then my message was
 // gone"). A message, a picture or a voice note is kept on this device from the moment you send it: its words and tags
-// in storage (`out:<room>`), its files with storage.setFile, until the relay has it or you delete it. It shows in the
+// in storage (one key, `outbox`, for every room), its files with storage.setFile, until the relay has it or you delete it. It shows in the
 // room at once ("Sending…"); if it can't go, it stays there, marked "Not sent – tap to retry", across leaving the room
 // and the app starting again. It is signed once, before it goes (relay.sign), and that very event is what every retry
 // sends: a relay that already has it answers "duplicate", so it is never there twice. A relay takes an event only
@@ -508,8 +508,11 @@ export type Outgoing = {
   state: "sending" | "failed"; why?: string;
   /** false: its files are held only in memory (an older app, or its 100 MB full): here only until the app stops */
   kept?: boolean;
-  /** false: the room's list couldn't be written (its storage full): here only until the app stops */
+  /** false: the room's list couldn't be written (its storage full): here only until the app stops (never written) */
   listed?: boolean;
+  /** a bot's approval (/approve): signed only as it goes, so a retry would be a new answer to whatever is asked by
+   *  then: it isn't retried, only deleted, and isn't kept past the app stopping */
+  approval?: boolean;
 };
 const RELAY_WINDOW_S = 14 * 60;
 /** Whether the relay has this message: true or false once its read is done, null when it couldn't say (away, or no
@@ -525,9 +528,11 @@ function relayHas(relay: any, id: string, room: string): Promise<boolean | null>
   });
 }
 const outbox = (() => {
+  // every room's, in memory and in one storage key (`outbox`): read once a session, written whole on each change
   const rooms = new Map<string, Outgoing[]>();
-  const loading = new Map<string, Promise<void>>();
+  let loading: Promise<boolean> | null = null;
   const running = new Set<string>();
+  const order = new Map<string, Promise<unknown>>();
   /** bytes kept only in memory, when this app keeps no files for applets (an older app) */
   const held = new Map<string, ArrayBuffer>();
   const subs = new Set<() => void>();
@@ -535,54 +540,43 @@ const outbox = (() => {
   const bump = () => { rev++; subs.forEach((f) => f()); };
   /** files being kept for a message not listed yet: the sweep leaves them */
   const adding = new Set<string>();
-  let swept = false;
   const keepsFiles = () => typeof (storage as any).setFile === "function";
-  /** whether the room's list is on this device now; when it can't be (its storage full), each one says so */
-  const save = async (room: string) => {
-    const l = rooms.get(room) ?? [];
-    const ok = await storage.set(`out:${room}`, l.length ? l : null).then(() => true, () => false);
-    // said on the list as it is now (a message dropped meanwhile stays dropped); the writes go in order, so the last
-    // one written is the newest list
-    const now = rooms.get(room) ?? [];
-    if (now.some((o) => (o.listed !== false) !== ok)) { rooms.set(room, now.map((o) => ({ ...o, listed: ok }))); bump(); }
-  };
-  const put = (o: Outgoing) => { const l = rooms.get(o.room) ?? []; const i = l.findIndex((x) => x.key === o.key); if (i >= 0) l[i] = o; else l.push(o); rooms.set(o.room, l); bump(); return save(o.room); };
-  /** once a session: files no message lists (an app that stopped between keeping a file and listing its message) go */
+  const all = () => [...rooms.values()].flat();
+  /** The list as this device kept it, once (a read that fails is tried again by the next): true once read. One left
+   *  "sending" by an app that stopped is not sent, so it waits; an approval is not kept past that; one whose files were
+   *  only in memory has lost them. Then the files no message lists go (an app that stopped between keeping a file and
+   *  listing its message). */
+  const load = (): Promise<boolean> => (loading ??= storage.get("outbox").then((v: unknown) => {
+    const kept = (Array.isArray(v) ? v : []).filter((o: any) => o && typeof o.key === "string" && typeof o.room === "string" && Array.isArray(o.files) && !o.approval) as Outgoing[];
+    for (const o of kept) {
+      const l = rooms.get(o.room) ?? [];
+      if (!l.some((x) => x.key === o.key)) l.push({ ...o, state: "failed", why: o.kept === false ? "its file was only in memory, and went when the app stopped" : o.why ?? "the app stopped before it went" });
+      rooms.set(o.room, l.sort((a, b) => a.at - b.at));
+    }
+    bump();
+    void sweep();
+    return true;
+  }, () => { loading = null; return false; }));
   const sweep = async () => {
-    if (swept || !keepsFiles()) return;
-    swept = true;
-    try {
-      const listed = new Set<string>([...adding]);
-      for (const l of rooms.values()) for (const o of l) for (const f of o.files) listed.add(f.file);
-      for (const k of (await storage.keys()) as string[]) {
-        if (!k.startsWith("out:")) continue;
-        const v = await storage.get(k);
-        for (const o of Array.isArray(v) ? v : []) for (const f of Array.isArray(o?.files) ? o.files : []) if (typeof f?.file === "string") listed.add(f.file);
-      }
-      const inUse = (k: string) => listed.has(k) || adding.has(k) || [...rooms.values()].some((l) => l.some((o) => o.files.some((f) => f.file === k)));
-      for (const k of (await (storage as any).fileKeys()) as string[]) if (k.startsWith("f:") && !inUse(k)) await (storage as any).setFile(k, null).catch(() => {});
-    } catch { swept = false; }
+    if (!keepsFiles()) return;
+    const inUse = (k: string) => adding.has(k) || all().some((o) => o.files.some((f) => f.file === k));
+    for (const k of ((await (storage as any).fileKeys().catch(() => [])) as string[])) if (k.startsWith("f:") && !inUse(k)) await (storage as any).setFile(k, null).catch(() => {});
   };
+  /** Write the list (never over one not read yet: a read that failed would have this write erase what it held); whether
+   *  it was written is said on each message as the list is now (the writes go in order: the last is the newest) */
+  const save = async () => {
+    const ok = (await load()) && await storage.set("outbox", all().length ? all().map(({ listed: _, ...o }) => o) : null).then(() => true, () => false);
+    for (const [room, l] of rooms) if (l.some((o) => (o.listed !== false) !== ok)) rooms.set(room, l.map((o) => ({ ...o, listed: ok })));
+    bump();
+  };
+  /** in memory at once; written too unless `memoryOnly` (a passing state: "sending") */
+  const put = (o: Outgoing, memoryOnly = false) => { const l = rooms.get(o.room) ?? []; const i = l.findIndex((x) => x.key === o.key); if (i >= 0) l[i] = o; else l.push(o); rooms.set(o.room, l); bump(); return memoryOnly ? Promise.resolve() : save(); };
   const fileOf = async (key: string): Promise<ArrayBuffer | null> => held.get(key) ?? (keepsFiles() ? await (storage as any).getFile(key).catch(() => null) : null);
   return {
     sub(f: () => void) { subs.add(f); return () => { subs.delete(f); }; },
     rev: () => rev,
     of: (room: string) => rooms.get(room) ?? [],
-    /** what this device kept for the room, once: one left "sending" by an app that stopped is not sent, so it waits */
-    load(room: string) {
-      let p = loading.get(room);
-      if (!p) {
-        p = storage.get(`out:${room}`).then((v: unknown) => {
-          const kept = (Array.isArray(v) ? v : []).filter((o: any) => o && typeof o.key === "string" && o.room === room && Array.isArray(o.files)) as Outgoing[];
-          const now = rooms.get(room) ?? [];
-          for (const o of kept) if (!now.some((x) => x.key === o.key)) now.push({ ...o, state: "failed", why: o.why ?? "the app stopped before it went" });
-          rooms.set(room, now.sort((a, b) => a.at - b.at)); bump();
-          void sweep();
-        }, () => {});
-        loading.set(room, p);
-      }
-      return p;
-    },
+    load,
     /** a new one: its files kept first (so a message never points at bytes that aren't there), then itself */
     async add(o: Outgoing, bytes: ArrayBuffer[]) {
       let kept = true;
@@ -596,20 +590,25 @@ const outbox = (() => {
     },
     /** gone: sent, or deleted by you (and its files with it) */
     async drop(o: Outgoing) {
-      const l = (rooms.get(o.room) ?? []).filter((x) => x.key !== o.key);
-      rooms.set(o.room, l); bump();
-      await save(o.room);
+      rooms.set(o.room, (rooms.get(o.room) ?? []).filter((x) => x.key !== o.key)); bump();
+      await save();
       for (const f of o.files) { held.delete(f.file); if (keepsFiles()) await (storage as any).setFile(f.file, null).catch(() => {}); }
     },
     file: fileOf,
-    /** Send it: upload what isn't, sign once, publish that event. Resolves the event when the relay has it, else null. */
-    async send(o: Outgoing, relay: any, svc: string): Promise<(Ev & { sig: string }) | null> {
-      if (running.has(o.key)) return null;
+    /** Send it: upload what isn't, sign once, publish that event. Resolves the event when the relay has it, else null.
+     *  A room's go one after another, in the order sent (a line sent after a picture isn't signed before it). */
+    send(o: Outgoing, relay: any, svc: string): Promise<(Ev & { sig: string }) | null> {
+      if (running.has(o.key)) return Promise.resolve(null);
       running.add(o.key);
+      const next = (order.get(o.room) ?? Promise.resolve()).then(() => this.attempt(o, relay, svc), () => this.attempt(o, relay, svc));
+      order.set(o.room, next.catch(() => null));
+      return next;
+    },
+    async attempt(o: Outgoing, relay: any, svc: string): Promise<(Ev & { sig: string }) | null> {
       // what this device holds now (the copy drawn may be older: a tap on a list drawn before a save landed)
       let cur: Outgoing = { ...(rooms.get(o.room)?.find((x) => x.key === o.key) ?? o), state: "sending", why: undefined };
       try {
-        await put(cur);
+        await put(cur, true);
         const files = [...cur.files];
         for (const [i, f] of files.entries()) {
           if (f.imeta) continue;
@@ -621,7 +620,7 @@ const outbox = (() => {
           // a voice note is the Uni app's: an empty message with an audio imeta, no line of its own
           const line = type.startsWith("audio/") ? "" : type.startsWith("image/") ? `![image](${d.url})` : type.startsWith("video/") ? `![video](${d.url})` : `[${f.name}](${d.url})`;
           files[i] = { ...f, imeta, line };
-          cur = { ...cur, files: [...files] }; await put(cur);
+          cur = { ...cur, files: [...files] };
         }
         const template = () => ({ kind: 9, content: [cur.content, ...cur.files.map((f) => f.line)].filter(Boolean).join("\n"), tags: [...cur.tags, ...cur.files.map((f) => f.imeta!)] });
         let ev = cur.event;
@@ -635,16 +634,17 @@ const outbox = (() => {
           cur = { ...cur, event: undefined };
         }
         if (!ev && typeof relay.sign === "function") {
-          // a bot's approval is signed only as it goes (the shell refuses to sign one to keep): it goes as it is
+          // signed, then kept (with what its files became), before it goes: every try after sends this very event. A
+          // bot's approval is signed only as it goes (the shell refuses to sign one to keep): it goes as it is
           try { ev = await relay.sign(template()); cur = { ...cur, event: ev }; await put(cur); }
-          catch (e: any) { if (e?.code !== "not_granted" || !/approval/.test(String(e?.message))) throw e; }
+          catch (e: any) { if (e?.code !== "not_granted" || !/approval/.test(String(e?.message))) throw e; cur = { ...cur, approval: true }; }
         }
         const r = await relay.publish(ev ?? template());
         if (!r.ok) throw new Error(r.message || "the relay refused it");
         await this.drop(cur);
         return (r.event ?? ev) as Ev & { sig: string };
       } catch (e: any) {
-        await put({ ...cur, state: "failed", why: String(e?.message ?? e).slice(0, 200) });
+        await put({ ...cur, state: "failed", why: cur.approval ? "an approval isn't sent again: answer the prompt that's asking now" : String(e?.message ?? e).slice(0, 200) });
         return null;
       } finally { running.delete(o.key); }
     },
@@ -654,7 +654,7 @@ const newKey = () => `o${Date.now().toString(36)}${Math.random().toString(36).sl
 function useOutbox(room: string) {
   const [, set] = useState(0);
   useEffect(() => outbox.sub(() => set(outbox.rev())), []);
-  useEffect(() => { void outbox.load(room); }, [room]);
+  useEffect(() => { void outbox.load(); }, []);
   return outbox.of(room);
 }
 /** A file of yours not sent yet, drawn from this device's copy. */
@@ -682,9 +682,10 @@ function Unsent({ o, retry, remove }: { o: Outgoing; retry: () => void; remove: 
     {o.content && <div className="body"><Markdown text={o.content} /></div>}
     {o.files.map((f) => <KeptAttachment key={f.file} f={f} />)}
     {failed && <div className="acts">
-      <Button kind="quiet" small className="retry" onClick={retry} title={o.why}>Not sent – tap to retry</Button>
+      {o.approval || (o.kept === false && /went when the app stopped/.test(o.why ?? "")) ? <span className="retry">Not sent</span>
+        : <Button kind="quiet" small className="retry" onClick={retry} title={o.why}>Not sent – tap to retry</Button>}
       <Button kind="quiet" small onClick={() => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } remove(); }}>{sure ? "Tap again to delete" : "Delete"}</Button>
-      {(o.why || o.kept === false || o.listed === false) && <span className="why">{[o.why, o.kept === false || o.listed === false ? "this device couldn't keep it: it is here until the app stops" : ""].filter(Boolean).join(" · ")}</span>}
+      {(o.why || o.kept === false || o.listed === false) && <span className="why">{[o.why, (o.kept === false || o.listed === false) && !/went when the app stopped/.test(o.why ?? "") ? "this device couldn't keep it: it is here until the app stops" : ""].filter(Boolean).join(" · ")}</span>}
     </div>}
   </article>;
 }

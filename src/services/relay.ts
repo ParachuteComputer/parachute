@@ -116,7 +116,7 @@ export class RelayConn {
     this.openTimer = setTimeout(() => { this.openTimer = null; if (this.ws === ws && !this.open) this.drop("couldn't connect", false); }, OPEN_WAIT_MS);
     ws.onopen = () => {
       if (this.openTimer) { clearTimeout(this.openTimer); this.openTimer = null; }
-      this.open = true; this.tries = 0;
+      this.open = true;
       // a relay that asks no sign-in: go on after a moment
       this.authTimer = setTimeout(() => { if (!this.authed) this.ready(); }, AUTH_WAIT_MS);
     };
@@ -153,7 +153,8 @@ export class RelayConn {
 
   private ready() {
     if (this.authTimer) { clearTimeout(this.authTimer); this.authTimer = null; }
-    this.authed = true;
+    // the pause starts over only once signed in: a relay that opens and then refuses or closes isn't asked each second
+    this.authed = true; this.tries = 0;
     this.onStatus({ status: "ready" });
     for (const [id, s] of this.subs) this.raw(["REQ", id, ...s.filters]);
     // every publish still waiting for its OK: made before the sign-in, or sent on a connection that dropped
