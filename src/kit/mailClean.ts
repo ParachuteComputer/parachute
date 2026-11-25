@@ -191,7 +191,7 @@ export function cleanSheet(css: string, pic: (src: string) => string | null): st
   // reading of ours that differs from the browser's), none of it is kept
   // (a kept condition's brackets are in `seen`, its words not; an at-keyword left in `seen` is one nested in a rule,
   // as CSS nesting allows: @scope, @starting-style, none of them ours)
-  return /:host|::?slotted|::?part\b/i.test(seen) || FOREIGN_URL.test(seen) || PINNED_ANYWHERE.test(seen) || tooDeep(seen) || /@[\w-]/.test(seen) ? "" : out;
+  return /:host|::?slotted|::?part\b/i.test(seen) || FOREIGN_URL.test(seen) || PINNED_ANYWHERE.test(seen) || tooDeep(seen) || /(?:^|[{};])[ \t\n\r\f]*@[\w-]/.test(seen) ? "" : out;
 }
 /** Braces, brackets and parentheses nested deeper than this: the browser's own style pass slows to seconds and then
  *  crashes (CSS nesting, a selector of :is( in :is( …), so such a sheet is left out. */
@@ -252,7 +252,8 @@ function cleanRules(css: string, pic: (src: string) => string | null, depth: num
       else if (FRAMES_AT.test(prelude)) { const f = frames(body, pic); out += `${prelude}{${f}}`; seen += `@{${blank(f)}}`; }
       continue;
     }
-    if (!prelude || prelude.includes(ESCAPED) || /:host|::?slotted|::?part\b/i.test(prelude)) continue;
+    // a selector with a stray } in it (one too many before it) is no selector: the browser drops that rule, and so do we
+    if (!prelude || prelude.includes(ESCAPED) || blank(prelude).includes("}") || /:host|::?slotted|::?part\b/i.test(prelude)) continue;
     const selector = prelude.replace(/(?<![\w.#:-])(?:html|body)(?![\w-])|:root\b/gi, ".pa-mail-doc");
     const rule = `${selector}{${cleanDeclarations(body, pic)}}`;
     out += rule;

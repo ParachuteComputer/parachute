@@ -281,6 +281,10 @@ describe("cleanSheet", () => {
     expect(cleanSheet("p{@scope{:scope{margin-left:77px}}} .b{color:blue}", none)).toBe("");
     expect(cleanSheet("@media all{p{@starting-style{opacity:0}}}", none)).toBe("");
   });
+  it("a stray } before an at-rule drops only that rule; an @ inside a value is no at-rule (fifth review of #225)", () => {
+    expect(cleanSheet(".a{color:red}} @media (max-width:600px){.b{width:100%}} .c{color:green}", none)).toBe(".a{color:red}.c{color:green}");
+    expect(cleanSheet(".a{font-family:@MS PGothic, serif} .b{color:blue}", none)).toBe(".a{font-family:@MS PGothic, serif}.b{color:blue}");
+  });
   it("an element unwrapped with a great many children doesn't take the stack", () => {
     const { host } = drawn(`<canvas>${"<br>".repeat(125_000)}</canvas><p>after</p>`);
     expect(host.querySelectorAll("br")).toHaveLength(125_000);
