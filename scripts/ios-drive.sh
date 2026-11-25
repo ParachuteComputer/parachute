@@ -46,6 +46,12 @@ say "install the app"
 xcrun simctl install "$udid" "$app"
 /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Info.plist"
 
+say "start the simulator's WebKit once (on a busy runner its processes took 47 s to launch the first time)"
+xcrun simctl launch "$udid" computer.parachute.app >/dev/null
+for _ in $(seq 240); do grep -q "didFinishLoadForFrame.*isMainFrame=1" "$out/app.log" && break; sleep 1; done
+grep -q "didFinishLoadForFrame.*isMainFrame=1" "$out/app.log" || echo "warning: the app's page hadn't loaded after 4 minutes"
+xcrun simctl terminate "$udid" computer.parachute.app >/dev/null 2>&1 || true
+
 say "the hub, the relay, Rooms in the home vault"
 (cd "$root" && exec npx vite-node e2e/ios/world.ts "$world/world.json") > "$out/world.log" 2>&1 &
 worldpid=$!
