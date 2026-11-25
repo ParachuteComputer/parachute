@@ -11,10 +11,11 @@ const SAVED = "e2e/.expiry-signed-in.json";
 /** Past core's access token lifetime (15 minutes, ACCESS_TOKEN_TTL_SECONDS). */
 const PAST_EXPIRY = 16 * 60_000;
 
-test.afterEach(async () => { await moveClock(hubState(), 0); });
+test.describe.configure({ mode: "serial" });
+test.afterAll(async () => { await moveClock(hubState(), 0); });
 
-test("signed in across the access token's expiry: three specs in a row start from the kept sign-in and read the vault", async ({ page, browser }, info) => {
-  test.setTimeout(180_000);
+test("a sign-in of its own, saved as the shared start is", async ({ page }) => {
+  test.setTimeout(120_000);
   await signInWithKey(page, hubState(), VAULT, "Mine");
   // Parachute's own Vault applet reaches the vaults picked for it (docs/ACCESS.md proposal 5), as the shared start has it
   await page.evaluate(({ hub, vault }) => {
@@ -24,32 +25,39 @@ test("signed in across the access token's expiry: three specs in a row start fro
   await page.goto("/settings");
   await expect(page.getByRole("status").filter({ hasText: /approved code only|run sealed/ })).toBeVisible({ timeout: 45_000 });
   await page.context().storageState({ path: SAVED });
-  await page.context().close();
-  const id = (await api(hubState(), "GET", `notes?id=${encodeURIComponent("Welcome")}`)).id as string;
-  /** One spec's start: a browser from the saved sign-in, the Welcome note opened from the hub, and what the hub said to its refreshes. */
-  const spec = async () => {
-    const ctx = await browser.newContext({ ...info.project.use, storageState: SAVED });
-    const refreshes: number[] = [];
-    ctx.on("response", (r) => { if (new URL(r.url()).pathname === "/oauth/token") refreshes.push(r.status()); });
-    const p: Page = await ctx.newPage();
+});
+
+test.describe("three specs in a row, each starting from the saved sign-in", () => {
+  test.use({ storageState: SAVED });
+
+  /** The Welcome note opened from a link, read from the hub; what the hub said to each refresh on the way. */
+  async function opens(page: Page): Promise<number[]> {
+    const said: number[] = [];
+    page.context().on("response", (r) => { if (new URL(r.url()).pathname === "/oauth/token") said.push(r.status()); });
+    const id = (await api(hubState(), "GET", `notes?id=${encodeURIComponent("Welcome")}`)).id as string;
     // a link to the note, as links.spec.ts opens one
-    await p.goto(`/open-link?url=${encodeURIComponent(`parachute://open?url=${encodeURIComponent(`${hubState().origin}/surface/parachute/v/${VAULT}/n/${id}`)}`)}`);
-    await expectInVault(p, VAULT, id, "Welcome");
-    await ctx.close();
-    return refreshes;
+    await page.goto(`/open-link?url=${encodeURIComponent(`parachute://open?url=${encodeURIComponent(`${hubState().origin}/surface/parachute/v/${VAULT}/n/${id}`)}`)}`);
+    await expectInVault(page, VAULT, id, "Welcome");
+    return said;
+  }
+  /** There was a refresh and the hub said yes to every one: the sign-in crossed the expiry and stayed. (A read refused just
+   *  after a refresh can make the app refresh once more to check, vaultsDeps.ts; that is a yes too.) */
+  const refreshed = (said: number[]) => {
+    expect(said.length, "refreshed").toBeGreaterThan(0);
+    expect(said.filter((s) => s !== 200), "what the hub refused").toEqual([]);
   };
-  /** The hub said yes to every refresh, and there was one: the sign-in crossed the expiry and stayed. (A read refused just
-   *  after a refresh can make the app refresh once more to check; vaultsDeps.ts. That is a yes too.) */
-  const refreshedOk = (said: number[], which: string) => {
-    expect(said.length, `${which}: refreshed`).toBeGreaterThan(0);
-    expect(said.filter((s) => s !== 200), `${which}: what the hub refused`).toEqual([]);
-  };
-  // the token runs out: the first spec's reads are refused, it refreshes, and reads
-  await moveClock(hubState(), PAST_EXPIRY);
-  refreshedOk(await spec(), "the first spec after the expiry");
-  // the next starts from what the first kept: its token is good, nothing to refresh
-  expect.soft(await spec(), "the second").toEqual([]);
-  // and it runs out again: the third refreshes the one kept last, not the spent one the sign-in started with
-  await moveClock(hubState(), 2 * PAST_EXPIRY);
-  refreshedOk(await spec(), "the third, after a second expiry");
+
+  test("the first after the access token ran out: its reads are refused, it refreshes, and reads", async ({ page }) => {
+    await moveClock(hubState(), PAST_EXPIRY);
+    refreshed(await opens(page));
+  });
+
+  test("the second starts from what the first kept: its token is good, nothing to refresh", async ({ page }) => {
+    expect(await opens(page)).toEqual([]);
+  });
+
+  test("after a second expiry, the third refreshes the one kept last, not the spent one the sign-in started with", async ({ page }) => {
+    await moveClock(hubState(), 2 * PAST_EXPIRY);
+    refreshed(await opens(page));
+  });
 });
