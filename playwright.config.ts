@@ -16,18 +16,17 @@ export default defineConfig({
   projects: [
     { name: "setup", testMatch: /auth\.setup\.ts/, use: { ...devices["Pixel 7"], browserName: "chromium" } },
     { name: "phone", dependencies: ["setup"], testIgnore: [/webkit\.spec\.ts/, /vaultpick\.spec\.ts/, /vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /packs\.spec\.ts/, /notion\.spec\.ts/, /start\.spec\.ts/, /plainwords\.spec\.ts/, /leaving\.spec\.ts/, /voice\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
-    // the recorder's specs ran last in the phone project, which now runs longer than a sign-in's 15 minutes (core's
-    // ACCESS_TOKEN_TTL_SECONDS; a shared saved session can't refresh): on a sign-in of their own, right after it
-    { name: "voice-setup", dependencies: ["phone"], testMatch: /auth\.setup\.ts/, use: { ...devices["Pixel 7"], browserName: "chromium" } },
-    { name: "voice", dependencies: ["voice-setup"], testMatch: [/voice\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // signing in again or refreshing retires the sign-in the tests above share (after a minute or so), so these run last
-    { name: "signs-in", dependencies: ["voice"], testMatch: [/vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /start\.spec\.ts/, /leaving\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
+    { name: "signs-in", dependencies: ["phone"], testMatch: [/vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /start\.spec\.ts/, /leaving\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // last: a 403 there makes the app refresh its sign-in, which rotates the saved session the specs before share
     { name: "packs", dependencies: ["signs-in"], testMatch: [/packs\.spec\.ts/, /notion\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // last of all, for the same reason (the walk of every screen reaches what an older hub refuses: Sharing, Changes), on a
     // sign-in of its own: the one the specs before it shared is retired by now
     { name: "plain-setup", dependencies: ["packs"], testMatch: /auth\.setup\.ts/, use: { ...devices["Pixel 7"], browserName: "chromium" } },
-    { name: "plain", dependencies: ["plain-setup"], testMatch: [/plainwords\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
+    // the recorder's specs too: last in the phone project they ran past its sign-in's 15 minutes (core's
+    // ACCESS_TOKEN_TTL_SECONDS; a saved session shared by many pages can't refresh), and here they need no sign-in of
+    // their own (the hub takes five password sign-ins in 15 minutes)
+    { name: "plain", dependencies: ["plain-setup"], testMatch: [/plainwords\.spec\.ts/, /voice\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // the same build in WebKit (the Mac app's WKWebView, Safari) at a Mac's width: the applet frame (e2e/webkit.spec.ts).
     // Last, on a sign-in of its own, so nothing before it waits on it. PW_WEBKIT_WS: a Playwright server to run WebKit in
     // (on a machine whose own libraries Playwright's WebKit can't use)
