@@ -35,6 +35,10 @@ export const LIMITS = {
   maxPending: 8,
   maxRequests: 60,
   rateWindowMs: 10_000,
+  /** Calls only a person's fresh tap can make (TAP_CALLS), past the 60: a room busy with its own reads and posts
+   *  mustn't make a tap on Record or Save wait until the tap has gone stale (T-476). Each is refused at once without a
+   *  fresh tap, so these few can't be spent on anything else. */
+  maxTapRequests: 10,
   /** Most notes a tag or content request reads; each read is charged to the limiter. */
   maxScan: 20,
   maxRecent: 30,
@@ -138,6 +142,10 @@ export function parseEnvelope(raw: unknown): Envelope {
   }
   return bad(ERROR_CODES.badRequest);
 }
+
+/** The calls a person's tap in the frame pays for (the kit's FIRST lane, but for posts and layout): they may go past a
+ *  spent request bucket, on LIMITS.maxTapRequests of their own. */
+export const TAP_CALLS = new Set(["app.openLink", "app.follow", "app.save", "app.pick", "app.open", "voice.record", "services.answer", "services.trust", "services.secret", "services.forgetSecret"]);
 
 /** Sliding-window limiter: at most `max` hits per `windowMs`. */
 export class RateLimiter {

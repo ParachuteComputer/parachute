@@ -2,7 +2,7 @@
 // and routes validated calls through the router under this frame's grant.
 // The frame component owns the iframe and checks `event.source` before `handle`.
 
-import { ContractError, ERROR_CODES, LIMITS, parseEnvelope, RateLimiter, type ErrorCode, type HostMessage } from "./contract.ts";
+import { ContractError, ERROR_CODES, LIMITS, parseEnvelope, RateLimiter, TAP_CALLS, type ErrorCode, type HostMessage } from "./contract.ts";
 import { errorToFrameFetchReply, toFrameFetchReply, type FetchResult } from "./modules/frameFetch.ts";
 import type { Resolved } from "./needs.ts";
 import type { Router } from "./router.ts";
@@ -18,6 +18,7 @@ export function createSession(opts: SessionOptions) {
   // Two buckets: one hit per message, and one token per underlying vault read. Spent reads never silence requests.
   const requests = new RateLimiter();
   const reads = new RateLimiter();
+  const taps = new RateLimiter(LIMITS.maxTapRequests, LIMITS.rateWindowMs);
   let pending = 0;
   let closed = false;
   const ctx = { charge(n: number) { if (!reads.take(now(), n)) throw new ContractError(ERROR_CODES.rateLimited); }, closed: () => closed };
@@ -39,7 +40,9 @@ export function createSession(opts: SessionOptions) {
      */
     handle(data: unknown): void {
       if (closed) return;
-      const limited = !requests.take(now());
+      const raw = data && typeof data === "object" ? data as { ns?: unknown; method?: unknown } : {};
+      const tapCall = typeof raw.ns === "string" && typeof raw.method === "string" && TAP_CALLS.has(`${raw.ns}.${raw.method}`);
+      const limited = !requests.take(now()) && !(tapCall && taps.take(now()));
       const env = parseEnvelope(data);
       const isPfr = !!data && typeof data === "object" && "pfr" in (data as object);
       const errorReply = (id: string, code: ErrorCode, words?: string) => post(isPfr || env.kind === "pfr"

@@ -555,7 +555,9 @@ const outbox = (() => {
   let loading: Promise<boolean> | null = null;
   const running = new Set<string>();
   const order = new Map<string, Promise<unknown>>();
-  /** bytes kept only in memory, when this app keeps no files for applets (an older app) */
+  /** the bytes of what was sent this session, until it goes: drawn and uploaded from here (a file read through the
+   *  shell costs a call of the frame's 60 in 10 s, and a busy room needs them for taps); kept on disk as well when the
+   *  app keeps files (an older one doesn't) */
   const held = new Map<string, ArrayBuffer>();
   const subs = new Set<() => void>();
   let rev = 0;
@@ -587,12 +589,19 @@ const outbox = (() => {
   };
   /** Write the list (never over one not read yet: a read that failed would have this write erase what it held); whether
    *  it was written is said on each message as the list is now (the writes go in order: the last is the newest) */
+  /** sent ones not written away yet, and the files of messages gone (let go after the next write) */
+  let stale = false;
+  const gone = new Set<string>();
   const save = async () => {
+    stale = false;
     const ok = (await load()) && await storage.set("outbox", all().length ? all().map(({ listed: _, ...o }) => o) : null).then(() => true, () => false);
+    // a file goes only once no list written names it
+    if (ok && keepsFiles()) for (const k of [...gone]) { gone.delete(k); await (storage as any).setFile(k, null).catch(() => {}); }
     for (const [room, l] of rooms) if (l.some((o) => (o.listed !== false) !== ok)) rooms.set(room, l.map((o) => ({ ...o, listed: ok })));
     bump();
   };
   /** in memory at once; written too unless `memoryOnly` (a passing state: "sending") */
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && (stale || gone.size)) void save(); });
   const put = (o: Outgoing, memoryOnly = false) => { const l = rooms.get(o.room) ?? []; const i = l.findIndex((x) => x.key === o.key); if (i >= 0) l[i] = o; else l.push(o); rooms.set(o.room, l); bump(); return memoryOnly ? Promise.resolve() : save(); };
   const fileOf = async (key: string): Promise<ArrayBuffer | null> => held.get(key) ?? (keepsFiles() ? await (storage as any).getFile(key).catch(() => null) : null);
   return {
@@ -605,17 +614,22 @@ const outbox = (() => {
       let kept = true;
       for (const [i, f] of o.files.entries()) {
         adding.add(f.file);
+        held.set(f.file, bytes[i]);
         if (keepsFiles()) { try { await (storage as any).setFile(f.file, bytes[i]); continue; } catch { /* full, or refused: held in memory */ } }
-        held.set(f.file, bytes[i]); kept = false;
+        kept = false;
       }
       await put(kept ? o : { ...o, kept: false });
       for (const f of o.files) adding.delete(f.file);
     },
-    /** gone: sent, or deleted by you (and its files with it) */
-    async drop(o: Outgoing) {
+    /** gone: deleted by you (written at once, its files with it), or `sent`: the relay has it, so the list is written
+     *  with the next change or when the frame is hidden, and its files go then (each call is one of the frame's 60 in
+     *  10 s, and a busy room needs them for taps). Kept a moment longer, it does no harm: its event comes back from the
+     *  relay's read and takes it away, or a tap sends that same event and the relay answers "duplicate". */
+    async drop(o: Outgoing, sent = false) {
       rooms.set(o.room, (rooms.get(o.room) ?? []).filter((x) => x.key !== o.key)); bump();
+      for (const f of o.files) { held.delete(f.file); gone.add(f.file); }
+      if (sent) { stale = true; return; }
       await save();
-      for (const f of o.files) { held.delete(f.file); if (keepsFiles()) await (storage as any).setFile(f.file, null).catch(() => {}); }
     },
     file: fileOf,
     /** Send it: upload what isn't, sign once, publish that event. Resolves the event when the relay has it, else null.
@@ -658,7 +672,7 @@ const outbox = (() => {
         if (ev && now() - ev.created_at > RELAY_WINDOW_S) {
           const had = await relayHas(relay, ev.id, cur.room);
           if (had === null) throw new Error("can't reach the relay");
-          if (had) { await this.drop(cur); return ev; }
+          if (had) { await this.drop(cur, true); return ev; }
           ev = undefined;
           cur = { ...cur, event: undefined };
         }
@@ -670,7 +684,7 @@ const outbox = (() => {
         }
         const r = await relay.publish(ev ?? template());
         if (!r.ok) throw new Error(r.message || "the relay refused it");
-        await this.drop(cur);
+        await this.drop(cur, true);
         return (r.event ?? ev) as Ev & { sig: string };
       } catch (e: any) {
         await put({ ...cur, state: "failed", why: cur.approval ? "an approval isn't sent again: answer the prompt that's asking now" : String(e?.message ?? e).slice(0, 200) });
@@ -943,7 +957,12 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     const tg = tagsFor(mentions);
     const size = new TextEncoder().encode(JSON.stringify([content, tg])).length + 400 + files.reduce((n, f) => n + 460 + 2 * new TextEncoder().encode(f.name).length, 0);
     if (size > 7600) throw new Error(files.length ? "too long to send with its files: send the words and the files apart" : "too long to send: split it in two");
-    const o: Outgoing = { key, room, thread, at: Date.now(), content, tags: tg, files: files.map((f, i) => ({ file: `f:${key}:${i}`, name: f.name, type: f.type, ...(f.w && f.h ? { w: f.w, h: f.h } : {}) })), state: "sending" };
+    let o: Outgoing = { key, room, thread, at: Date.now(), content, tags: tg, files: files.map((f, i) => ({ file: `f:${key}:${i}`, name: f.name, type: f.type, ...(f.w && f.h ? { w: f.w, h: f.h } : {}) })), state: "sending" };
+    // words alone: signed now, so they are kept once, already signed (a call fewer of the frame's 60 in 10 s)
+    if (!files.length && typeof relay.sign === "function") {
+      const ev = await relay.sign({ kind: 9, content, tags: tg }).catch(() => null);
+      if (ev) o = { ...o, event: ev };
+    }
     // what you send is shown, as in any chat: the talk goes to its foot
     atBottom.current = true;
     await outbox.add(o, files.map((f) => f.bytes));

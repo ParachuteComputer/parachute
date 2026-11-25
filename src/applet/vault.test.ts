@@ -114,6 +114,17 @@ describe("the vault, from inside a frame", () => {
     expect(errors.filter((c) => c === "rate_limited")).toHaveLength(10);
     expect(f.out.filter((m) => "id" in m)).toHaveLength(70);
   });
+  it("past the 60, a call only a tap can make still gets through, ten at most: a busy frame doesn't starve a tap (T-476)", async () => {
+    const f = frame();
+    for (let i = 0; i < 60; i++) f.session.handle({ uni: 1, id: `t${i}`, ns: "theme", method: "get" });
+    f.session.handle({ uni: 1, id: "busy", ns: "theme", method: "get" });
+    for (let i = 0; i < 12; i++) f.session.handle({ uni: 1, id: `r${i}`, ns: "voice", method: "record", params: {} });
+    await new Promise((r) => setTimeout(r, 10));
+    const code = (id: string) => (f.out.find((m) => "id" in m && m.id === id) as { error?: { code: string } } | undefined)?.error?.code;
+    expect(code("busy")).toBe("rate_limited");
+    // the module answers these (this frame has no microphone): not the limiter, for ten of them
+    expect(Array.from({ length: 12 }, (_, i) => code(`r${i}`)).filter((c) => c === "rate_limited")).toHaveLength(2);
+  });
   it("refuses an unknown namespace and a malformed message", async () => {
     const f = frame();
     f.session.handle({ uni: 1, id: "c1", ns: "chat", method: "recent" });
