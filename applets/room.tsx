@@ -414,7 +414,7 @@ const CSS = `
 @media (pointer: coarse) { .room .acts { row-gap: 20px; } }
 .room .msg.unsent .body { border-style: dashed; }
 .room .msg.unsent .when { color: var(--muted); }
-.room .msg.unsent.failed .when, .room .msg.unsent .retry { color: var(--danger); }
+.room .msg.unsent .retry { color: var(--danger); }
 .room .msg.unsent .why { color: var(--muted); font-size: var(--fs-small); overflow-wrap: anywhere; }
 .room .file-chip { border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 1px 4px 1px 9px; font-size: var(--fs-small); }
 .room .pic { max-width: min(100%, 420px); max-height: 420px; height: auto; border-radius: 6px; display: block; margin: 6px 0; }
@@ -621,7 +621,7 @@ function Unsent({ o, retry, remove }: { o: Outgoing; retry: () => void; remove: 
   const [sure, setSure] = useState(false);
   const failed = o.state === "failed";
   return <article className={`msg mine unsent${failed ? " failed" : ""}`} data-key={o.key} aria-label={failed ? "You, not sent" : "You, sending"}>
-    <div><span className="who">You</span><span className="when">{failed ? "Not sent" : "Sending…"}</span></div>
+    <div><span className="who">You</span><span className="when">{failed ? when.time(Math.floor(o.at / 1000)) : "Sending…"}</span></div>
     {o.content && <div className="body"><Markdown text={o.content} /></div>}
     {o.files.map((f) => <KeptAttachment key={f.file} f={f} />)}
     {failed && <div className="acts">

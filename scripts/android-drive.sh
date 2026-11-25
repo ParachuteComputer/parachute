@@ -4,6 +4,8 @@
 # (e2e/android/<walk>.ts) through the app's WebView devtools, with screenshots from the phone itself. Taps are the
 # devtools' own input events, which the WebView takes as a person's (a picker opens on one).
 #   scripts/android-drive.sh <debug.apk> <walk> [<folder>]      e.g. scripts/android-drive.sh app-universal-debug.apk libfirst shots
+# DRIVE_PORTS: more of the host's loopback ports the phone reaches, as <phone port>:<host port>[,…] (a relay, or a
+# pass-through in front of it the walk can cut: e2e/android/unsent.ts).
 # Needs PARACHUTE_CORE (a parachute-core binary), podman with the uni-cuttlefish image and the images in
 # ~/Android/cuttlefish/run (RUNBOOK.md, "Emulator"), and spark-ai. Exit status: the walk's.
 set -euo pipefail
@@ -32,6 +34,7 @@ echo "== the hubs"
 (cd "$root" && exec npx vite-node e2e/android/world.ts "$work/world.json") > "$out/world.log" 2>&1 &
 worldpid=$!
 for _ in $(seq 1 120); do [ -s "$work/world.json" ] && break; kill -0 "$worldpid" 2>/dev/null || { cat "$out/world.log" >&2; exit 1; }; sleep 1; done
+ports=${DRIVE_PORTS:-}
 hubport=$(node -e 'console.log(new URL(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).hub).port)' "$work/world.json")
 
 echo "== the phone (hub on $hubport, devtools on 127.0.0.1:$CDP)"
@@ -66,6 +69,7 @@ $adb shell input keyevent KEYCODE_WAKEUP; $adb shell wm dismiss-keyguard || true
 $adb shell settings put system screen_off_timeout 1800000 || true
 $adb install -r /work/app.apk >/dev/null
 $adb reverse tcp:$HUBPORT tcp:$HUBPORT >/dev/null
+for m in ${PORTS//,/ }; do $adb reverse tcp:${m%%:*} tcp:${m%%:*} >/dev/null; done
 $adb shell monkey -p computer.parachute.app -c android.intent.category.LAUNCHER 1 >/dev/null
 pid=
 for i in $(seq 1 90); do pid=$($adb shell pidof computer.parachute.app 2>/dev/null | tr -d '\r' || true); { [ -n "$pid" ] && $adb shell cat /proc/net/unix 2>/dev/null | grep -q "webview_devtools_remote_$pid"; } && break; sleep 1; done
@@ -83,9 +87,9 @@ bin/stop_cvd >/dev/null 2>&1 || true
 IN
 spark-ai lease --gb 8 --name "$name" -- \
   podman run --rm --name "$name" --label owner=uni-cf --label task=parachute-drive \
-    --network "pasta:-T,$hubport,-t,127.0.0.1/$CDP" \
+    --network "pasta:-T,$hubport${ports:+,-T,${ports//,/,-T,}},-t,127.0.0.1/$CDP" \
     --device /dev/kvm --device /dev/vhost-net --device /dev/vhost-vsock --device /dev/net/tun --cap-add NET_ADMIN --cap-add NET_RAW \
-    -v "$cf:/cf" -v "$work:/work" -e HUBPORT="$hubport" -e CDP="$CDP" localhost/uni-cuttlefish bash /work/inside.sh > "$out/phone.log" 2>&1 &
+    -v "$cf:/cf" -v "$work:/work" -e HUBPORT="$hubport" -e PORTS="$ports" -e CDP="$CDP" localhost/uni-cuttlefish bash /work/inside.sh > "$out/phone.log" 2>&1 &
 phonepid=$!
 for _ in $(seq 1 600); do [ -s "$work/ready" ] && break; kill -0 "$phonepid" 2>/dev/null || { cat "$out/phone.log" >&2; exit 1; }; sleep 1; done
 [ -s "$work/ready" ] || { echo "the phone didn't come up" >&2; exit 1; }

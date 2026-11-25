@@ -60,7 +60,7 @@ test("first run: four applets, four short cards; changed code says whether it as
     await expect(face(page)).toContainText("from Uni there. Powerful ones ask for your device unlock.");
     await expect(face(page)).toContainText("which gets your public key and where to reach this phone");
     await expect(face(page).locator("strong", { hasText: "Opens web addresses" })).toBeVisible();
-    await expect(card(page).getByText("Also: the microphone when you press record, files you pick, saving to Downloads, 256 KB for drafts")).toBeVisible();
+    await expect(card(page).getByText("Also: the microphone when you press record, files you pick, saving to Downloads, drafts and unsent files")).toBeVisible();
     await expect(card(page).getByText("On this device an applet could send what it reads to the internet: allow only code you trust.")).toBeVisible();
     // the exact lines are there, folded: hidden until Show details
     const exact = card(page).getByText(`With your everyday key: sign in to ${relayHost} on this device as you`);

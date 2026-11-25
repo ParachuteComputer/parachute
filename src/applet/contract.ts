@@ -104,7 +104,7 @@ export function parseEnvelope(raw: unknown): Envelope {
   const id = idOf(raw.id);
   const bad = (error: ErrorCode): Envelope => ({ kind: "bad", id, error });
   // a services call, a file it saves (app.save) or attaches to a note (vault.attach), or a value it keeps on the device
-  // (storage.set, which caps it at its 256 KB), or what the kit saves (saved.put, the same cap) may carry bytes (an ArrayBuffer at params.bytes), outside the request's
+  // (storage.set, which caps it at its 256 KB; storage.setFile, a file it holds until it is sent), or what the kit saves (saved.put, the same cap) may carry bytes (an ArrayBuffer at params.bytes), outside the request's
   // budget and capped on their own
   const params = "uni" in raw && (raw.ns === "services" || raw.ns === "app" || raw.ns === "vault" || raw.ns === "storage" || raw.ns === "saved" || raw.ns === "vaults") && plain(raw.params) ? raw.params : null;
   const bytes = params && params.bytes instanceof ArrayBuffer ? params.bytes : null;

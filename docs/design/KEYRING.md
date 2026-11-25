@@ -123,7 +123,7 @@ a note under it: "It sees what each card asks (the job, never a key), and that c
 `reach: voice`: "Record from your microphone when you press record (the app shows its own recorder)". `links`: "Open
 web addresses in your browser: what it reads could leave in an address it opens" (stressed). `save`: "Save files to
 your device's Downloads". `attach`: "Ask you to pick a file or picture to give it". `storage`: "Keep up to 256 KB on
-this device for itself (drafts, what it last showed)".
+this device for itself (drafts, what it last showed), and files it holds until they are sent (up to 100 MB)".
 
 ## Approving inside an applet
 
@@ -259,7 +259,10 @@ alone are refused. Not room-scoped, said on the card's notes: media on that rela
   256 KB in all; a value goes as JSON text in bytes (`params.bytes`, read only once it is within the 256 KB), so one
   call keeps a whole list. Why not the two places that already keep an applet's state: drafts are written at every pause in
   typing, belong to this device, and shouldn't sync; a relay's private note is a signed event per write, and a vault
-  note would show up as a note and sync everywhere.
+  note would show up as a note and sync everywhere. Beside it, files it holds until they are sent
+  (`storage.setFile(key, bytes)`, `getFile(key)`, `fileKeys()`; null removes one): 25 MB each, 100 MB in all, in the
+  app's data folder (a browser: IndexedDB), gone with the rest on Revoke. Rooms keeps a recording or a picture there
+  from the moment it is sent until the relay has it (T-476), so a dropped connection never loses it.
 - **Vault attachments** (new call `vault.attach(noteId, bytes, type, {transcribe})`): adds a file to a note the applet
   may `update` (its access rule governs it), through the hub's own upload and attach routes; `transcribe` asks the hub
   to transcribe audio.

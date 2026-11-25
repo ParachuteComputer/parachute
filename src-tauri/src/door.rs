@@ -270,12 +270,17 @@ fn client() -> Result<reqwest::Client, Refusal> {
 }
 
 /// The shell's HTTP client: rustls with the web's roots, no redirects followed, no cookie store, a whole-request timeout.
+/** How long making a connection may take, for every request the app's native side makes. */
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+
 pub(crate) fn http_client(timeout: Duration) -> Result<reqwest::Client, ()> {
     let mut roots = rustls::RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let provider = rustls::crypto::CryptoProvider::get_default().cloned().unwrap_or_else(|| std::sync::Arc::new(rustls::crypto::ring::default_provider()));
     let tls = rustls::ClientConfig::builder_with_provider(provider).with_safe_default_protocol_versions().map_err(|_| ())?.with_root_certificates(roots).with_no_client_auth();
-    reqwest::Client::builder().tls_backend_preconfigured(tls).redirect(reqwest::redirect::Policy::none()).timeout(timeout).build().map_err(|_| ())
+    // a server that can't be reached (off the tailnet, a phone just waking) is said in seconds, not after a request's
+    // whole time (an upload's is 5 minutes): T-476
+    reqwest::Client::builder().tls_backend_preconfigured(tls).redirect(reqwest::redirect::Policy::none()).timeout(timeout).connect_timeout(CONNECT_TIMEOUT.min(timeout)).build().map_err(|_| ())
 }
 
 // ── Sharing a vault with a friend (docs/design/SHARING.md) ──

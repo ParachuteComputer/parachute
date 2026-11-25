@@ -37,6 +37,6 @@ export function appLines(app: readonly AppWord[]): { text: string; stress: boole
   if (app.includes("sharing")) out.push({ text: "See what reaches each vault you give it (this app, its applets, and, once you let Parachute manage it on your hub, every key, AI and app), and, each after you say yes on the app's own sheet: give an AI a key to some or all of a vault (its secret shown on Parachute's own sheet, never to the applet), end what reaches a vault, invite someone to a vault and end their access, publish a record (anyone with its link can read it), take an applet's access back, or make a vault read only", stress: true });
   if (app.includes("changes")) out.push({ text: "See how many changes your AIs and other apps made today in the vaults you give it, and their names (not what they changed)", stress: false });
   if (app.includes("copy")) out.push({ text: "Put text of its own on your clipboard when you tap in it", stress: false });
-  if (app.includes("storage")) out.push({ text: "Keep up to 256 KB on this device for itself (drafts, what it last showed)", stress: false });
+  if (app.includes("storage")) out.push({ text: "Keep up to 256 KB on this device for itself (drafts, what it last showed), and files it holds until they are sent (up to 100 MB)", stress: false });
   return out;
 }

@@ -44,7 +44,6 @@ export class RelayConn {
   private againTimer: ReturnType<typeof setTimeout> | null = null;
   private hiddenAt = 0;
   private probe: { id: string; timer: ReturnType<typeof setTimeout> } | null = null;
-  private lastWhy = "";
   private unwake: () => void = () => {};
 
   constructor(private url: string, private auth: (challenge: string) => Promise<SignedEvent>, private onStatus: (s: Status) => void, private socket: (url: string) => WebSocket = (u) => new WebSocket(u)) {
@@ -98,7 +97,7 @@ export class RelayConn {
     this.onStatus({ status: "connecting" });
     this.authed = false; this.open = false; this.authEvent = null;
     let ws: WebSocket;
-    try { ws = this.socket(this.url); } catch (e) { this.lastWhy = e instanceof Error ? e.message : "couldn't connect"; this.onStatus({ status: "closed", why: this.lastWhy }); this.again(); return; }
+    try { ws = this.socket(this.url); } catch (e) { this.onStatus({ status: "closed", why: e instanceof Error ? e.message : "couldn't connect" }); this.again(); return; }
     this.ws = ws;
     ws.onopen = () => {
       this.open = true; this.tries = 0;
@@ -115,7 +114,6 @@ export class RelayConn {
     if (this.authTimer) clearTimeout(this.authTimer);
     if (this.probe) { clearTimeout(this.probe.timer); this.probe = null; }
     if (this.closedForGood) return;
-    this.lastWhy = why;
     this.onStatus({ status: "closed", why });
     // a publish in flight keeps waiting (its own timer): it goes again, the same event, after the next sign-in
     this.dropOutbox();
@@ -238,7 +236,7 @@ export class RelayConn {
         this.waiting.delete(ev.id);
         // told it failed: if it was still waiting for a sign-in, it doesn't go out later
         this.posts = this.posts.filter((m) => !(Array.isArray(m) && m[0] === "EVENT" && (m[1] as SignedEvent)?.id === ev.id));
-        resolve({ ok: false, message: this.authed ? "no answer from the relay" : this.lastWhy ? `can't reach the relay (${this.lastWhy})` : "can't reach the relay" });
+        resolve({ ok: false, message: this.authed ? "no answer from the relay" : "can't reach the relay" });
       }, OK_WAIT_MS);
       // the same event asked again while it waits (a second tap): one wait, both told its answer
       if (was) { clearTimeout(was.timer); const first = was.resolve; this.waiting.set(ev.id, { ev, resolve: (r) => { first(r); resolve(r); }, timer }); return; }

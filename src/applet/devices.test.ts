@@ -15,8 +15,9 @@ import type { CallCtx } from "./router";
 import { createAppModule, type AppDeps } from "./modules/app";
 import { createVoiceModule } from "./modules/voice";
 import { createStorageModule } from "./modules/storage";
+import { createKeptFiles, KEPT_FILES_MAX, type FilesBackend } from "../shell/keptFiles";
 import { createVaultModule, type VaultNote } from "./modules/vault";
-import { bareName, linkOk, mediaType, parseAccept, STORAGE_MAX } from "./files";
+import { bareName, FILE_MAX, linkOk, mediaType, parseAccept, STORAGE_MAX } from "./files";
 
 const m = (() => { const r = parseManifest(RECIPES); if (!r.ok) throw new Error(r.error); return r.manifest; })();
 const voiced = (() => { const r = parseManifest({ ...RECIPES, reach: ["voice"] }); if (!r.ok) throw new Error(r.error); return r.manifest; })();
@@ -63,7 +64,7 @@ describe("the app words links, save, attach, storage", () => {
       { text: "Open web addresses in your browser: what it reads could leave in an address it opens", stress: true },
       { text: "Save files to your device's Downloads", stress: false },
       { text: "Ask you to pick a file or picture to give it", stress: false },
-      { text: "Keep up to 256 KB on this device for itself (drafts, what it last showed)", stress: false },
+      { text: "Keep up to 256 KB on this device for itself (drafts, what it last showed), and files it holds until they are sent (up to 100 MB)", stress: false },
     ]);
   });
   it("each word asks again", async () => {
@@ -254,6 +255,64 @@ describe("storage", () => {
     const half = JSON.stringify({ x: "y".repeat(STORAGE_MAX / 2) });
     await r.call("storage", "set", { key: "half", bytes: bytes(half) }, {});
     expect(await code(r.call("storage", "set", { key: "half2", bytes: bytes(half) }, {}))).toBe("too_large");
+  });
+});
+
+describe("storage: files it holds until they are sent (T-476)", () => {
+  const store = () => { let all: Record<string, unknown> = {}; return { read: () => ({ ...all }), write: (x: Record<string, unknown>) => { all = x; } }; };
+  /** this device's files, in memory: the total is the backend's to check, as Rust and IndexedDB do */
+  const memory = (): FilesBackend => {
+    const m = new Map<string, Uint8Array>();
+    return {
+      async put(subject, key, bytes) { const others = [...m].filter(([k]) => k.startsWith(`${subject}\0`) && k !== `${subject}\0${key}`).reduce((a, [, b]) => a + b.byteLength, 0); if (others + bytes.byteLength > KEPT_FILES_MAX) return "full"; m.set(`${subject}\0${key}`, bytes.slice()); return "ok"; },
+      async get(subject, key) { return m.get(`${subject}\0${key}`) ?? null; },
+      async drop(subject, key) { for (const k of [...m.keys()]) if (key === undefined ? k.startsWith(`${subject}\0`) : k === `${subject}\0${key}`) m.delete(k); },
+      async keys(subject) { return [...m.keys()].filter((k) => k.startsWith(`${subject}\0`)).map((k) => k.slice(subject.length + 1)).sort(); },
+    };
+  };
+  const filesFor = (kept: ReturnType<typeof createKeptFiles>, subject: string) => ({ put: (k: string, b: Uint8Array) => kept.put(subject, k, b), get: (k: string) => kept.get(subject, k), drop: (k: string) => kept.drop(subject, k), keys: () => kept.keys(subject) });
+  const buf = (n: number, fill = 1) => { const b = new ArrayBuffer(n); new Uint8Array(b).fill(fill); return b; };
+
+  it("not_granted without storage, for each of its calls", async () => {
+    const r = createRouter([createStorageModule(false, { ...store(), files: filesFor(createKeptFiles(memory()), "a") })]);
+    for (const [m, p] of [["setFile", { key: "f", bytes: buf(3) }], ["getFile", { key: "f" }], ["fileKeys", {}]] as const) expect(await code(r.call("storage", m, p, {}))).toBe("not_granted");
+  });
+
+  it("kept as given, read back, listed and let go; another applet's are its own; Revoke takes them all", async () => {
+    const kept = createKeptFiles(memory());
+    const r = createRouter([createStorageModule(true, { ...store(), files: filesFor(kept, "a") })]);
+    const other = createRouter([createStorageModule(true, { ...store(), files: filesFor(kept, "b") })]);
+    await r.call("storage", "setFile", { key: "f:voice", bytes: buf(1000, 7) }, {});
+    const back = (await r.call("storage", "getFile", { key: "f:voice" }, {})) as ArrayBuffer;
+    expect(back.byteLength).toBe(1000);
+    expect(new Uint8Array(back)[999]).toBe(7);
+    expect(await r.call("storage", "fileKeys", {}, {})).toEqual(["f:voice"]);
+    expect(await other.call("storage", "getFile", { key: "f:voice" }, {})).toBeNull();
+    // its JSON keys and its files are apart
+    expect(await r.call("storage", "keys", {}, {})).toEqual([]);
+    await r.call("storage", "setFile", { key: "f:voice", bytes: null }, {});
+    expect(await r.call("storage", "getFile", { key: "f:voice" }, {})).toBeNull();
+    await r.call("storage", "setFile", { key: "f:pic", bytes: buf(10) }, {});
+    await kept.clear("a");
+    expect(await r.call("storage", "fileKeys", {}, {})).toEqual([]);
+  });
+
+  it("25 MB a file (refused before it is kept), 100 MB in all; keys up to 100 characters; bytes only", async () => {
+    const r = createRouter([createStorageModule(true, { ...store(), files: filesFor(createKeptFiles(memory()), "a") })]);
+    expect(await code(r.call("storage", "setFile", { key: "big", bytes: buf(FILE_MAX + 1) }, {}))).toBe("too_large");
+    for (let i = 0; i < 4; i++) expect(await code(r.call("storage", "setFile", { key: `f${i}`, bytes: buf(FILE_MAX) }, {}))).toBe("ok");
+    expect(await code(r.call("storage", "setFile", { key: "f4", bytes: buf(1) }, {}))).toBe("too_large");
+    // the same key again replaces it: not counted twice
+    expect(await code(r.call("storage", "setFile", { key: "f0", bytes: buf(FILE_MAX) }, {}))).toBe("ok");
+    expect(await code(r.call("storage", "setFile", { key: "x".repeat(101), bytes: buf(1) }, {}))).toBe("bad_params");
+    expect(await code(r.call("storage", "setFile", { key: "s", bytes: "text" }, {}))).toBe("bad_params");
+  });
+
+  it("a device that keeps no files says so; the JSON store still works", async () => {
+    const r = createRouter([createStorageModule(true, store())]);
+    expect(await code(r.call("storage", "setFile", { key: "f", bytes: buf(3) }, {}))).toBe("failed");
+    await r.call("storage", "set", { key: "draft", value: "hi" }, {});
+    expect(await r.call("storage", "get", { key: "draft" }, {})).toBe("hi");
   });
 });
 

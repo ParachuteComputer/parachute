@@ -225,7 +225,7 @@ describe("the broker's relay connection", () => {
       FakeSocket.refuse = true;
       FakeSocket.all[0].onclose?.();
       await vi.advanceTimersByTimeAsync(15_500);
-      await expect(posted).resolves.toMatchObject({ ok: false, message: expect.stringMatching(/can't reach the relay/) });
+      await expect(posted).resolves.toMatchObject({ ok: false, message: "can't reach the relay" });
       FakeSocket.refuse = false;
       await vi.advanceTimersByTimeAsync(31_000);
       const back = FakeSocket.all[FakeSocket.all.length - 1];
