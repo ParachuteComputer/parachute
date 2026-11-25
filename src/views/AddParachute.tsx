@@ -48,7 +48,7 @@ export default function AddParachute({ first = false }: { first?: boolean }) {
     <main className="screen">
       <Bar title={first ? "Parachute" : "Add a Parachute"} back={first ? undefined : "/"} />
       <section className="card stack">
-        <PickVaults pick={pick} onCancel={() => setPick(null)} onError={(e) => { setPick(null); setError(`[T520] ${e instanceof Error ? `${e.name}: ${e.message} ${e.stack ?? ""}` : JSON.stringify(e)} / ${String(words(e))}`); }} />
+        <PickVaults pick={pick} onCancel={() => setPick(null)} onError={(e) => { setPick(null); if (isRefusal(e)) setRefusal(e); else setError(words(e)); }} />
       </section>
     </main>
   );

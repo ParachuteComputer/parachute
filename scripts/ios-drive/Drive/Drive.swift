@@ -50,6 +50,15 @@ final class Drive: XCTestCase {
         _ = app.keyboards.firstMatch.waitForNonExistence(timeout: 3)
         let window = app.windows.firstMatch.frame
         for _ in 0..<6 where !window.contains(CGPoint(x: e.frame.midX, y: e.frame.midY)) { app.swipeUp() }
+        // the page can still move after it shows (on the iPhone the pick's Continue rose 46pt a second or two after it
+        // appeared, and a tap aimed at it landed on Back): tap once the button has held its place for half a second
+        var at = e.frame
+        for _ in 0..<10 {
+            Thread.sleep(forTimeInterval: 0.5)
+            let now = e.frame
+            if now == at { break }
+            at = now
+        }
         e.tap()
     }
 
@@ -114,7 +123,6 @@ final class Drive: XCTestCase {
         press("Sign in with your key")
         wait("Which vaults on \(host) are yours?")
         shot("03-pick")
-        print("T520 continue frame \(app.buttons["Continue"].frame) back \(app.buttons["Back"].frame)")
         press("Continue")
         sleep(1)
         shot("03b-after-continue")
