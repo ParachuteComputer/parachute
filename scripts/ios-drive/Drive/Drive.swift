@@ -114,6 +114,7 @@ final class Drive: XCTestCase {
         press("Sign in with your key")
         wait("Which vaults on \(host) are yours?")
         shot("03-pick")
+        print("T520 continue frame \(app.buttons["Continue"].frame) back \(app.buttons["Back"].frame)")
         press("Continue")
         sleep(1)
         shot("03b-after-continue")

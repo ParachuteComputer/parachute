@@ -13,7 +13,13 @@ export default function PickVaults({ pick, onError, onCancel }: { pick: VaultPic
   const choices = pick.home ? (pick.askMine ? pick.vaults.filter((v) => mine.includes(v)) : pick.mine) : pick.vaults;
   const chosen = choices.includes(first) ? first : choices[0] ?? "";
   const t520 = (m: string) => document.body.insertAdjacentHTML("beforeend", `<p style="font-size:12px">[T520] ${m.replace(/</g, "&lt;")}</p>`);
-  useEffect(() => { t520("pick mounted"); return () => t520("pick unmounted"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const vv = () => `scrollY=${window.scrollY} inner=${window.innerHeight} vv.top=${window.visualViewport?.offsetTop} vv.h=${window.visualViewport?.height} vv.scale=${window.visualViewport?.scale} doc.h=${document.documentElement.scrollHeight}`;
+    t520(`pick mounted ${vv()}`);
+    const at = (e: Event) => { const t = (e as TouchEvent).touches?.[0] ?? (e as TouchEvent).changedTouches?.[0]; const m = e as MouseEvent; t520(`${e.type} client=${t ? `${t.clientX},${t.clientY}` : `${m.clientX},${m.clientY}`} on "${(e.target as HTMLElement)?.textContent?.slice(0, 20)}" ${vv()}`); };
+    for (const k of ["touchstart", "touchend", "click"]) document.addEventListener(k, at, true);
+    return () => { for (const k of ["touchstart", "touchend", "click"]) document.removeEventListener(k, at, true); t520("pick unmounted"); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   async function go() {
     t520(`go chosen=${chosen}`);
     if (!chosen) return;
