@@ -267,7 +267,10 @@ mod platform {
                 })
         }
         // Touch ID or the Mac's password; Face ID or the passcode on an iPhone (Info.ios.plist says why it asks)
+        #[cfg(target_os = "ios")]
+        return Err("The device unlock isn't available here.".into());
         #[cfg(any(target_os = "macos", target_os = "ios"))]
+        #[allow(unreachable_code)]
         {
             let reason = _reason.to_string();
             tauri::async_runtime::spawn_blocking(move || {
