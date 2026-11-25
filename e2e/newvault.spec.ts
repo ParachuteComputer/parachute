@@ -22,7 +22,7 @@ async function makeVault(vault: string, applet: string) {
 const dropVault = (vault: string) => { try { cli(hubState(), ["vault", "remove", vault, "--yes"]); } catch { /* gone already */ } };
 
 /** A vault on offer: one line in Settings, under its Parachute. */
-const newLine = (page: Page, vault: string) => page.getByRole("button", { name: `Open ${vault}`, exact: true });
+const newLine = (page: Page, vault: string) => page.getByRole("button", { name: new RegExp(`^Open ${vault}( · (yours|someone else's))?$`) });
 
 test.afterAll(() => { dropVault("garden"); dropVault("attic"); dropVault("shelf"); });
 
@@ -113,7 +113,7 @@ test("a vault of yours this device doesn't read is offered at the foot of the li
   await page.goto("about:blank");
   await page.goto("/");
   await expect(list.getByRole("link").first()).toBeVisible();
-  const open = toOpen.getByRole("button", { name: "Open shelf", exact: true });
+  const open = toOpen.getByRole("button", { name: /^Open shelf( · (yours|someone else.s))?$/ });
   await expect(open).toBeVisible({ timeout: 15_000 });
   await expect(toOpen).toContainText("Their applets show here once you open them.");
   await expect(list.getByRole("link", { name: /Books/ })).toHaveCount(0);
@@ -122,5 +122,5 @@ test("a vault of yours this device doesn't read is offered at the foot of the li
   await page.waitForURL((u) => u.origin === hubState().origin);
   expect(await approveUntilBack(page, hubState().origin, app)).toBe(1);
   await expect(list.getByRole("link", { name: /Books/ })).toBeVisible({ timeout: 20_000 });
-  await expect(toOpen.getByRole("button", { name: "Open shelf", exact: true })).toHaveCount(0);
+  await expect(toOpen.getByRole("button", { name: /^Open shelf( · (yours|someone else.s))?$/ })).toHaveCount(0);
 });

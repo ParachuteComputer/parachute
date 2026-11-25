@@ -45,7 +45,9 @@ Three layers, from what no record can touch to what is most yours.
 2. **The list is your bundle.** Every applet the open bundle offers ([Bundles](#bundles)), in one plain list. In Everything, that
    is every applet in every vault. Vaults are not on it, save one kind: a vault of yours that the bundle draws applets
    from and this device doesn't read yet ends the list under **Not open here yet** (*Their applets show here once you
-   open them*), **Open <vault>** or **Not now** each (T-476: Aaron's Library sat in such a vault, unseen). Otherwise
+   open them*), **Open <vault>** or **Not now** each (T-476: Aaron's Library sat in such a vault, unseen). The line says
+   whose it opens as when that isn't settled yet: *· yours* on a Parachute your key says you run, *· someone else's*
+   elsewhere. Otherwise
    vaults are in Settings (**Your Parachutes**, one line each saying what Parachute holds of it and what for, with **Open**),
    and in a Vault applet when the bundle lists one. Nor is Connect an AI: it is a setting (Settings → **Your AI**), a first
    step in Start here on a new vault, and a place on Parachute Simplified's bar.
@@ -213,7 +215,8 @@ as one line with **Sign in**; nothing is signed in to, or fetched from it, until
 Signing in reads your home vault only. Each other vault on that Parachute, and any made there later, is counted under
 it in Settings (*3 more vaults there, not open here*) and at the foot of the list when the open bundle draws applets
 from them (**Not open here yet**); a tap on that line shows them, each as **Open
-playground**. A tap asks your hub to let Parachute read that one vault; **Not now** stops offering it on this device ([design/SCOPES.md](design/SCOPES.md), [design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md),
+playground**. A tap asks your hub to let Parachute read that one vault, and it comes in as the line says (*· yours* or *·
+someone else's*; [What is whose](#what-is-whose)); **Not now** stops offering it on this device ([design/SCOPES.md](design/SCOPES.md), [design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md),
 step 7).
 
 ## What is whose
