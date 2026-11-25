@@ -200,6 +200,8 @@ pub fn run() {
                 use tauri::Manager;
                 if let Some(window) = app.get_webview_window("main") {
                     seal_webview(&window);
+                    #[cfg(target_os = "ios")]
+                    full_screen_page(&window);
                 }
             }
             #[cfg(target_os = "android")]
@@ -224,6 +226,25 @@ fn webview_runtime() -> String {
     match env!("PARACHUTE_WRY_VERSION") {
         "unknown" => String::new(),
         wry => format!("wry {wry} tauri {}", tauri::VERSION),
+    }
+}
+
+/// The page fills the iPhone's screen and pads itself for the notch and the home bar (`viewport-fit=cover` and
+/// `env(safe-area-inset-*)` in the CSS). UIKit's default also shrank the page by those insets, so the page was 82pt
+/// short and the bar at the foot floated above the bottom of the screen.
+#[cfg(target_os = "ios")]
+fn full_screen_page(window: &tauri::WebviewWindow) {
+    if let Err(err) = window.with_webview(|webview| {
+        use objc2::{msg_send, rc::Retained, runtime::AnyObject};
+        // SAFETY: `inner()` is the live WKWebView, on the main thread (`with_webview`); `scrollView` and
+        // `setContentInsetAdjustmentBehavior:` are public UIKit API; 2 is UIScrollViewContentInsetAdjustmentNever.
+        unsafe {
+            let wk = &*webview.inner().cast::<AnyObject>();
+            let scroll: Retained<AnyObject> = msg_send![wk, scrollView];
+            let () = msg_send![&*scroll, setContentInsetAdjustmentBehavior: 2isize];
+        }
+    }) {
+        log::warn!("full_screen_page: with_webview failed ({err})");
     }
 }
 

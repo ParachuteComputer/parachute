@@ -141,5 +141,12 @@ final class Drive: XCTestCase {
         wait(room, 60)
         wait("The beans are up along the fence.", 30)
         shot("07-rooms")
+
+        // the page fills the screen: the bar at the foot sits on its bottom edge (src-tauri/src/lib.rs full_screen_page;
+        // UIKit's default left the page 82pt short and the bar floating above the bottom)
+        let screen = app.windows.firstMatch.frame
+        let foot = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Applets")).allElementsBoundByIndex
+            .map { $0.frame.maxY }.max() ?? 0
+        XCTAssertLessThan(screen.maxY - foot, 80, "the bar at the foot ends \(screen.maxY - foot)pt above the bottom of the screen")
     }
 }
