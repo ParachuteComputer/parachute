@@ -108,7 +108,7 @@ fieldset.plain { border: 0; min-width: 0; }
    the button below (the vault pick's Continue opened Back). Not a hidden legend (it stays 1px), not the flex .choice
    (a floated legend would become one of its items) */
 fieldset.plain legend { padding: 0; }
-fieldset.plain:not(.choice) > legend:not(.sr-only) { float: left; width: 100%; }
+fieldset.plain:not(.choice) > legend:not(.sr-only) { float: left; width: 100%; margin-top: 0; }
 fieldset.plain:not(.choice) > legend:not(.sr-only) + * { clear: left; }
 .line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; }
 .line + .line { border-top: 1px solid var(--line); }
