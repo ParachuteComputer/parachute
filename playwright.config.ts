@@ -41,6 +41,8 @@ export default defineConfig({
     // a vault made after the sign-in, opened from the list, and its first applet (e2e/libfirst.spec.ts): it signs in
     // itself through the key door, after every other sign-in
     { name: "first-open", dependencies: ["pick"], testMatch: [/libfirst\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium" } },
+    { name: "first-open-mac", dependencies: ["first-open"], testMatch: [/libfirst\.spec\.ts/], use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 900 },
+      ...(process.env.PW_WEBKIT_WS ? { connectOptions: { wsEndpoint: process.env.PW_WEBKIT_WS } } : {}) } },
   ],
   // VITE_E2E_SIGNER: the test signer for the services tests (src/services/e2eNative.ts); only this build has it
   webServer: { command: `VITE_E2E_SIGNER=1 npm run build && npx vite preview --port ${PORT} --strictPort`, url: `http://localhost:${PORT}`, reuseExistingServer: !process.env.CI, timeout: 120_000 },

@@ -2,6 +2,7 @@
 // the person's own Parachute with their key reads its vaults; a vault made there later (`library`, as Uni made his),
 // with Library and Languages put in it as his apply.sh puts them (scripts/install-applets.ts), is offered at the end of
 // the list: Open library. A tap, the hub's consent, Library's card, Allow, Add a book: the shell's own picker opens.
+// On a phone (Chromium) and at a Mac's width in WebKit (the Mac app's engine). The phone itself: e2e/android/libfirst.ts.
 // Set LIBFIRST_SHOTS=<dir> for a screenshot of every screen on the way.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -13,22 +14,21 @@ import { cli, hubState, mintToken, VAULT } from "./hub";
 
 const SHOTS = process.env.LIBFIRST_SHOTS || "";
 const LIB = "library";
-let n = 0;
+let n = 0, where = "";
 async function shot(page: Page, name: string) {
   if (!SHOTS) return;
-  mkdirSync(SHOTS, { recursive: true });
+  mkdirSync(join(SHOTS, where), { recursive: true });
   await page.waitForTimeout(300);
-  await page.screenshot({ path: join(SHOTS, `${String(++n).padStart(2, "0")}-${name}.png`) });
+  await page.screenshot({ path: join(SHOTS, where, `${String(++n).padStart(2, "0")}-${name}.png`) });
 }
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame:visible");
 
 test.afterAll(() => { try { cli(hubState(), ["vault", "remove", LIB, "--yes"]); } catch { /* gone already */ } });
 
-test("a vault made later, opened from the list: its applet asks on one card, and Add a book opens the picker", async ({ browser }) => {
+test("a vault made later, opened from the list: its applet asks on one card, and Add a book opens the picker", async ({ page }, info) => {
   test.setTimeout(240_000);
   const h = hubState();
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  const page = await ctx.newPage();
+  where = info.project.name;
   await page.clock.install();
   // signed in with the key, the Parachute his own: the vaults there now are his
   await signInWithKey(page, h, VAULT, "Mine");
@@ -87,5 +87,4 @@ test("a vault made later, opened from the list: its applet asks on one card, and
   expect(asked).toBe(1);
   expect(more).toBe(1);
   await expect(page.getByRole("region", { name: /asking for access/ })).toHaveCount(0);
-  await ctx.close();
 });
