@@ -200,8 +200,6 @@ pub fn run() {
                 use tauri::Manager;
                 if let Some(window) = app.get_webview_window("main") {
                     seal_webview(&window);
-                    #[cfg(target_os = "ios")]
-                    full_screen_page(&window);
                 }
             }
             #[cfg(target_os = "android")]
@@ -233,6 +231,7 @@ fn webview_runtime() -> String {
 /// `env(safe-area-inset-*)` in the CSS). UIKit's default also shrank the page by those insets, so the page was 82pt
 /// short and the bar at the foot floated above the bottom of the screen.
 #[cfg(target_os = "ios")]
+#[allow(dead_code)]
 fn full_screen_page(window: &tauri::WebviewWindow) {
     if let Err(err) = window.with_webview(|webview| {
         use objc2::{msg_send, rc::Retained, runtime::AnyObject};
