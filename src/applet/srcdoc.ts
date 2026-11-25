@@ -1,6 +1,9 @@
 // The srcdoc for a sealed applet (copied from the Uni app). Pure: data in, string out.
 
 export const FRAME_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'";
+/** A sealed frame gets no microphone, camera or screen of its own, whatever the webview would grant: an applet that
+ *  records asks the shell, which records on its own sheet (docs/design/KEYRING.md "Voice, files, links, storage"). */
+export const NO_DEVICES = "microphone 'none'; camera 'none'; display-capture 'none'; geolocation 'none'";
 export const CSP_META = `<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}">`;
 
 // WebRTC ignores CSP. This removes it from the app's own realm before app code

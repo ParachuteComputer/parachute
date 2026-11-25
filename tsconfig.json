@@ -37,6 +37,8 @@
     "src",
     "packages/surface-render/src",
     "packages/applet-kit",
+    "packages/applet-host/src",
+    "packages/applet-host/vite.config.ts",
     "e2e",
     "applets/record.ts",
     "vite.config.ts",

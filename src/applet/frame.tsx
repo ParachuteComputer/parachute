@@ -5,7 +5,7 @@ import vaultClientSource from "virtual:vault-client-kit";
 import reactKitSource from "virtual:react-kit";
 import reactNoteKitSource from "virtual:react-note-kit";
 import { modulePage, usesNote, type CodeKind } from "./code";
-import { buildSrcdoc } from "./srcdoc";
+import { buildSrcdoc, NO_DEVICES } from "./srcdoc";
 import { buildKitSource } from "./kits";
 import { createSession, type Session } from "./session";
 import { subscribeTheme, tokensNow } from "../theme/store";
@@ -17,9 +17,8 @@ import { judge, loadedAgain } from "./violations";
 
 /** Shown in place of a frame whose navigation the host CSP had to block. */
 export const STOPPED_MESSAGE = "This applet tried to leave its sandbox and was stopped.";
-/** A sealed frame gets no microphone, camera or screen of its own, whatever the webview would grant: an applet that
- *  records asks the shell, which records on its own sheet (docs/design/KEYRING.md "Voice, files, links, storage"). */
-export const NO_DEVICES = "microphone 'none'; camera 'none'; display-capture 'none'; geolocation 'none'";
+/** The frame's devices (none: srcdoc.ts says why). */
+export { NO_DEVICES };
 /** When the app couldn't tell which frame on a page tried (docs/design/EMBED.md). */
 export const PAGE_STOPPED_MESSAGE = "Something on this page tried to leave its sandbox, so the page was stopped.";
 const KIT_SOURCE = buildKitSource({ vaultClientSource });
