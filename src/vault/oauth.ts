@@ -27,7 +27,7 @@ export const CLOUD_CLIENT_NAME = "Vault app";
  *  address (SHELL_RETURN), so under one name a sign-in on the Mac signed the phone out (T-476 journey walk). The device's
  *  kind tells them apart, and reads plainly on Cloud's pages; signing in again on the same device still replaces its
  *  own earlier sign-in. */
-export function cloudClientName(ua: string = typeof navigator === "undefined" ? "" : navigator.userAgent): string {
+export function cloudClientName(ua: string = deviceAgent()): string {
   const on = /Android/i.test(ua) ? "Android" : /iPad/i.test(ua) ? "iPad" : /iPhone/i.test(ua) ? "iPhone" : /Macintosh|Mac OS X/i.test(ua) ? "a Mac"
     : /Windows/i.test(ua) ? "Windows" : /Linux|X11/i.test(ua) ? "Linux" : null;
   return on ? `${CLOUD_CLIENT_NAME} on ${on}` : CLOUD_CLIENT_NAME;
@@ -39,6 +39,7 @@ const PENDING_TTL_MS = 30 * 60_000;
 
 export { PendingApprovalError };
 import { limitedFetch } from "./limited";
+import { deviceAgent } from "../shell/agent";
 
 /** What follows when the hub says yes to an `open` step, beyond keeping the token: the applet the person allowed on its
  *  card, recorded only now (src/applet/grants.ts), so an Allow the hub refused allows nothing. */

@@ -12,6 +12,7 @@ import { originOf, type VaultRecord } from "../vault/store";
 import { stripExt } from "./contract";
 import { APPROVAL_TAG, KEYS_PATH, KEYS_TAG, PICK_CODE, approvalContent, approvalPath, checkApproval, checkKeyList, decide, dOf, newestOf, pickIn, pickRead, revokeFloor, trustedKeys, type Content, type Decision, type PickRead, type KeyList, type SignedEvent, type Subject } from "./approvals";
 import type { VaultRef } from "./vaultPick";
+import { deviceAgent } from "../shell/agent";
 
 const SEEN_KEY = "parachute.approvals.seen.v1";
 const ANCHOR_KEY = "parachute.anchor.v1";
@@ -212,7 +213,7 @@ export const signPick = (s: Subject, name: string, vaults: readonly VaultRef[] |
   signApproval({ subject: s, name, approved: true, code: PICK_CODE, scope: PICK_CODE, vaults, passcode, signed });
 
 /** What this device calls itself on an approval it signs. */
-export function deviceName(ua: string = typeof navigator === "undefined" ? "" : navigator.userAgent): string {
+export function deviceName(ua: string = deviceAgent()): string {
   // an iPhone's user agent says "like Mac OS X": it is asked first
   return /Android/i.test(ua) ? "Android" : /iPhone/i.test(ua) ? "iPhone" : /iPad/i.test(ua) ? "iPad" : /Mac/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : /Windows/i.test(ua) ? "Windows" : "a device";
 }

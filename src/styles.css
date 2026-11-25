@@ -105,9 +105,11 @@ details[open] summary { margin-bottom: 6px; }
 fieldset.plain { border: 0; min-width: 0; }
 /* the legend as a plain block (floated, so it isn't drawn in the fieldset's border): iOS's WebKit laid a legend's height
    out twice at first and took it back as a tap began, so a fieldset shrank a line under the finger and the tap landed on
-   the button below (the vault pick's Continue opened Back) */
-fieldset.plain legend { padding: 0; float: left; width: 100%; }
-fieldset.plain legend + * { clear: left; }
+   the button below (the vault pick's Continue opened Back). Not a hidden legend (it stays 1px), not the flex .choice
+   (a floated legend would become one of its items) */
+fieldset.plain legend { padding: 0; }
+fieldset.plain:not(.choice) > legend:not(.sr-only) { float: left; width: 100%; }
+fieldset.plain:not(.choice) > legend:not(.sr-only) + * { clear: left; }
 .line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; }
 .line + .line { border-top: 1px solid var(--line); }
 /* what an allowed applet holds beyond its line (its servers, what it may do on Techne): under it, the whole width */

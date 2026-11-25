@@ -1,7 +1,7 @@
-//! Parachute's shell: one window around the app, the seal applets need on desktop, and the two facts the applet
-//! self-test is keyed on (the app's version and the webview runtime), and the person's key (key.rs: kept, paired in by
-//! pairing.rs, used to sign in to a hub by door.rs and for an allowed applet's services by services.rs). Everything else
-//! lives in the web app.
+//! Parachute's shell: one window around the app, the seal applets need on desktop and on an iPhone, and the two facts
+//! the applet self-test is keyed on (the app's version and the webview runtime), and the person's key (key.rs: kept,
+//! paired in by pairing.rs, used to sign in to a hub by door.rs and for an allowed applet's services by services.rs).
+//! Everything else lives in the web app.
 
 mod approvals;
 pub mod approve;
@@ -271,9 +271,9 @@ fn seal_webview(window: &tauri::WebviewWindow) {
         #[cfg(target_os = "ios")]
         {
             use objc2::{msg_send, rc::Retained, runtime::AnyObject};
-            // SAFETY: on iOS `inner()` is the live WKWebView, and `with_webview` runs this on the main thread; both
-            // messages are public WebKit API (WKWebView.configuration, WKUserContentController
-            // removeScriptMessageHandlerForName:).
+            // SAFETY: on iOS `inner()` is the live WKWebView, and `with_webview` runs this on the main thread; the
+            // three messages are public WebKit API (WKWebView.configuration, WKWebViewConfiguration.userContentController,
+            // WKUserContentController removeScriptMessageHandlerForName:); objc2 retains the two objects they return.
             unsafe {
                 let wk = &*webview.inner().cast::<AnyObject>();
                 let config: Retained<AnyObject> = msg_send![wk, configuration];

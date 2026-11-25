@@ -202,25 +202,29 @@ working whenever Apple has a new agreement the Account Holder hasn't accepted.
   - **Saved files** go to the app's Documents, which Files shows as On My iPhone → Parachute (an iPhone has no
     Downloads an app may write to).
   - **Pairing** can scan the other device's QR code, as on Android.
+  - **An iPad** asks for desktop pages, so its user agent says "Macintosh"; a Macintosh with touch points is named an
+    iPad (`src/shell/agent.ts`), on the approvals it signs, on Parachute Cloud's pages and in the self-test.
   - `parachute://` links open the app (the deep-link plugin writes the scheme into the Info.plist). No other scheme is
     registered, on any platform.
   - The Info.plist lines iOS shows when it first asks: microphone, camera, Face ID (`src-tauri/Info.ios.plist`).
-- **Not on the iPhone yet:** notifications while the app is closed (Android's relay listener can't run there; it needs
+- **Not on the iPhone yet:** the words for saving a file still say Downloads (an applet's card and its face: the face is
+  part of a signed approval, so changing it per device needs care); notifications while the app is closed (Android's relay listener can't run there; it needs
   Apple push and a push key), a recording that goes on while another app is in front (background audio), and saving to
   a folder the person picks (a document picker).
-- **Build number:** the commit count, as Play's version code (`scripts/play-version-code.sh`); the version becomes
-  0.1.0.<count>. Build from `next`: a feature branch's count could outrun later builds of `next`, and TestFlight takes
-  each number once.
+- **Build number** (CFBundleVersion): the commit count alone, as Play's version code (`scripts/play-version-code.sh`),
+  beside the version 0.1.0. Not Tauri's `--build-number`, which makes 0.1.0.<count>: Apple reads at most three parts,
+  so every build would read as 0.1.0. Build from `next`: a feature branch's count could outrun later builds of `next`,
+  and TestFlight takes each number once. `ios.yml` checks the number inside the .ipa.
 
 ### CI
 
-`ios.yml` on each pull request that touches the shell, the Xcode project or the drive, by hand, and on release tags:
+`ios.yml` on each pull request except docs-only ones (as `mac.yml`), on `testflight-*` and release tags, and by hand:
 
 - **simulator** (every run): a debug build for the simulator, installed on a fresh simulator and driven with XCUITest
   (`scripts/ios-drive.sh`, `scripts/ios-drive/`): paste a key, sign in to a throwaway hub through its Approve page, see the
   applets, open Rooms, allow it with Face ID (enrolled on the simulator, and matched), see a room on a fake relay
   (`e2e/ios/world.ts`). Screenshots are the artifact `ios-drive`.
-- **testflight** (a `testflight-*` tag on a commit of `next`, a release tag, or by hand once `ios.yml` is on `main`:
+- **testflight** (after the simulator job passes; a `testflight-*` tag on a commit of `next`, a release tag, or by hand once `ios.yml` is on `main`:
   GitHub dispatches only the default branch's workflows; never a pull request): signed for the App Store and uploaded with `altool`, when all
   three iPhone secrets are set: `IOS_CERTIFICATE` (the Apple Distribution certificate with its key, a .p12, base64),
   `IOS_CERTIFICATE_PASSWORD`, `IOS_MOBILE_PROVISION` (the App Store profile, base64). The upload uses the App Store
@@ -235,7 +239,8 @@ Only an Admin key or the Account Holder may make identifiers, certificates and p
 
 `scripts/ios-signing.mjs` does each step that isn't done yet: registers the bundle id, makes an **Apple Distribution**
 certificate from the CSR of a private key kept on uni (`~/.config/uni/apple-ios/`, never in the repository), makes the
-**App Store** profile "Parachute App Store", writes the .p12, and with `--secrets` sets the three repository secrets from
+**App Store** profile ("Parachute App Store <date>"; this app's older App Store profiles go only once the new one is
+made), writes the .p12, and with `--secrets` sets the three repository secrets from
 those files. With `--group`, once the app record exists, it makes the internal TestFlight group "Parachute testers"
 (every build). With the Developer key it stops at the first step it may not take; if Aaron made the files by hand, it
 reads them and goes on.

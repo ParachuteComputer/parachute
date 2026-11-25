@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Bar } from "../ui/Bar";
 import { errorText, pairCancel, pairConfirm, pairStart } from "./key";
+import { deviceAgent } from "../shell/agent";
 
 type Step = "link" | "scanning" | "connecting" | "code" | "receiving";
 const isLink = (s: string) => s.trim().startsWith("nostrpair://");
 /** The phones, where the shell has the barcode scanner (src-tauri/Cargo.toml). */
-const canScan = () => /Android|iPhone|iPad/i.test(navigator.userAgent);
+const canScan = () => /Android|iPhone|iPad/i.test(deviceAgent());
 
 /** Pair from a device that has the key: the other device shows a pairing link (a QR code); this one scans or pastes it,
  *  both show a 6-digit code, the person checks they match, and the key comes over encrypted (src-tauri/src/pairing.rs). */

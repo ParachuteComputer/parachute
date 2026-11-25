@@ -124,8 +124,6 @@ final class Drive: XCTestCase {
         wait("Which vaults on \(host) are yours?")
         shot("03-pick")
         press("Continue")
-        sleep(1)
-        shot("03b-after-continue")
         wait("Approve Parachute?")
         shot("04-hub-approve")
         press("Approve")

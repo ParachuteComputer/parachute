@@ -29,6 +29,7 @@ cleanup() {
   rm -rf "$world"
 }
 trap cleanup EXIT
+trap 'exit 143' TERM INT  # a stopped run cleans up too
 echo "$dt on $rt: $udid"
 xcrun simctl boot "$udid"
 xcrun simctl bootstatus "$udid" -b >/dev/null

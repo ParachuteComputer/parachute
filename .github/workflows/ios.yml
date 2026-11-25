@@ -16,15 +16,13 @@ permissions:
 on:
   push:
     tags: ["v*", "testflight-*"]
-  # a change to the shell, the Xcode project or the drive is built and driven on the simulator before it merges
+  # a change is built and driven on the iPhone simulator before it merges, as on the Mac (mac.yml): an iPhone-only break
+  # can sit in the web side too (a style WebKit lays out differently); only docs skip it
   pull_request:
-    paths:
-      - "src-tauri/**"
-      - "scripts/ios-drive.sh"
-      - "scripts/ios-drive/**"
-      - "e2e/ios/**"
-      - "package-lock.json"
-      - ".github/workflows/ios.yml"
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "design/**"
   workflow_dispatch:
 
 concurrency:
@@ -70,7 +68,10 @@ jobs:
       # the Xcode project is generated once (tauri ios init) and kept in the repository; a build may only rewrite what
       # the plugins own in it, and the same way each time: a change here means gen/apple needs that change committed
       - name: The Xcode project in the repository is the one the build used
-        run: git diff --exit-code -- src-tauri/gen/apple
+        run: |
+          git diff --exit-code -- src-tauri/gen/apple
+          extra=$(git status --porcelain --untracked-files=all -- src-tauri/gen/apple)
+          [ -z "$extra" ] || { echo "the build made files in gen/apple the repository doesn't have (commit or ignore them):" >&2; echo "$extra" >&2; exit 1; }
       - name: Sign in and open Rooms on the simulator, as a person would
         run: scripts/ios-drive.sh "$APP" ios-drive
       - uses: actions/upload-artifact@v4
@@ -85,6 +86,8 @@ jobs:
   testflight:
     name: TestFlight (signed, uploaded)
     if: github.event_name != 'pull_request'
+    # only a build whose drive passed goes to testers (and a build number is taken once)
+    needs: simulator
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -135,7 +138,8 @@ jobs:
       - if: steps.sign.outputs.signed
         run: brew install xcodegen
       # Tauri imports the certificate into a keychain of its own and installs the profile; the export is for App Store
-      # Connect. The build number joins the version: 0.1.0.<count>.
+      # Connect. The build number (CFBundleVersion) is the count alone: Apple reads at most three parts of it, so
+      # Tauri's --build-number (0.1.0.<count>) would read as 0.1.0 every time.
       - name: Build and sign for the App Store
         if: steps.sign.outputs.signed
         env:
@@ -145,9 +149,14 @@ jobs:
         run: |
           unset PARACHUTE_UPDATE_FEED
           n=$(scripts/play-version-code.sh)
-          npx tauri ios build --target aarch64 --export-method app-store-connect --build-number "$n" --ci
+          npx tauri ios build --target aarch64 --export-method app-store-connect --ci \
+            --config "{\"bundle\":{\"iOS\":{\"bundleVersion\":\"$n\"}}}"
           ipa=$(find src-tauri/gen/apple/build -name '*.ipa' | head -1)
           [ -n "$ipa" ] || { echo "no .ipa under src-tauri/gen/apple/build" >&2; exit 1; }
+          # the build number Apple will read, from the .ipa itself
+          rm -rf "$RUNNER_TEMP/ipa" && unzip -q "$ipa" 'Payload/*.app/Info.plist' -d "$RUNNER_TEMP/ipa"
+          got=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$RUNNER_TEMP"/ipa/Payload/*.app/Info.plist)
+          [ "$got" = "$n" ] || { echo "the .ipa's CFBundleVersion is $got, not $n" >&2; exit 1; }
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
           mkdir -p out && cp "$ipa" "out/Parachute_${version}.${n}.ipa"
           echo "IPA=out/Parachute_${version}.${n}.ipa" >> "$GITHUB_ENV"

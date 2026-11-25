@@ -9,11 +9,12 @@ import { clearSelfTest, currentUserAgent, gateMode, parseSelfTest, platformName,
 import { evaluateProbe, navProbeHtml, navVerdict, NAV_STAGES, PROBE_HTML, type ProbeResult } from "./probe";
 import ProbeFrame, { type ProbeOutcome } from "./ProbeFrame";
 import { runtimeFacts } from "./runtime";
+import { deviceAgent } from "../../shell/agent";
 
 const TIMEOUT_MS = 40000;
 const STUB_ROUTER = createRouter([createThemeModule({ theme: () => ({ accent: "selftest" }) })]);
 const STAGES = [{ id: "main", html: PROBE_HTML, nav: false }, ...NAV_STAGES.map((s) => ({ id: s.id, html: navProbeHtml(s.vector), nav: true }))];
-export const PLATFORM = platformName(currentUserAgent());
+export const PLATFORM = platformName(deviceAgent());
 
 type RunState = { running: boolean; last: ProbeResult | null; timedOut: boolean; requested: number; version: string | null; runtime: string | null; known: boolean };
 let state: RunState = { running: false, last: null, timedOut: false, requested: 0, version: null, runtime: null, known: false };

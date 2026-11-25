@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The iPhone app's signing, made through the App Store Connect API (docs/STORES.md "iPhone"), each step only if it
 // isn't there yet: the bundle id computer.parachute.app, an Apple Distribution certificate for the private key in
-// <dir> (from its CSR), the App Store provisioning profile "Parachute App Store", and the three repository secrets
+// <dir> (from its CSR), the App Store provisioning profile ("Parachute App Store <date>"), and the three repository secrets
 // ios.yml signs with (IOS_CERTIFICATE, IOS_CERTIFICATE_PASSWORD, IOS_MOBILE_PROVISION). Then it says whether the App
 // Store Connect app record exists, and with --group, makes the internal TestFlight group "Parachute testers" in it.
 //
@@ -9,7 +9,8 @@
 // reads them, and this stops at the first step it may not take, saying so. Nothing secret is printed.
 //   ASC_KEY_ID=… ASC_ISSUER=… ASC_KEY_P8=<AuthKey .p8> node scripts/ios-signing.mjs [--dir <folder>] [--secrets] [--group]
 // <folder> (default ~/.config/uni/apple-ios) holds dist.key and dist.csr (openssl, mode 600); the certificate, the
-// .p12 with its password and the profile are written beside them.
+// .p12 with its password and the profile are written beside them, mode 600. The profile is named "Parachute App Store"
+// and the day it was made.
 import { createPrivateKey, createPublicKey, randomBytes, sign, X509Certificate } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -23,6 +24,8 @@ const REPO = "ParachuteComputer/parachute";
 const args = process.argv.slice(2);
 const flag = (f) => args.includes(f);
 const dir = args.includes("--dir") ? args[args.indexOf("--dir") + 1] : join(homedir(), ".config/uni/apple-ios");
+if (!dir || dir.startsWith("--")) { console.error("--dir needs a folder."); process.exit(2); }
+process.umask(0o077); // every file made here (the certificate, the .p12, the profile) is the owner's alone from the start
 const { ASC_KEY_ID: kid, ASC_ISSUER: iss, ASC_KEY_P8: p8 } = process.env;
 if (!kid || !iss || !p8) { console.error("Set ASC_KEY_ID, ASC_ISSUER and ASC_KEY_P8 (the .p8 file's path)."); process.exit(2); }
 
@@ -55,6 +58,7 @@ async function main() {
 
   // 1. the bundle id
   let bundle = (await asc("GET", `/v1/bundleIds?filter[identifier]=${BUNDLE}&limit=5`)).data.find((b) => b.attributes.identifier === BUNDLE);
+  if (bundle && !["IOS", "UNIVERSAL"].includes(bundle.attributes.platform)) throw new Error(`bundle id: ${BUNDLE} is registered for ${bundle.attributes.platform}, not iOS: change it at developer.apple.com first`);
   if (bundle) say(`bundle id: ${BUNDLE} is registered (${bundle.attributes.platform})`);
   else {
     bundle = (await asc("POST", "/v1/bundleIds", { data: { type: "bundleIds", attributes: { identifier: BUNDLE, name: "Parachute", platform: "IOS" } } })).data;
@@ -74,16 +78,18 @@ async function main() {
   keep("dist.cer", der);
   const pem = keep("dist.pem", new X509Certificate(der).toString());
 
-  // 3. the App Store profile for the bundle id with that certificate (an older one without it is replaced)
-  const profiles = await asc("GET", `/v1/profiles?filter[name]=${encodeURIComponent(PROFILE)}&include=bundleId,certificates&limit=20`);
-  let profile = profiles.data.find((p) => p.attributes.profileState === "ACTIVE" && p.attributes.profileType === "IOS_APP_STORE"
-    && p.relationships.bundleId.data?.id === bundle.id && p.relationships.certificates.data?.some((c) => c.id === cert.id));
-  if (profile) say(`profile: ${PROFILE}, until ${profile.attributes.expirationDate.slice(0, 10)}`);
+  // 3. the App Store profile for this bundle id with that certificate. A new one is made under a dated name first; only
+  // then do this bundle id's older App Store profiles go (another certificate, or expired): never one of another app's
+  const old = (await asc("GET", `/v1/profiles?filter[profileType]=IOS_APP_STORE&include=bundleId,certificates&limit=200`)).data
+    .filter((p) => p.relationships.bundleId.data?.id === bundle.id);
+  let profile = old.find((p) => p.attributes.profileState === "ACTIVE" && p.relationships.certificates.data?.some((c) => c.id === cert.id));
+  if (profile) say(`profile: ${profile.attributes.name}, until ${profile.attributes.expirationDate.slice(0, 10)}`);
   else {
-    for (const old of profiles.data) { await asc("DELETE", `/v1/profiles/${old.id}`); say(`profile: removed an older ${PROFILE} (another certificate or expired)`); }
-    profile = (await asc("POST", "/v1/profiles", { data: { type: "profiles", attributes: { name: PROFILE, profileType: "IOS_APP_STORE" },
+    const name = `${PROFILE} ${new Date().toISOString().slice(0, 10)}`;
+    profile = (await asc("POST", "/v1/profiles", { data: { type: "profiles", attributes: { name, profileType: "IOS_APP_STORE" },
       relationships: { bundleId: { data: { type: "bundleIds", id: bundle.id } }, certificates: { data: [{ type: "certificates", id: cert.id }] } } } })).data;
-    say(`profile: made ${PROFILE}, until ${profile.attributes.expirationDate.slice(0, 10)}`);
+    say(`profile: made ${name}, until ${profile.attributes.expirationDate.slice(0, 10)}`);
+    for (const p of old) { await asc("DELETE", `/v1/profiles/${p.id}`); say(`profile: removed the older ${p.attributes.name}`); }
   }
   const provision = keep("Parachute_App_Store.mobileprovision", Buffer.from(profile.attributes.profileContent, "base64"));
 
@@ -92,7 +98,6 @@ async function main() {
   const p12 = join(dir, "dist.p12");
   execFileSync("openssl", ["pkcs12", "-export", "-inkey", join(dir, "dist.key"), "-in", pem, "-name", "Parachute iOS Distribution", "-out", p12,
     "-passout", `file:${pass}`, "-certpbe", "PBE-SHA1-3DES", "-keypbe", "PBE-SHA1-3DES", "-macalg", "sha1"]);
-  execFileSync("chmod", ["600", p12]);
   say(`files: ${p12}, ${provision} (and the password beside them)`);
 
   // 5. the repository's secrets, from the files
