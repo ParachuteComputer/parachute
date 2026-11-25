@@ -506,8 +506,10 @@ export type Outgoing = {
   files: { file: string; name: string; type: string; w?: number; h?: number; imeta?: string[]; line?: string }[];
   event?: Ev & { sig: string };
   state: "sending" | "failed"; why?: string;
-  /** false: this device couldn't keep it (its storage is full): it is here only until the app stops */
+  /** false: its files are held only in memory (an older app, or its 100 MB full): here only until the app stops */
   kept?: boolean;
+  /** false: the room's list couldn't be written (its storage full): here only until the app stops */
+  listed?: boolean;
 };
 const RELAY_WINDOW_S = 14 * 60;
 /** Whether the relay has this message: true or false once its read is done, null when it couldn't say (away, or no
@@ -539,7 +541,10 @@ const outbox = (() => {
   const save = async (room: string) => {
     const l = rooms.get(room) ?? [];
     const ok = await storage.set(`out:${room}`, l.length ? l : null).then(() => true, () => false);
-    if (l.some((o) => (o.kept !== false) !== ok)) { rooms.set(room, l.map((o) => ({ ...o, kept: ok }))); bump(); }
+    // said on the list as it is now (a message dropped meanwhile stays dropped); the writes go in order, so the last
+    // one written is the newest list
+    const now = rooms.get(room) ?? [];
+    if (now.some((o) => (o.listed !== false) !== ok)) { rooms.set(room, now.map((o) => ({ ...o, listed: ok }))); bump(); }
   };
   const put = (o: Outgoing) => { const l = rooms.get(o.room) ?? []; const i = l.findIndex((x) => x.key === o.key); if (i >= 0) l[i] = o; else l.push(o); rooms.set(o.room, l); bump(); return save(o.room); };
   /** once a session: files no message lists (an app that stopped between keeping a file and listing its message) go */
@@ -554,7 +559,8 @@ const outbox = (() => {
         const v = await storage.get(k);
         for (const o of Array.isArray(v) ? v : []) for (const f of Array.isArray(o?.files) ? o.files : []) if (typeof f?.file === "string") listed.add(f.file);
       }
-      for (const k of (await (storage as any).fileKeys()) as string[]) if (k.startsWith("f:") && !listed.has(k) && !adding.has(k)) await (storage as any).setFile(k, null).catch(() => {});
+      const inUse = (k: string) => listed.has(k) || adding.has(k) || [...rooms.values()].some((l) => l.some((o) => o.files.some((f) => f.file === k)));
+      for (const k of (await (storage as any).fileKeys()) as string[]) if (k.startsWith("f:") && !inUse(k)) await (storage as any).setFile(k, null).catch(() => {});
     } catch { swept = false; }
   };
   const fileOf = async (key: string): Promise<ArrayBuffer | null> => held.get(key) ?? (keepsFiles() ? await (storage as any).getFile(key).catch(() => null) : null);
@@ -678,7 +684,7 @@ function Unsent({ o, retry, remove }: { o: Outgoing; retry: () => void; remove: 
     {failed && <div className="acts">
       <Button kind="quiet" small className="retry" onClick={retry} title={o.why}>Not sent – tap to retry</Button>
       <Button kind="quiet" small onClick={() => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } remove(); }}>{sure ? "Tap again to delete" : "Delete"}</Button>
-      {o.why && <span className="why">{o.why}{o.kept === false ? " · this device couldn't keep it: it is here until the app stops" : ""}</span>}
+      {(o.why || o.kept === false || o.listed === false) && <span className="why">{[o.why, o.kept === false || o.listed === false ? "this device couldn't keep it: it is here until the app stops" : ""].filter(Boolean).join(" · ")}</span>}
     </div>}
   </article>;
 }
@@ -896,7 +902,12 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   const queue = async (content: string, files: { name: string; type: string; bytes: ArrayBuffer; w?: number; h?: number }[], mentions: string[]) => {
     setErr("");
     const key = newKey();
-    const o: Outgoing = { key, room, thread, at: Date.now(), content, tags: tagsFor(mentions), files: files.map((f, i) => ({ file: `f:${key}:${i}`, name: f.name, type: f.type, ...(f.w && f.h ? { w: f.w, h: f.h } : {}) })), state: "sending" };
+    // what goes is sent whole and signed, in one call of at most 8 KB: one that wouldn't fit is said now, and the
+    // words stay in the box (each file adds its address, hash and name, twice over)
+    const tg = tagsFor(mentions);
+    const size = new TextEncoder().encode(JSON.stringify([content, tg])).length + 400 + files.reduce((n, f) => n + 460 + 2 * new TextEncoder().encode(f.name).length, 0);
+    if (size > 7600) throw new Error(files.length ? "too long to send with its files: send the words and the files apart" : "too long to send: split it in two");
+    const o: Outgoing = { key, room, thread, at: Date.now(), content, tags: tg, files: files.map((f, i) => ({ file: `f:${key}:${i}`, name: f.name, type: f.type, ...(f.w && f.h ? { w: f.w, h: f.h } : {}) })), state: "sending" };
     // what you send is shown, as in any chat: the talk goes to its foot
     atBottom.current = true;
     await outbox.add(o, files.map((f) => f.bytes));

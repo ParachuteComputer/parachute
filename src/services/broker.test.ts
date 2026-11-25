@@ -9,13 +9,14 @@ import type { Service } from "../applet/services";
 
 class FakeSocket {
   static all: FakeSocket[] = [];
-  /** the network away: a new socket closes without opening */
+  /** the network away: a new socket closes without opening; `hang`: it neither opens nor closes */
   static refuse = false;
+  static hang = false;
   sent: unknown[] = [];
   onopen: (() => void) | null = null;
   onmessage: ((m: { data: string }) => void) | null = null;
   onclose: (() => void) | null = null;
-  constructor(public url: string) { FakeSocket.all.push(this); setTimeout(() => (FakeSocket.refuse ? this.onclose?.() : this.onopen?.()), 0); }
+  constructor(public url: string) { FakeSocket.all.push(this); if (!FakeSocket.hang) setTimeout(() => (FakeSocket.refuse ? this.onclose?.() : this.onopen?.()), 0); }
   send(s: string) { this.sent.push(JSON.parse(s)); }
   close() { setTimeout(() => this.onclose?.(), 0); }
   from(m: unknown) { this.onmessage?.({ data: JSON.stringify(m) }); }
@@ -41,7 +42,7 @@ const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 const made: { close(): void }[] = [];
 function setup(n: Native = native(), services: Service[] = [relay]) {
   made.splice(0).forEach((x) => x.close());
-  FakeSocket.all = []; FakeSocket.refuse = false;
+  FakeSocket.all = []; FakeSocket.refuse = false; FakeSocket.hang = false;
   const emitted: { event: string; data: any }[] = [];
   const b = createBroker({ native: n, session: "s", applet: { name: "Rooms", subject: "v\u0000n" }, services, hubs: [], emit: (event, data) => emitted.push({ event, data }), socket: (u) => new FakeSocket(u) as unknown as WebSocket });
   made.push(b);
@@ -326,6 +327,44 @@ describe("the broker's relay connection", () => {
       second.from(["OK", ev[1].id, true, ""]);
       await expect(posted).resolves.toMatchObject({ ok: true });
     } finally { vis.mockRestore(); vi.useRealTimers(); }
+  });
+
+  it("a socket that never opens (the network changed under it) is given up after 10 s and tried again; the network back gives it up at once", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { b } = setup();
+      FakeSocket.hang = true;
+      b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+      await vi.advanceTimersByTimeAsync(9000);
+      expect(FakeSocket.all).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1000 + 1000 + 10);
+      expect(FakeSocket.all).toHaveLength(2);
+      FakeSocket.hang = false;
+      window.dispatchEvent(new Event("online"));
+      await vi.advanceTimersByTimeAsync(5);
+      expect(FakeSocket.all).toHaveLength(3);
+      await signIn(FakeSocket.all[2], () => vi.advanceTimersByTimeAsync(1));
+      expect(FakeSocket.all[2].reqs().map((r) => r[1])).toContain("a:a");
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("a post with no answer on an open socket asks it for a sign of life; a busy relay's CLOSED to that ask counts as one", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+      await vi.advanceTimersByTimeAsync(1);
+      const sock = FakeSocket.all[0];
+      await signIn(sock, () => vi.advanceTimersByTimeAsync(1));
+      const posted = b.publish({ service: "rooms", event: { kind: 9, content: "into the void", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(15_100);
+      await expect(posted).resolves.toMatchObject({ ok: false, message: "no answer from the relay" });
+      const probe = sock.reqs().at(-1)!;
+      expect(probe[2]).toMatchObject({ limit: 1 });
+      sock.from(["CLOSED", probe[1], "rate-limited: slow down"]);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(FakeSocket.all).toHaveLength(1);
+    } finally { vi.useRealTimers(); }
   });
 
   it("an open connection that answers the sign-of-life is kept", async () => {

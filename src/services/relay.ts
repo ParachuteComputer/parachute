@@ -22,6 +22,9 @@ const OK_WAIT_MS = 15_000;
 /** Woken after this long away, an open connection is asked for a sign of life (a socket can die unseen while a phone
  *  sleeps), and dropped for a new one if none comes within PROBE_WAIT_MS. */
 const AWAY_MS = 20_000, PROBE_WAIT_MS = 4000;
+/** A socket that hasn't opened in this long (a network that changed under it) is given up, and tried again after the
+ *  usual pause. */
+const OPEN_WAIT_MS = 10_000;
 
 export class RelayConn {
   private ws: WebSocket | null = null;
@@ -44,6 +47,7 @@ export class RelayConn {
   private againTimer: ReturnType<typeof setTimeout> | null = null;
   private hiddenAt = 0;
   private probe: { id: string; timer: ReturnType<typeof setTimeout> } | null = null;
+  private openTimer: ReturnType<typeof setTimeout> | null = null;
   private unwake: () => void = () => {};
 
   constructor(private url: string, private auth: (challenge: string) => Promise<SignedEvent>, private onStatus: (s: Status) => void, private socket: (url: string) => WebSocket = (u) => new WebSocket(u)) {
@@ -51,7 +55,12 @@ export class RelayConn {
     // the app back in front, or the network back: don't wait out the growing pause
     if (typeof window !== "undefined" && typeof document !== "undefined") {
       const online = () => this.wake(true);
-      const seen = () => { if (document.visibilityState === "hidden") this.hiddenAt = Date.now(); else this.wake(); };
+      const seen = () => {
+        if (document.visibilityState === "hidden") { this.hiddenAt = Date.now(); return; }
+        const away = !!this.hiddenAt && Date.now() - this.hiddenAt > AWAY_MS;
+        this.hiddenAt = 0;
+        this.wake(false, away);
+      };
       window.addEventListener("online", online);
       document.addEventListener("visibilitychange", seen);
       this.unwake = () => { window.removeEventListener("online", online); document.removeEventListener("visibilitychange", seen); };
@@ -61,18 +70,21 @@ export class RelayConn {
   /** The device is back (in front, or online): a connection waiting to try again tries now; an open one that was away
    *  a while is asked for a sign of life, and dropped for a new one when none comes. `network`: the network itself came
    *  back, so a socket still trying to connect over the old one is given up for a new one. */
-  wake(network = false) {
+  wake(network = false, away = false) {
     if (this.closedForGood) return;
-    const away = this.hiddenAt && Date.now() - this.hiddenAt > AWAY_MS;
-    this.hiddenAt = 0;
     if (!this.ws && this.againTimer) { this.tries = 0; this.connectNow(); return; }
     if (network && this.ws && !this.open) { this.drop("the network changed"); return; }
-    if (this.ws && this.open && this.authed && away && !this.probe) {
-      // a read of nothing: any relay answers it with EOSE at once
-      const id = `p${Math.random().toString(36).slice(2, 10)}`;
-      this.probe = { id, timer: setTimeout(() => { this.probe = null; this.drop("no sign of life from the relay"); }, PROBE_WAIT_MS) };
-      this.ws.send(JSON.stringify(["REQ", id, { ids: ["0".repeat(64)], limit: 1 }]));
-    }
+    // the network changed under an open socket, or it was away a while: it may be dead without knowing
+    if (network || away) this.check();
+  }
+
+  /** Ask an open, signed-in socket for a sign of life; none in PROBE_WAIT_MS and it is dropped for a new one. */
+  private check() {
+    if (!this.ws || !this.open || !this.authed || this.probe) return;
+    // a read of nothing: any relay answers it at once (EOSE, or CLOSED if it is busy: an answer all the same)
+    const id = `p${Math.random().toString(36).slice(2, 10)}`;
+    this.probe = { id, timer: setTimeout(() => { this.probe = null; this.drop("no sign of life from the relay"); }, PROBE_WAIT_MS) };
+    this.ws.send(JSON.stringify(["REQ", id, { ids: ["0".repeat(64)], limit: 1 }]));
   }
 
   /** Waiting out a pause before trying again: try now (the pause still grows if this try fails too). */
@@ -83,15 +95,15 @@ export class RelayConn {
     return true;
   }
 
-  /** Give up on this socket now (it may never say it closed) and connect again. */
-  private drop(why: string) {
+  /** Give up on this socket now (it may never say it closed) and connect again: at once (`now`: it was this side that
+   *  gave up on a socket that had worked), else after the usual pause. */
+  private drop(why: string, now = true) {
     const ws = this.ws;
     if (!ws) return;
     ws.onclose = null; ws.onmessage = null; ws.onopen = null;
     try { ws.close(); } catch { /* gone */ }
     this.closed(why);
-    // it was this side that gave up on it, not the relay: a new one at once
-    this.tries = 0; this.connectNow();
+    if (now) { this.tries = 0; this.connectNow(); }
   }
 
   private connect() {
@@ -101,7 +113,9 @@ export class RelayConn {
     let ws: WebSocket;
     try { ws = this.socket(this.url); } catch (e) { this.onStatus({ status: "closed", why: e instanceof Error ? e.message : "couldn't connect" }); this.again(); return; }
     this.ws = ws;
+    this.openTimer = setTimeout(() => { this.openTimer = null; if (this.ws === ws && !this.open) this.drop("couldn't connect", false); }, OPEN_WAIT_MS);
     ws.onopen = () => {
+      if (this.openTimer) { clearTimeout(this.openTimer); this.openTimer = null; }
       this.open = true; this.tries = 0;
       // a relay that asks no sign-in: go on after a moment
       this.authTimer = setTimeout(() => { if (!this.authed) this.ready(); }, AUTH_WAIT_MS);
@@ -114,6 +128,7 @@ export class RelayConn {
     // not signed in any more: what is sent from now waits for the next sign-in
     this.ws = null; this.open = false; this.authed = false;
     if (this.authTimer) clearTimeout(this.authTimer);
+    if (this.openTimer) { clearTimeout(this.openTimer); this.openTimer = null; }
     if (this.probe) { clearTimeout(this.probe.timer); this.probe = null; }
     if (this.closedForGood) return;
     this.onStatus({ status: "closed", why });
@@ -202,6 +217,7 @@ export class RelayConn {
         this.subs.get(m[1])?.onEose(); return;
       }
       case "CLOSED": {
+        if (this.probe && m[1] === this.probe.id) { clearTimeout(this.probe.timer); this.probe = null; return; }
         const s = this.subs.get(m[1]);
         const why = typeof m[2] === "string" ? m[2] : "";
         // refused before the sign-in finished: it goes again once signed in
@@ -239,6 +255,8 @@ export class RelayConn {
       const timer = setTimeout(() => {
         const w = this.waiting.get(ev.id);
         this.waiting.delete(ev.id);
+        // no answer on a socket that says it is open: it may have died unseen; asked, and replaced if so
+        if (this.authed) this.check();
         // told it failed: if it was still waiting for a sign-in, it doesn't go out later
         this.posts = this.posts.filter((m) => !(Array.isArray(m) && m[0] === "EVENT" && (m[1] as SignedEvent)?.id === ev.id));
         w?.resolve({ ok: false, message: this.authed ? "no answer from the relay" : "can't reach the relay" });
@@ -255,6 +273,7 @@ export class RelayConn {
     this.unwake();
     if (this.authTimer) clearTimeout(this.authTimer);
     if (this.againTimer) clearTimeout(this.againTimer);
+    if (this.openTimer) clearTimeout(this.openTimer);
     if (this.probe) clearTimeout(this.probe.timer);
     for (const [, w] of this.waiting) { clearTimeout(w.timer); w.resolve({ ok: false, message: "closed" }); }
     this.waiting.clear(); this.subs.clear(); this.dropOutbox();
