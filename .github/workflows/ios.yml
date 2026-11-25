@@ -4,8 +4,9 @@ name: iOS
 # - simulator: the app built for the iOS simulator (unsigned, a debug build), installed on a fresh simulator and driven
 #   as a person would (scripts/ios-drive.sh): paste a key, sign in to a throwaway hub on loopback, see the applets,
 #   open Rooms, allow it with Face ID, see a room on a fake relay. Screenshots are the artifact `ios-drive`.
-# - testflight: run by hand or by a release tag, the app signed for the App Store and uploaded to TestFlight, when the
-#   three iPhone signing secrets are set: IOS_CERTIFICATE (the Apple Distribution certificate and its key, a .p12, base64),
+# - testflight: on a `testflight-*` tag (git tag testflight-<n> on a commit of next; no release is made), a release tag
+#   or a run by hand (once this file is on main: GitHub dispatches only the default branch's workflows), the app signed
+#   for the App Store and uploaded to TestFlight, when the three iPhone signing secrets are set: IOS_CERTIFICATE (the Apple Distribution certificate and its key, a .p12, base64),
 #   IOS_CERTIFICATE_PASSWORD, IOS_MOBILE_PROVISION (the App Store provisioning profile for computer.parachute.app,
 #   base64). The upload uses the App Store Connect key the Mac workflow notarises with (APPLE_API_KEY, APPLE_API_ISSUER,
 #   APPLE_API_KEY_P8). None of the three set: it says so and stops, green. Some but not all: the run fails. Never on a
@@ -14,7 +15,7 @@ permissions:
   contents: read
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*", "testflight-*"]
   # a change to the shell, the Xcode project or the drive is built and driven on the simulator before it merges
   pull_request:
     paths:

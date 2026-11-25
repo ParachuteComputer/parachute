@@ -220,7 +220,8 @@ working whenever Apple has a new agreement the Account Holder hasn't accepted.
   (`scripts/ios-drive.sh`, `scripts/ios-drive/`): paste a key, sign in to a throwaway hub through its Approve page, see the
   applets, open Rooms, allow it with Face ID (enrolled on the simulator, and matched), see a room on a fake relay
   (`e2e/ios/world.ts`). Screenshots are the artifact `ios-drive`.
-- **testflight** (by hand or a tag, never a pull request): signed for the App Store and uploaded with `altool`, when all
+- **testflight** (a `testflight-*` tag on a commit of `next`, a release tag, or by hand once `ios.yml` is on `main`:
+  GitHub dispatches only the default branch's workflows; never a pull request): signed for the App Store and uploaded with `altool`, when all
   three iPhone secrets are set: `IOS_CERTIFICATE` (the Apple Distribution certificate with its key, a .p12, base64),
   `IOS_CERTIFICATE_PASSWORD`, `IOS_MOBILE_PROVISION` (the App Store profile, base64). The upload uses the App Store
   Connect key the Mac workflow uses. None set: it says so and passes. Some set: it fails.
@@ -281,5 +282,5 @@ The Play upload key is ours, not Aaron's: Uni makes it, before Aaron's first upl
 | The app's part on parachute.computer/privacy/ | Uni, with Aaron's go-ahead for the site |
 | A Play upload script (service account), after the first manual upload | a worker |
 | Add the play-test key's fingerprint under Android developer verification | Uni, before 2027 |
-| iPhone: after Aaron's steps 1 and 2, run `scripts/ios-signing.mjs --secrets --group`, then `ios.yml` by hand on `next` (build 1 to TestFlight) | Uni |
+| iPhone: after Aaron's steps 1 and 2, run `scripts/ios-signing.mjs --secrets --group`, then tag a commit of `next` `testflight-<n>` and push the tag (build 1 to TestFlight) | Uni |
 | iPhone: notifications while closed (Apple push), background recording, a save-to-folder picker | an app worker |
