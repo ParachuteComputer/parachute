@@ -23,12 +23,13 @@ const freePort = async () => {
 };
 
 export function cli(state, args) {
-  const out = execFileSync(BIN, args, { env: { ...process.env, PARACHUTE_HOME: join(state.home, "home"), PORT: String(new URL(state.origin).port) }, stdio: "pipe" }).toString();
+  const out = execFileSync(BIN, args, { env: { ...process.env, PARACHUTE_HOME: join(state.home, "home"), PORT: String(state.port), PARACHUTE_HUB_ORIGIN: state.origin }, stdio: "pipe" }).toString();
   try { return JSON.parse(out); } catch { return { out }; }
 }
 
+const local = (state) => `http://127.0.0.1:${state.port}`;
 export async function mcp(state, method, params, token = state.token) {
-  const r = await fetch(`${state.origin}/vault/${VAULT}/mcp`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+  const r = await fetch(`${local(state)}/vault/${VAULT}/mcp`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
   const t = await r.text();
   return JSON.parse(t.trim().startsWith("{") ? t : [...t.matchAll(/^data:\s*(.*)$/gm)].at(-1)[1]);
 }
@@ -39,7 +40,7 @@ export async function tool(state, name, args) {
   return j.result.structuredContent ?? JSON.parse(j.result.content[0].text);
 }
 async function rest(state, method, path, body) {
-  const r = await fetch(`${state.origin}/vault/${VAULT}/api/${path}`, { method, headers: { authorization: `Bearer ${state.token}`, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const r = await fetch(`${local(state)}/vault/${VAULT}/api/${path}`, { method, headers: { authorization: `Bearer ${state.token}`, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await r.text();
   if (r.status >= 300) throw new Error(`${method} ${path}: ${r.status} ${text.slice(0, 200)}`);
   return text ? JSON.parse(text) : null;
@@ -82,16 +83,18 @@ export async function putApproval(state, ev, subject) {
   return rest(state, "POST", "notes", { path: `Parachute/Approvals/${host}/${subject.vault}/${subject.record}-${ev.id.slice(0, 6)}`, content: "", tags: ["parachute-approval"], metadata: { approval: ev } });
 }
 
-export async function start() {
+/** `opts.port`/`opts.origin`: a fixed port, and the address people reach it by (a tunnel's https URL), which the hub
+ *  signs its tokens with and the approvals name. */
+export async function start(opts = {}) {
   const home = mkdtempSync(join(tmpdir(), "mcpapp-t476-hub-"));
   writeFileSync(join(home, "pw"), randomBytes(18).toString("base64url"), { mode: 0o600 });
   const env = { ...process.env, PARACHUTE_HOME: join(home, "home") };
   execFileSync(BIN, ["bootstrap", "--embedded", "--home", env.PARACHUTE_HOME, "--username", "owner", "--password-file", join(home, "pw"), "--vault", VAULT, "--json"], { env, stdio: "pipe" });
-  const port = await freePort(), vaultPort = await freePort();
-  const origin = `http://127.0.0.1:${port}`;
+  const port = opts.port ?? await freePort(), vaultPort = await freePort();
+  const origin = opts.origin ?? `http://127.0.0.1:${port}`;
   const child = spawn(BIN, ["serve", "--embedded", "--home", env.PARACHUTE_HOME, "--listen", `127.0.0.1:${port}`, "--vault-listen", `127.0.0.1:${vaultPort}`],
     { env: { ...env, PARACHUTE_HUB_ORIGIN: origin, ...(process.env.APPLET_HOST_HTML ? { PARACHUTE_APPLET_HOST_HTML: process.env.APPLET_HOST_HTML } : {}) }, stdio: ["ignore", "pipe", "pipe"], detached: true });
-  const state = { home, origin, pid: child.pid, token: "", key: "", pub: "" };
+  const state = { home, origin, port, pid: child.pid, token: "", key: "", pub: "" };
   let log = "";
   child.stdout.on("data", (d) => { log += d; }); child.stderr.on("data", (d) => { log += d; });
   const until = Date.now() + 30_000;

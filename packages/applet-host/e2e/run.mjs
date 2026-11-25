@@ -35,7 +35,7 @@ const proxy = createServer(async (req, res) => {
   const h = { authorization: `Bearer ${state.token}`, "content-type": req.headers["content-type"] ?? "application/json", accept: req.headers.accept ?? "application/json, text/event-stream" };
   for (const k of ["mcp-protocol-version", "mcp-session-id"]) if (req.headers[k]) h[k] = req.headers[k];
   try {
-    const r = await fetch(`${state.origin}/vault/demo/mcp`, { method: req.method, headers: h, body: req.method === "GET" || req.method === "DELETE" ? undefined : body });
+    const r = await fetch(`http://127.0.0.1:${state.port}/vault/demo/mcp`, { method: req.method, headers: h, body: req.method === "GET" || req.method === "DELETE" ? undefined : body });
     const out = Buffer.from(await r.arrayBuffer());
     res.writeHead(r.status, { ...cors, "content-type": r.headers.get("content-type") ?? "application/json" }); res.end(out);
   } catch (e) { res.writeHead(502, cors); res.end(String(e?.message ?? e)); }
@@ -46,7 +46,9 @@ const host = spawn("bun", ["serve.ts"], { cwd: join(EXT, "examples/basic-host"),
 let hostLog = ""; host.stdout.on("data", (d) => { hostLog += d; }); host.stderr.on("data", (d) => { hostLog += d; });
 for (let i = 0; i < 100 && !/Sandbox server/.test(hostLog); i++) await new Promise((r) => setTimeout(r, 100));
 
-const browser = await (browserName === "webkit" ? webkit : chromium).launch();
+const cleanup = () => { try { process.kill(-host.pid, "SIGTERM"); } catch {} proxy.close(); stop(state); };
+let browser;
+try { browser = await (browserName === "webkit" ? webkit : chromium).launch(); } catch (e) { cleanup(); throw e; }
 const page = await browser.newPage({ viewport: { width: 1180, height: 1000 } });
 const errors = [];
 const logs = [];
@@ -120,9 +122,7 @@ try {
   ok(errors.length === 0, `no uncaught errors in the page (${errors.slice(0, 3).join(" / ")})`);
 } finally {
   await browser.close();
-  try { process.kill(-host.pid, "SIGTERM"); } catch {}
-  proxy.close();
-  stop(state);
+  cleanup();
 }
 console.log(failed ? `${failed} check(s) failed` : "every check passed");
 process.exit(failed ? 1 : 0);
