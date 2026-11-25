@@ -11,7 +11,7 @@
 import { beginSignIn, dropPending } from "./oauth";
 import { describe, everyVault } from "./parachute";
 import { listVaults, originOf } from "./store";
-import { whoseSaid } from "./whose";
+import { isMine, whoseSaid } from "./whose";
 import { keySignIn, keysHere, listWithKey } from "../key/key";
 
 export const NEW_VAULTS_KEY = "parachute.newvaults.v1";
@@ -89,12 +89,13 @@ export const listedVaults = (hub: string): string[] => listedOn(originOf(hub));
 export function subscribeNewVaults(f: () => void): () => void { listeners.add(f); return () => { listeners.delete(f); }; }
 export const newVaultsRev = () => rev;
 
-/** The vaults the person reaches on `hub` now, asked as the sign-in asks; null when this device can't ask. */
+/** The vaults the person reaches on `hub` now, asked as the sign-in asks; null when this device can't ask. With the key,
+ *  whether they reach every vault there is noted again (a device signed in before that was kept learns it here). */
 async function reachable(hub: string): Promise<string[] | null> {
   if (keysHere()) {
     try {
       const listed = await listWithKey(await describe(hub));
-      if (listed) return listed.vaults;
+      if (listed) { noteEvery(hub, listed.all); return listed.vaults; }
     } catch { /* no key here, or the hub refused it: the public list, where it is the person's */ }
   }
   return read().every.includes(hub) ? everyVault(hub) : null;
@@ -112,15 +113,29 @@ export async function relistVaults(now = Date.now()): Promise<void> {
   }));
 }
 
+/** Does the person run this Parachute: they reach every vault on it (the sign-in or a later listing found so) and said
+ *  it is theirs (a vault of theirs is held here)? */
+export function runsHub(hub: string): boolean {
+  const h = originOf(hub);
+  return read().every.includes(h) && listVaults().some((v) => originOf(v.issuer) === h && isMine(v));
+}
+
+/** Whose a vault on offer opens as: what the person said of it; else, on a Parachute they run, theirs, as the sign-in's
+ *  own pick ticks every vault there (only the hub's owner, or an account they let make vaults, makes one there, and they
+ *  open it from the list of their own vaults); elsewhere someone else's until they say otherwise in Settings (on a hub
+ *  they don't run, a vault offered later may be one someone else shared with them). */
+export function opensAs(hub: string, vault: string): "mine" | "theirs" {
+  const said = whoseSaid({ issuer: originOf(hub), vault });
+  return said === "mine" || (said === null && runsHub(hub)) ? "mine" : "theirs";
+}
+
 /** Open a vault on offer: the hub's consent to read it alone (its sign-in, then its Approve, unless the person's grant
- *  there already covers it), and back to the sign-in's return. Resolves to the address to open. Whose it is: what the
- *  person said at sign-in (of the Parachute, or of that vault on a hub they run); a vault made later is someone
- *  else's until they say otherwise in Settings (the hub doesn't say whose; another account may have made it). */
+ *  there already covers it), and back to the sign-in's return. Resolves to the address to open. Whose it is: `opensAs`
+ *  (the hub doesn't say whose). */
 export async function startAddVault(hub: string, vault: string): Promise<string> {
   const h = originOf(hub);
   if (!newVaultsOn(h).includes(vault)) throw new Error("That vault isn't on offer here.");
-  const said = whoseSaid({ issuer: h, vault });
-  const whose: "mine" | "theirs" = said === "mine" ? "mine" : "theirs";
+  const whose = opensAs(h, vault);
   const parachute = await describe(h);
   const b = { parachute, step: "open" as const, vault, level: "read" as const, why: "open" as const, whose };
   if (keysHere()) {
