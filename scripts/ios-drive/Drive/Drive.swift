@@ -108,7 +108,7 @@ final class Drive: XCTestCase {
         let hub = need("PARACHUTE_HUB"), key = need("PARACHUTE_KEY"), room = need("PARACHUTE_ROOM")
         let host = URL(string: hub)!.host! + ":" + String(URL(string: hub)!.port!)
         app.launch()
-        wait("Make a new key", 60)
+        wait("Make a new key", 180)  // a debug build on a busy runner can take over a minute to draw
         shot("01-first-screen")
 
         press("Advanced: paste a secret key", until: field("nsec1…"))
