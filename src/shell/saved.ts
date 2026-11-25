@@ -87,6 +87,9 @@ export function createSavedStore(backend: SavedBackend) {
   return {
     /** What the applet saved (handed to it before it starts); nothing when it can't be read just now. */
     load(subject: string): Promise<Values> { return read(subject).then((v) => ({ ...v }), () => ({})); },
+    /** What it saved, or a refusal when the store can't be read just now: an applet's own reads (`storage`) are told,
+     *  so an unreadable store never reads as an empty one (whose next write would erase it). */
+    read(subject: string): Promise<Values> { return read(subject).then((v) => ({ ...v })); },
     /** What it holds now (after `load`). */
     now(subject: string): Values { return { ...(memory.get(subject) ?? {}) }; },
     /** Set some keys (null removes one) and write the store through. Refused, and nothing changed, past SAVED_MAX.

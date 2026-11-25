@@ -515,6 +515,28 @@ export type Outgoing = {
   approval?: boolean;
 };
 const RELAY_WINDOW_S = 14 * 60;
+/** A bot's approval (Hermes's /approve, /deny), read step for step as the shell reads one (src/applet/services.ts
+ *  isCommandApproval, Rust's is_command_approval): droppable characters, then up to 8 leading mentions (`@…`,
+ *  `nostr:npub1…`, `npub1…`, a 64-hex key, each up to a droppable character, `:` or `,`), then `/approve` or `/deny`. */
+const DROPPABLE = /[\u0000-\u0020\u007f-\u00a0\u00ad\u034f\u1680\u180e\u2000-\u200f\u2028-\u202f\u205f-\u206f\u3000\ufeff]/;
+export function isApproval(content: string): boolean {
+  const drop = (c: string) => DROPPABLE.test(c);
+  const trim = (t: string, f: (c: string) => boolean) => { let i = 0; while (i < t.length && f(t[i])) i++; return t.slice(i); };
+  let t = content;
+  for (let n = 0; n < 8; n++) {
+    t = trim(t, drop);
+    const skip = t.toLowerCase().startsWith("nostr:") ? 6 : 0;
+    let end = t.length;
+    for (let i = skip; i < t.length; i++) if (drop(t[i]) || t[i] === ":" || t[i] === ",") { end = i; break; }
+    const word = t.slice(0, end), lower = word.toLowerCase();
+    const mention = lower.startsWith("@") || lower.startsWith("nostr:npub1") || lower.startsWith("npub1") || (word.length === 64 && /^[0-9a-fA-F]+$/.test(word));
+    if (!mention || !word) break;
+    t = trim(t.slice(end), (c) => drop(c) || c === ":" || c === ",");
+  }
+  t = t.toLowerCase();
+  return t.startsWith("/approve") || t.startsWith("/deny");
+}
+
 /** Whether the relay has this message: true or false once its read is done, null when it couldn't say (away, or no
  *  answer in 15 s). */
 function relayHas(relay: any, id: string, room: string): Promise<boolean | null> {
@@ -550,7 +572,8 @@ const outbox = (() => {
     const kept = (Array.isArray(v) ? v : []).filter((o: any) => o && typeof o.key === "string" && typeof o.room === "string" && Array.isArray(o.files) && !o.approval) as Outgoing[];
     for (const o of kept) {
       const l = rooms.get(o.room) ?? [];
-      if (!l.some((x) => x.key === o.key)) l.push({ ...o, state: "failed", why: o.kept === false ? "its file was only in memory, and went when the app stopped" : o.why ?? "the app stopped before it went" });
+      // its files were only in memory: gone with the app, unless it was signed with them already (it goes as signed)
+      if (!l.some((x) => x.key === o.key)) l.push({ ...o, state: "failed", why: o.kept === false && !o.event ? "its file was only in memory, and went when the app stopped" : o.why ?? "the app stopped before it went" });
       rooms.set(o.room, l.sort((a, b) => a.at - b.at));
     }
     bump();
@@ -600,13 +623,19 @@ const outbox = (() => {
     send(o: Outgoing, relay: any, svc: string): Promise<(Ev & { sig: string }) | null> {
       if (running.has(o.key)) return Promise.resolve(null);
       running.add(o.key);
+      // said at once, even while it waits behind the room's earlier ones (no retry or Delete to tap meanwhile)
+      const now = rooms.get(o.room)?.find((x) => x.key === o.key);
+      if (now) void put({ ...now, state: "sending", why: undefined }, true);
       const next = (order.get(o.room) ?? Promise.resolve()).then(() => this.attempt(o, relay, svc), () => this.attempt(o, relay, svc));
       order.set(o.room, next.catch(() => null));
       return next;
     },
     async attempt(o: Outgoing, relay: any, svc: string): Promise<(Ev & { sig: string }) | null> {
-      // what this device holds now (the copy drawn may be older: a tap on a list drawn before a save landed)
-      let cur: Outgoing = { ...(rooms.get(o.room)?.find((x) => x.key === o.key) ?? o), state: "sending", why: undefined };
+      // what this device holds now (the copy drawn may be older: a tap on a list drawn before a save landed); one deleted
+      // meanwhile stays deleted
+      const latest = rooms.get(o.room)?.find((x) => x.key === o.key);
+      if (!latest) { running.delete(o.key); return null; }
+      let cur: Outgoing = { ...latest, state: "sending", why: undefined };
       try {
         await put(cur, true);
         const files = [...cur.files];
@@ -682,7 +711,7 @@ function Unsent({ o, retry, remove }: { o: Outgoing; retry: () => void; remove: 
     {o.content && <div className="body"><Markdown text={o.content} /></div>}
     {o.files.map((f) => <KeptAttachment key={f.file} f={f} />)}
     {failed && <div className="acts">
-      {o.approval || (o.kept === false && /went when the app stopped/.test(o.why ?? "")) ? <span className="retry">Not sent</span>
+      {o.approval || /went when the app stopped/.test(o.why ?? "") ? <span className="retry">Not sent</span>
         : <Button kind="quiet" small className="retry" onClick={retry} title={o.why}>Not sent – tap to retry</Button>}
       <Button kind="quiet" small onClick={() => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } remove(); }}>{sure ? "Tap again to delete" : "Delete"}</Button>
       {(o.why || o.kept === false || o.listed === false) && <span className="why">{[o.why, (o.kept === false || o.listed === false) && !/went when the app stopped/.test(o.why ?? "") ? "this device couldn't keep it: it is here until the app stops" : ""].filter(Boolean).join(" · ")}</span>}
@@ -900,8 +929,11 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   // what you send from the box: kept on this device and shown at once, until the relay has it (outbox, above)
   const unsent = useOutbox(room);
   const deliver = async (o: Outgoing) => { const ev = await outbox.send(o, relay, service); if (ev) { st.add(ev); st.bump(); } };
-  const queue = async (content: string, files: { name: string; type: string; bytes: ArrayBuffer; w?: number; h?: number }[], mentions: string[]) => {
+  /** In the room now, kept until it goes (true: the box may clear); a bot's approval goes at once instead, as before,
+   *  while its tap is fresh, and isn't kept (false when it didn't go: its words stay in the box). */
+  const queue = async (content: string, files: { name: string; type: string; bytes: ArrayBuffer; w?: number; h?: number }[], mentions: string[]): Promise<boolean> => {
     setErr("");
+    if (!files.length && isApproval(content)) return send(content, [], mentions);
     const key = newKey();
     // what goes is sent whole and signed, in one call of at most 8 KB: one that wouldn't fit is said now, and the
     // words stay in the box (each file adds its address, hash and name, twice over)
@@ -913,6 +945,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     atBottom.current = true;
     await outbox.add(o, files.map((f) => f.bytes));
     void deliver(o);
+    return true;
   };
   // one the relay turns out to have (its own event came back, read or live): sent
   const mineNow = s.msgs.get(room);
@@ -1223,7 +1256,7 @@ async function plainImage(f: File): Promise<{ bytes: ArrayBuffer; type: string; 
  *  goes is sent again whole, signed (its id, key and signature, its tags), so room is left for those. */
 const MAX_TEXT = 6000;
 
-function Composer({ st, relay, room, thread, members, queue, typing, setErr, sendErr, name, muted }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; queue: (content: string, files: { name: string; type: string; bytes: ArrayBuffer; w?: number; h?: number }[], mentions: string[]) => Promise<void>; typing: string[]; setErr: (e: string) => void; sendErr: string; name: string; muted: (() => void) | null }) {
+function Composer({ st, relay, room, thread, members, queue, typing, setErr, sendErr, name, muted }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; queue: (content: string, files: { name: string; type: string; bytes: ArrayBuffer; w?: number; h?: number }[], mentions: string[]) => Promise<boolean>; typing: string[]; setErr: (e: string) => void; sendErr: string; name: string; muted: (() => void) | null }) {
   const s = st.s;
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1285,8 +1318,7 @@ function Composer({ st, relay, room, thread, members, queue, typing, setErr, sen
       const mentions = [...bound.current].filter(([n]) => body.includes(`@${n}`)).map(([, p]) => p);
       // in the room now, kept on this device until it goes: the field and its draft go, unless you wrote more meanwhile
       // (then what you wrote stays)
-      await queue(body, kept, mentions);
-      setFiles([]); if (edits.current === began) { setText(""); bound.current.clear(); keepDraft(""); }
+      if (await queue(body, kept, mentions)) { setFiles([]); if (edits.current === began) { setText(""); bound.current.clear(); keepDraft(""); } }
     } catch (e: any) { setErr(`Not sent: ${e?.message ?? e}`); }
     setBusy(false);
   };

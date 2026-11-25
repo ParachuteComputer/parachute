@@ -16,6 +16,8 @@ import { createAppModule, type AppDeps } from "./modules/app";
 import { createVoiceModule } from "./modules/voice";
 import { createStorageModule } from "./modules/storage";
 import { createKeptFiles, KEPT_FILES_MAX, type FilesBackend } from "../shell/keptFiles";
+import { createSavedStore } from "../shell/saved";
+import { storageFor } from "../shell/device";
 import { createVaultModule, type VaultNote } from "./modules/vault";
 import { bareName, FILE_MAX, linkOk, mediaType, parseAccept, STORAGE_MAX } from "./files";
 
@@ -306,6 +308,18 @@ describe("storage: files it holds until they are sent (T-476)", () => {
     expect(await code(r.call("storage", "setFile", { key: "f0", bytes: buf(FILE_MAX) }, {}))).toBe("ok");
     expect(await code(r.call("storage", "setFile", { key: "x".repeat(101), bytes: buf(1) }, {}))).toBe("bad_params");
     expect(await code(r.call("storage", "setFile", { key: "s", bytes: "text" }, {}))).toBe("bad_params");
+  });
+
+  it("a store that can't be read is a refusal, never an empty store: nothing reads as gone, nothing is written over it", async () => {
+    let fail = true, wrote = 0;
+    const saved = createSavedStore({ read: async () => { if (fail) throw new Error("io"); return { outbox: [{ key: "o1" }], d: "draft" }; }, write: async () => { wrote++; } });
+    const r = createRouter([createStorageModule(true, storageFor("v\u0000n", saved, createKeptFiles(memory())))]);
+    expect(await code(r.call("storage", "get", { key: "outbox" }, {}))).not.toBe("ok");
+    expect(await code(r.call("storage", "set", { key: "d", value: "new" }, {}))).not.toBe("ok");
+    expect(wrote).toBe(0);
+    // readable again: what was there is there
+    fail = false;
+    expect(await r.call("storage", "get", { key: "outbox" }, {})).toEqual([{ key: "o1" }]);
   });
 
   it("a device that keeps no files says so; the JSON store still works", async () => {
