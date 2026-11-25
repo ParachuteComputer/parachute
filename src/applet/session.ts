@@ -6,6 +6,7 @@ import { ContractError, ERROR_CODES, LIMITS, parseEnvelope, RateLimiter, TAP_CAL
 import { errorToFrameFetchReply, toFrameFetchReply, type FetchResult } from "./modules/frameFetch.ts";
 import type { Resolved } from "./needs.ts";
 import type { Router } from "./router.ts";
+import { isCommandApproval } from "./services.ts";
 
 export type SessionOptions = { post: (m: HostMessage) => void; router: Router; grant: Resolved; now?: () => number };
 
@@ -41,7 +42,10 @@ export function createSession(opts: SessionOptions) {
     handle(data: unknown): void {
       if (closed) return;
       const raw = data && typeof data === "object" ? data as { ns?: unknown; method?: unknown } : {};
-      const tapCall = typeof raw.ns === "string" && typeof raw.method === "string" && TAP_CALLS.has(`${raw.ns}.${raw.method}`);
+      // a typed /approve is paid by a tap too (broker.ts `paid`): refused at once without one
+      const params = (raw as { params?: { event?: { content?: unknown } } }).params;
+      const tapCall = typeof raw.ns === "string" && typeof raw.method === "string" && (TAP_CALLS.has(`${raw.ns}.${raw.method}`)
+        || (raw.ns === "services" && raw.method === "publish" && typeof params?.event?.content === "string" && isCommandApproval(params.event.content)));
       const limited = !requests.take(now()) && !(tapCall && taps.take(now()));
       const env = parseEnvelope(data);
       const isPfr = !!data && typeof data === "object" && "pfr" in (data as object);

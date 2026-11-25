@@ -124,6 +124,15 @@ describe("the vault, from inside a frame", () => {
     expect(code("busy")).toBe("rate_limited");
     // the module answers these (this frame has no microphone): not the limiter, for ten of them
     expect(Array.from({ length: 12 }, (_, i) => code(`r${i}`)).filter((c) => c === "rate_limited")).toHaveLength(2);
+    // a post is not a tap's call, unless it is a bot's approval (the broker asks the tap for it)
+    const g = frame();
+    for (let i = 0; i < 60; i++) g.session.handle({ uni: 1, id: `t${i}`, ns: "theme", method: "get" });
+    g.session.handle({ uni: 1, id: "post", ns: "services", method: "publish", params: { service: "rooms", event: { kind: 9, content: "hello", tags: [] } } });
+    g.session.handle({ uni: 1, id: "approve", ns: "services", method: "publish", params: { service: "rooms", event: { kind: 9, content: "@Uni /approve", tags: [] } } });
+    await new Promise((r) => setTimeout(r, 10));
+    const gc = (id: string) => (g.out.find((m) => "id" in m && m.id === id) as { error?: { code: string } } | undefined)?.error?.code;
+    expect(gc("post")).toBe("rate_limited");
+    expect(gc("approve")).not.toBe("rate_limited");
   });
   it("refuses an unknown namespace and a malformed message", async () => {
     const f = frame();

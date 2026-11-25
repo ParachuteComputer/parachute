@@ -593,8 +593,8 @@ const outbox = (() => {
   let stale = false;
   const gone = new Set<string>();
   const save = async () => {
-    stale = false;
     const ok = (await load()) && await storage.set("outbox", all().length ? all().map(({ listed: _, ...o }) => o) : null).then(() => true, () => false);
+    if (ok) stale = false;
     // a file goes only once no list written names it
     if (ok && keepsFiles()) for (const k of [...gone]) { gone.delete(k); await (storage as any).setFile(k, null).catch(() => {}); }
     for (const [room, l] of rooms) if (l.some((o) => (o.listed !== false) !== ok)) rooms.set(room, l.map((o) => ({ ...o, listed: ok })));
@@ -609,6 +609,8 @@ const outbox = (() => {
     rev: () => rev,
     of: (room: string) => rooms.get(room) ?? [],
     load,
+    /** in the room at once, not yet kept (add keeps it) */
+    show: (o: Outgoing) => { void put(o, true); },
     /** a new one: its files kept first (so a message never points at bytes that aren't there), then itself */
     async add(o: Outgoing, bytes: ArrayBuffer[]) {
       let kept = true;
@@ -684,7 +686,8 @@ const outbox = (() => {
         }
         const r = await relay.publish(ev ?? template());
         if (!r.ok) throw new Error(r.message || "the relay refused it");
-        await this.drop(cur, true);
+        // written away later only when signed (its event coming back takes a leftover away); else at once
+        await this.drop(cur, !!ev);
         return (r.event ?? ev) as Ev & { sig: string };
       } catch (e: any) {
         await put({ ...cur, state: "failed", why: cur.approval ? "an approval isn't sent again: answer the prompt that's asking now" : String(e?.message ?? e).slice(0, 200) });
@@ -958,8 +961,10 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     const size = new TextEncoder().encode(JSON.stringify([content, tg])).length + 400 + files.reduce((n, f) => n + 460 + 2 * new TextEncoder().encode(f.name).length, 0);
     if (size > 7600) throw new Error(files.length ? "too long to send with its files: send the words and the files apart" : "too long to send: split it in two");
     let o: Outgoing = { key, room, thread, at: Date.now(), content, tags: tg, files: files.map((f, i) => ({ file: `f:${key}:${i}`, name: f.name, type: f.type, ...(f.w && f.h ? { w: f.w, h: f.h } : {}) })), state: "sending" };
-    // words alone: signed now, so they are kept once, already signed (a call fewer of the frame's 60 in 10 s)
+    // words alone: shown at once, signed, then kept once already signed (a call fewer of the frame's 60 in 10 s)
     if (!files.length && typeof relay.sign === "function") {
+      atBottom.current = true;
+      outbox.show(o);
       const ev = await relay.sign({ kind: 9, content, tags: tg }).catch(() => null);
       if (ev) o = { ...o, event: ev };
     }
