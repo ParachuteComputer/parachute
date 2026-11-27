@@ -1,0 +1,11 @@
+{
+  "name": "@openparachute/applet-host",
+  "version": "0.1.0",
+  "description": "A Parachute applet as an MCP App view: the app's sealed frame, nested in the view, its vault reached through the host's tools/call.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "files": ["dist/applet-host.html", "README.md"],
+  "exports": { "./applet-host.html": "./dist/applet-host.html", "./package.json": "./package.json" },
+  "scripts": { "build": "vite build --config vite.config.ts" },
+  "parachute": { "payload": 1, "protocolVersion": "2026-01-26" }
+}

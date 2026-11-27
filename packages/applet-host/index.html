@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parachute</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; }
+  html[data-mode="inline"] body { height: 640px; }
+  #root { height: 100%; display: flex; flex-direction: column; }
+  iframe.applet { flex: 1; width: 100%; border: 0; display: block; background: transparent; }
+  p.say { margin: auto; padding: 24px; max-width: 32em; text-align: center; font: 15px/1.5 Georgia, "Iowan Old Style", serif; color: #6b6660; }
+  html[style*="dark"] p.say { color: #b8b2a8; }
+</style>
+</head>
+<body><div id="root"></div><script type="module" src="./src/main.ts"></script></body>
+</html>

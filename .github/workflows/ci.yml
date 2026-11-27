@@ -66,6 +66,46 @@ jobs:
             test-results
           retention-days: 7
 
+  applet-host:
+    # Parachute applets as an MCP App (packages/applet-host, T-476): the view built from this branch, served by core's
+    # vault door (a core commit with the MCP App surface, built from source; move it on purpose), driven in the MCP Apps
+    # reference host (ext-apps basic-host, a pinned commit): approved applets as tiles, People and Library sealed in the
+    # app's frame inside the view, a write, and an approved applet that tries every way out. Chromium, Chromium under
+    # the spec's default content policy, and WebKit (Safari's engine) under it.
+    name: applet-host (MCP Apps reference host)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the view (one HTML file)
+        run: npx vite build --config packages/applet-host/vite.config.ts && ls -l packages/applet-host/dist
+      - uses: ./.github/actions/core
+        with:
+          core: bc2e4cbbfd96d0b8dbc2b55fed486e65c8d0b516   # core next with #170 (the MCP App); move to a release when one carries it
+      - name: The reference host (ext-apps basic-host, pinned)
+        run: packages/applet-host/e2e/basic-host.sh "$RUNNER_TEMP/ext-apps" 47393
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
+      - name: Applets in the reference host (Chromium)
+        run: node packages/applet-host/e2e/run.mjs "$RUNNER_TEMP/shots"
+        env: { EXT_APPS: "${{ runner.temp }}/ext-apps", APPLET_HOST_HTML: "${{ github.workspace }}/packages/applet-host/dist/applet-host.html" }
+      - name: The same under the spec's default content policy (Chromium)
+        run: node packages/applet-host/e2e/run.mjs --strict
+        env: { EXT_APPS: "${{ runner.temp }}/ext-apps", APPLET_HOST_HTML: "${{ github.workspace }}/packages/applet-host/dist/applet-host.html" }
+      - name: The same under it in WebKit
+        run: node packages/applet-host/e2e/run.mjs --strict --browser webkit
+        env: { EXT_APPS: "${{ runner.temp }}/ext-apps", APPLET_HOST_HTML: "${{ github.workspace }}/packages/applet-host/dist/applet-host.html" }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: applet-host-shots
+          path: ${{ runner.temp }}/shots
+
   shell:
     # the released hub people run (0.8), and the web job's 0.9 leg, where sharing must run (E2E_CORE_NEXT), not skip
     strategy:
