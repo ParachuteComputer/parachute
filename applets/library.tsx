@@ -233,11 +233,14 @@ function plainLabel(s: string): string {
  *  the library its words alone (never a link that can only fail), and a heading's emphasis gone (`## *Contents*`).
  *  Fenced code stays as written. Block count is unchanged, so a reading place and quotes keep their paragraphs. */
 function readingBody(body: string, leads: (target: string) => boolean): string {
-  return body.split(/(^```[^\n]*\n[\s\S]*?^```[^\n]*$)/m).map((part, i) => i % 2 ? part : part
+  const asked = new Map<string, boolean>();
+  const goes = (t: string) => { let v = asked.get(t); if (v === undefined) { v = leads(t); asked.set(t, v); } return v; };
+  return body.split(/(^(?:```|~~~)[^\n]*\n[\s\S]*?^(?:```|~~~)[^\n]*$)/m).map((part, i) => i % 2 ? part : part
     .replace(/\[\[([^\]|\n]+)(?:\|((?:[^\]]|\](?!\]))*))?\]\]/g, (_m, target: string, label?: string) => {
       const t = target.trim();
       const words = plainLabel(label ?? "");
-      if (!leads(t)) return words || chapterDisplayTitle({ path: t.split("#")[0] });
+      // asked without its #anchor, as the Note's tap gives it
+      if (!goes(t.split("#")[0].trim())) return words || chapterDisplayTitle({ path: t.split("#")[0] });
       return words ? `[[${t}|${words}]]` : `[[${t}]]`;
     })
     .replace(/^(#{1,6})[ \t]+(.+)$/gm, (_m, h: string, text: string) => `${h} ${plainLabel(text)}`)).join("");
@@ -1085,15 +1088,14 @@ const ChapterProse = memo(function ChapterProse({
   onBlockRef.current = onActiveBlock;
   const scrolledKey = useRef("");
   // a new body is a new Note (never redrawn under the marks); the marks effect runs on the same change
+  // the text as drawn: links one line of plain words, a link to nowhere its words (the same blocks as the body)
+  const shown = useMemo(() => readingBody(chapter.body ?? "", linkLeads), [chapter.body, linkLeads]);
   const bodyKey = useMemo(() => {
-    const b = chapter.body ?? "";
+    const b = shown;
     let h = 5381;
     for (let i = 0; i < b.length; i++) h = ((h * 33) ^ b.charCodeAt(i)) >>> 0;
     return `${chapter.id}|${b.length}|${h}`;
-  }, [chapter.id, chapter.body]);
-
-  // the text as drawn: links one line of plain words, a link to nowhere its words (the same blocks as the body)
-  const shown = useMemo(() => readingBody(chapter.body ?? "", linkLeads), [chapter.body, linkLeads]);
+  }, [chapter.id, shown]);
 
   const quotesSig = useMemo(
     () => quotes.map((q) => `${q.record.id}:${q.text}:${q.block ?? ""}:${q.before}:${q.after}`).join("\n"),
@@ -1129,7 +1131,7 @@ const ChapterProse = memo(function ChapterProse({
       cancelAnimationFrame(raf);
       if (containerRef.current) clearMarks(containerRef.current);
     };
-  }, [chapter.id, chapter.body, quotesSig, focusQuoteId, targetBlock]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chapter.id, shown, quotesSig, focusQuoteId, targetBlock]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track user text selection cleanly via rAF so selection feels instant
   useEffect(() => {
@@ -1986,7 +1988,8 @@ export default function Library() {
     else if (end.book) leaveChapter({ view: "book", bookId: end.book.book.id });
     else openSummaryDrawer(chapterDisplayTitle(end.summary), [end.summary]);
   }, [resolveLink, openChapter, leaveChapter, openSummaryDrawer]);
-  const linkLeads = useCallback((target: string) => resolveLink(target) !== null, [resolveLink]);
+  // a new function when the library changes, so a chapter's links are drawn again against it
+  const linkLeads = useCallback((target: string) => resolveLink(target) !== null, [resolveLink, lib]); // eslint-disable-line react-hooks/exhaustive-deps
   // the same function for the life of the applet: a Note given a new one draws again, and the chapter's Note holds the
   // quote marks, which React must not redraw under
   const followLinkRef = useRef(followLink);
@@ -2215,7 +2218,8 @@ export default function Library() {
 
     const chapterKey = chapter ? stripMd(chapter.path).toLowerCase() : "";
     const chapterQuotes = currentBook.quotes.filter(
-      (q) => q.chapterRef.toLowerCase() === chapterKey || q.chapterRef === chapter?.id,
+      (q) => q.chapterRef.toLowerCase() === chapterKey || q.chapterRef === chapter?.id
+        || (!!chapter && chapterFor(lib.chapterByKey, q.chapterRef)?.chapter.id === chapter.id),
     );
     const viewedQuote = viewedQuoteId ? lib.quoteByKey.get(viewedQuoteId) ?? null : null;
 
@@ -2544,7 +2548,8 @@ export default function Library() {
                     rows={groupChapters.map((ch) => {
                       const isPart = grp.part?.id === ch.id;
                       const chKey = stripMd(ch.path).toLowerCase();
-                      const chQuotes = currentBook.quotes.filter((q) => q.chapterRef.toLowerCase() === chKey || q.chapterRef === ch.id);
+                      const chQuotes = currentBook.quotes.filter((q) => q.chapterRef.toLowerCase() === chKey || q.chapterRef === ch.id
+                        || chapterFor(lib.chapterByKey, q.chapterRef)?.chapter.id === ch.id);
                       const chSums = currentBook.summariesByChapter.get(ch.id) ?? [];
                       const sumBody = chSums[0] ? (summaryBodies[chSums[0].id]?.body ?? chSums[0].body) : "";
                       const sumPreview = markdownPreview(sumBody, 120);

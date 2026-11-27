@@ -327,7 +327,10 @@ describe("Reading an imported book: links, headings, a chapter found again after
     expect(out).toContain(`[[${BOOK}/07 Glossary of Made-up Terms|Glossary of Made-up Terms]]`);
     expect(out).not.toContain("99 Index");
     expect(out.split("\n\n")).toEqual(expect.arrayContaining(["## Contents", "Index"]));
+    // a link to a place in a chapter is asked about its chapter, as the Note's tap gives it
+    expect(api.readingBody("[[Books/W/02 Water#dawn|At *dawn*]]", (t) => t === "Books/W/02 Water")).toBe("[[Books/W/02 Water#dawn|At dawn]]");
     // as written in code it stays
+    expect(api.readingBody("~~~\n[[x|*y*]]\n~~~", () => false)).toBe("~~~\n[[x|*y*]]\n~~~");
     expect(api.readingBody("```\n[[x|*y*]]\n```", () => false)).toBe("```\n[[x|*y*]]\n```");
   });
 

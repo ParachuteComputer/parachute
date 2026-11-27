@@ -222,7 +222,7 @@ class Converter:
         if t == "hr": md = "---"
         elif re.fullmatch(r"h[1-6]", t):
             # a heading is drawn bold already: emphasis around it (`<h2><em>Contents</em></h2>`) is only noise
-            words = " ".join(w for w in plain(self.inline(n, f).replace("\\\n", " ")).split() if w != "\\")
+            words = " ".join(w for w in unemph(self.inline(n, f).replace("\\\n", " ")).split() if w != "\\")
             md = "#" * min(6, int(t[1]) + 1) + " " + words if words else ""
         elif t in ("ul", "ol"):
             items = [k for k in n.kids if not isinstance(k, str) and k.tag == "li"]
@@ -267,6 +267,11 @@ def plain(s):
     return " ".join(s.split()).strip(" –")
 
 
+def unemph(s):
+    """Markdown without its emphasis marks; a link or a picture in it stays as it is."""
+    return re.sub(r"(?<!\\)\*+", "", s)
+
+
 def image_size(data):
     """(width, height) from a PNG's, GIF's or JPEG's header; None for anything else."""
     if data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) >= 24: return struct.unpack(">II", data[16:24])
@@ -285,7 +290,8 @@ def image_size(data):
 
 GENERIC_ALT = re.compile(r"(image|img|picture|figure|ornament|decoration|divider|separator|flourish|\*+|-+)?", re.I)
 ORNAMENT_SIDE = 64       # a picture no larger than this, with no words of its own, is an ornament
-ORNAMENT_REPEATS = 3     # the same picture this often in one book is an ornament, whatever it says
+ORNAMENT_REPEATS = 3     # the same picture this often in one book, with no words of its own or small, is an ornament
+ORNAMENT_REPEAT_SIDE = 200  # (a repeated map with its own words, or a large one, stays)
 SPLIT_WORDS = 6000       # a chapter longer than this is cut at its verses, when it has them
 PIECE_WORDS = 2500       # into pieces of about this many words
 VERSE = re.compile(r"\*\*(\d{1,3})\.\s+\S|(\d{1,3})\.\s+\S")
@@ -411,8 +417,8 @@ def drop_ornaments(e, blocks, hard):
         k = shas.get(p)
         if not k: return False
         n, size = uses[k]
-        if n >= ORNAMENT_REPEATS: return True
         no_words = GENERIC_ALT.fullmatch(alt.strip()) or alt.strip() == posixpath.basename(p)
+        if n >= ORNAMENT_REPEATS and (no_words or (size and max(size) <= ORNAMENT_REPEAT_SIDE)): return True
         return bool(no_words and size and max(size) <= ORNAMENT_SIDE)
     gone = 0
     for b in blocks:
@@ -492,8 +498,13 @@ def read_epub(path, split_depth=None):
     # short front matter after a long piece (a foreword before the dedication), up to the book's first part or numbered
     # chapter, joins it: a copyright page or a "Books by" is not a chapter to read
     for c in chapters: c["blocks"] = [b for b in c["blocks"] if b["md"]]
+    # the main text starts at the first part or numbered chapter, else at the first long piece (on this list, after the
+    # merge above)
     main = next((k for k, c in enumerate(chapters) if roman(c["label"]) or MAIN_START.match(c["label"])
-                 or (k + 1 < len(chapters) and chapters[k + 1]["depth"] > c["depth"])), first_real)
+                 or (k + 1 < len(chapters) and chapters[k + 1]["depth"] > c["depth"])), None)
+    if main is None:
+        main = next((k for k, c in enumerate(chapters) if sum(len(b["md"]) for b in c["blocks"]) >= 1000
+                     and not re.fullmatch(r"(table of )?contents|front matter", c["label"], re.I)), 0)
     fold = [c for c in chapters[:main] if c["label"] != "Front matter" and not KEEP_NAMES.fullmatch(c["label"].strip())
             and (FRONT_NAMES.fullmatch(c["label"].strip()) or words_in(c["blocks"]) < 200)]
     if fold:
@@ -511,7 +522,6 @@ def read_epub(path, split_depth=None):
     if index:
         chapters = [c for c in chapters if c not in index]
         hard.append("The printed index is left out (search does its work).")
-    for c in chapters: c["blocks"] = [b for b in c["blocks"] if b["md"]]
     chapters = [c for c in chapters if c["blocks"]]
 
     # footnote bodies move to the end of the chapter that cites them
@@ -943,17 +953,20 @@ def book_id(book):
 
 def cited_by_quotes(hub):
     """Every chapter path a quote in the vault names in its `from`: a record a quote cites is never pruned."""
-    out, off, seen = set(), 0, set()
-    while True:
-        page = hub.req("GET", f"/notes?tag=quote&include_metadata=true&limit=200&offset={off}") or []
-        new = [r for r in page if r.get("id") not in seen]
-        if not new: break
-        seen.update(r.get("id") for r in new); off += len(page)
-        for r in new:
-            ref = str((r.get("metadata") or r.get("fields") or {}).get("from") or "").strip()
-            ref = re.sub(r"^\[\[([^\]|]*)(\|[^\]]*)?\]\]$", r"\1", ref).strip()
-            if ref: out.add(re.sub(r"\.md$", "", ref))
-        if len(page) < 200: break
+    out, seen = set(), set()
+    # Library knows a quote by its type or tag, or by its place in Quotes/: both are asked
+    for q in ("tag=quote", "path_prefix=" + urllib.parse.quote("Quotes/", safe="")):
+        off = 0
+        while True:
+            page = hub.req("GET", f"/notes?{q}&include_metadata=true&limit=200&offset={off}") or []
+            new = [r for r in page if r.get("id") not in seen]
+            if not new: break
+            seen.update(r.get("id") for r in new); off += len(page)
+            for r in new:
+                ref = str((r.get("metadata") or r.get("fields") or {}).get("from") or "").strip()
+                ref = re.sub(r"^\[\[([^\]|]*)(\|[^\]]*)?\]\]$", r"\1", ref).strip()
+                if ref: out.add(re.sub(r"\.md$", "", ref))
+            if len(page) < 200: break
     return out
 
 

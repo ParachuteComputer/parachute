@@ -67,9 +67,11 @@ one Library wrote to before the pack) stays a tag, and the import writes it on i
   joins it, even after a long foreword. The cover goes on the book.
 - **Headings and links** are plain words: emphasis around a heading (`<h2><em>Contents</em></h2>`) goes, a heading at
   the top that only repeats the chapter's title goes, and a link's label is one line (a `<br/>` inside a title
-  becomes " – ").
-- **Ornaments** are left out: a picture the book repeats three times or more (one before every verse), or one no larger
-  than 64 px with no words of its own (an empty alt, "Image"). The report counts them.
+  becomes " – "). On a book imported before this, the next import takes that heading out, so a reading place (`at`)
+  in the chapter lands one paragraph later; quotes find their words again by the words around them.
+- **Ornaments** are left out: a picture the book repeats three times or more (one before every verse) with no words of
+  its own (an empty alt, "Image") or no side over 200 px, and a picture no larger than 64 px with no words of its own.
+  A repeated map with its own description stays. The report counts what went.
 - **Verses:** a chapter over 6,000 words that runs on numbered verses (`**12. …**`, at least eight, almost all in
   order) becomes a part holding its opening, with pieces of about 2,500 words under it (`Verses 1–5`), each starting
   on a verse.

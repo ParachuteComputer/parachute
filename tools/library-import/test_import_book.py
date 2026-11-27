@@ -185,6 +185,32 @@ class Shapes(unittest.TestCase):
             "Books/A Small Garden", "Books/A Small Garden/00 Part One – The Garden", "Books/A Small Garden/01 Seeds",
             "Books/A Small Garden/02 Water", "Books/A Small Garden/03 Part Two – The Harvest", "Books/A Small Garden/04 Picking"])
 
+    def test_a_heading_keeps_its_picture_and_its_link(self):
+        p = os.path.join(self.dir, "h.epub")
+        epub(p, {"one.xhtml": '<h2><em>One</em> <img src="mark.png" alt="A map of the hills"/></h2><p>' + "Words. " * 300 + "</p>",
+                 "two.xhtml": '<h2><a href="one.xhtml">Back to <em>One</em></a></h2><p>' + "More words. " * 300 + "</p>"},
+             pictures=["mark.png"])
+        bodies = chapters(p)
+        self.assertRegex(bodies["One"], r"^### One !\[A map of the hills\]\(file:[0-9a-f]{64}\)")
+        self.assertIn("### [[chap:c0|Back to One]]", bodies["Two"])
+
+    def test_short_unnumbered_chapters_after_the_front_matter_stay_chapters(self):
+        p = os.path.join(self.dir, "f.epub")
+        epub(p, {"title.xhtml": "<p>A Book</p>", "copyright.xhtml": "<p>No rights.</p>", "dedication.xhtml": "<p>For you.</p>",
+                 "river.xhtml": "<h2>The River</h2><p>" + "Water runs. " * 200 + "</p>",
+                 "night.xhtml": "<h2>Night</h2><p>A short poem of the night, in a few lines only.</p>",
+                 "dawn.xhtml": "<h2>Dawn</h2><p>" + "Light comes. " * 200 + "</p>"})
+        labels = [c["label"] for c in ib["read_epub"](p)["chapters"]]
+        self.assertEqual(labels, ["Front matter", "River", "Night", "Dawn"])
+
+    def test_a_picture_the_book_repeats_with_words_of_its_own_stays(self):
+        p = os.path.join(self.dir, "r.epub")
+        big = mk["png"](300, 200, (10, 20, 30))
+        docs = {f"c{i}.xhtml": f'<h2>C{i}</h2><p>' + "Words here. " * 200 + '</p><p><img src="map.png" alt="Map of the region"/></p>' for i in range(3)}
+        epub(p, docs)
+        with zipfile.ZipFile(p, "a") as z: z.writestr("OEBPS/map.png", big)
+        self.assertEqual(sum(b.count("](file:") for b in chapters(p).values()), 3)
+
     def test_picture_sizes_are_read_from_their_headers(self):
         self.assertEqual(ib["image_size"](mk["png"](24, 12, (1, 2, 3))), (24, 12))
         jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xc0\x00\x11\x08\x00\x20\x00\x30\x03"
@@ -330,7 +356,7 @@ class Reimport(unittest.TestCase):
         book = self.fresh_book()
         self.run_import(book)
         q = self.hub.req("POST", "/records", {"path": f"Quotes/{book['title']}/{os.urandom(3).hex()}", "body": "> Water at dawn.",
-                                              "types": ["quote"], "fields": {"from": f"{self.folder}/01 Water", "book": self.folder}})
+                                              "fields": {"from": f"{self.folder}/01 Water", "book": self.folder}})  # as Library writes one: no type
         try:
             moved = copy.deepcopy(book)
             moved["chapters"][1]["label"] = "Water again"
