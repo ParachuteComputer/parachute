@@ -35,6 +35,15 @@ export const LIMITS = {
   maxPending: 8,
   maxRequests: 60,
   rateWindowMs: 10_000,
+  /** Calls only a person's fresh tap can make (TAP_CALLS), past the 60: a room busy with its own reads and posts
+   *  mustn't make a tap on Record or Save wait until the tap has gone stale (T-476). Each is refused at once without a
+   *  fresh tap, so these few can't be spent on anything else. */
+  maxTapRequests: 10,
+  /** What an applet keeps on this device itself (`storage.*`: drafts, unsent messages) has 60 per 10 s of its own: a room
+   *  busy with its relay's reads must not starve them until the kit gives them up (T-476: next refused storage.set ten
+   *  times in one rooms.spec run, and on CI a draft was lost). The kit's own `saved.*` stays on the shared 60: it puts a
+   *  refused save back in line itself. */
+  maxDeviceRequests: 60,
   /** Most notes a tag or content request reads; each read is charged to the limiter. */
   maxScan: 20,
   maxRecent: 30,
@@ -104,7 +113,7 @@ export function parseEnvelope(raw: unknown): Envelope {
   const id = idOf(raw.id);
   const bad = (error: ErrorCode): Envelope => ({ kind: "bad", id, error });
   // a services call, a file it saves (app.save) or attaches to a note (vault.attach), or a value it keeps on the device
-  // (storage.set, which caps it at its 256 KB), or what the kit saves (saved.put, the same cap) may carry bytes (an ArrayBuffer at params.bytes), outside the request's
+  // (storage.set, which caps it at its 256 KB; storage.setFile, a file it holds until it is sent), or what the kit saves (saved.put, the same cap) may carry bytes (an ArrayBuffer at params.bytes), outside the request's
   // budget and capped on their own
   const params = "uni" in raw && (raw.ns === "services" || raw.ns === "app" || raw.ns === "vault" || raw.ns === "storage" || raw.ns === "saved" || raw.ns === "vaults") && plain(raw.params) ? raw.params : null;
   const bytes = params && params.bytes instanceof ArrayBuffer ? params.bytes : null;
@@ -138,6 +147,10 @@ export function parseEnvelope(raw: unknown): Envelope {
   }
   return bad(ERROR_CODES.badRequest);
 }
+
+/** The calls a person's tap in the frame pays for (the kit's FIRST lane, but for posts and layout): they may go past a
+ *  spent request bucket, on LIMITS.maxTapRequests of their own. */
+export const TAP_CALLS = new Set(["app.openLink", "app.follow", "app.save", "app.pick", "app.open", "voice.record", "services.answer", "services.trust", "services.secret", "services.forgetSecret"]);
 
 /** Sliding-window limiter: at most `max` hits per `windowMs`. */
 export class RateLimiter {

@@ -144,7 +144,7 @@ this holds: each service's id, kind, normalised url, auth, publish (sorted), med
 |---|---|
 | `services.me()` | `{ pubkey }` (hex): who the shell signs as. Only with a relay or nip98 service granted. |
 | `services.fetch(id, path, { method, headers, body, as })` | One request to the declared url + `path`. `method`: GET, HEAD, POST, PUT, PATCH, DELETE. `body`: a string or bytes. `as`: `text` (default), `json` or `bytes`. Resolves `{ status, headers, body }`. |
-| `services.relay(id)` | The relay, through the shell's connection for this applet. `.subscribe(filters, onEvents, onEose?)` → a function that stops it; `.query(filters)` → the events until EOSE; `.publish({ kind, content, tags })` → `{ ok, id, message }`; `.loadPrivate(entry)` → `[{ d, text, created_at }]`; `.savePrivate(d, text)`; `.onStatus(cb)` (`connecting`, `ready`, `closed`, with why). |
+| `services.relay(id)` | The relay, through the shell's connection for this applet. `.subscribe(filters, onEvents, onEose?)` → a function that stops it; `.query(filters)` → the events until EOSE; `.publish({ kind, content, tags })` → `{ ok, id, message, event }` (or `.publish(signedEvent)`: sent as it is); `.sign({ kind, content, tags })` → the signed event, not sent; `.loadPrivate(entry)` → `[{ d, text, created_at }]`; `.savePrivate(d, text)`; `.onStatus(cb)` (`connecting`, `ready`, `closed`, with why). |
 | `services.upload(id, bytes, type)` | A file to the relay's media server: the server's descriptor `{ url, sha256, size, type, dim?, … }`. |
 | `services.media(id, sha256, ext)` | A file from the relay's media server: `{ bytes, type }`, for a `blob:` URL. |
 
@@ -168,7 +168,16 @@ applet holds one per room), `limit` at most 500. Events go to the frame in batch
 events) through a queue of its own, not the rate-limited push. A subscription the relay closes comes back to the applet
 as a status, marked `retry` when the relay wanted a sign-in first or had an error; the kit then makes it again. `publish` checks the kind and tags, and for kind 5 reads each target
 from the relay (`ids` filter) and checks it is the person's and of a kind this applet may publish; Rust signs
-(`svc_sign_event`), the shell sends it and resolves on the relay's `OK`. `loadPrivate` asks the relay for the person's
+(`svc_sign_event`), the shell sends it and resolves on the relay's `OK`. A publish outlives a dropped connection: it
+waits (15 s) for the next sign-in and is sent again, the same event (a relay that has it answers `OK` "duplicate:"),
+and only when that wait runs out is it told it failed, and then never sent later. Woken (the network back, the app in
+front), a connection waiting out its growing pause tries at once, and one that was away over 20 s is asked for a sign
+of life (a read of nothing) and replaced if none comes in 4 s: a socket can die unseen while a phone sleeps (T-476).
+`sign` is `publish` without the sending: the same checks, the signed event back, except that it never signs a bot's
+approval (`/approve`, `/deny`): one held could be sent minutes later with no tap, so an approval is signed and sent
+together at its tap. An applet that keeps what it sends (Rooms) signs once, keeps the event, and publishes that event on
+every try; a signed event handed to `publish` is checked again (whole, the person's, its signature, in its kinds and
+rooms; a bot's approval needs a tap every time) and sent as it is, never signed again. `loadPrivate` asks the relay for the person's
 own events of the entry's kind and `t`, keeps those whose `d` starts with the prefix, and has Rust open each
 (`svc_private_open` recomputes the event's id and checks its signature, then checks author, kind, `t` and `d` itself: a hostile relay can't hand it a forged event wrapping someone else's ciphertext); `savePrivate` has Rust seal and sign
 it (`svc_private_save`). An applet can't hand the shell ciphertext to open.
@@ -209,7 +218,8 @@ second applet declaring the same server asks for its own token.
 
 **The frame transport.** Requests stay at 8 KB, but `services.fetch` and `services.upload` may carry bytes (an
 `ArrayBuffer`, at most 25 MB, at most 50 MB in flight per frame) outside that budget; replies carry bytes the same way
-(transferred). The frame's limits stand: 60 requests per 10 s, 8 pending. `FRAME_CSP` gains `media-src blob: data:`,
+(transferred). The frame's limits stand: 60 requests per 10 s, 8 pending; past the 60, a call only a fresh tap can make (record, pick, save, a link, a card's answer) has 10 of its own, so a room busy with its reads never makes a tap wait until it is stale; and what an applet keeps on the device itself
+(`storage.*`: drafts, unsent messages) has 60 per 10 s of its own, so its reads never starve its drafts (T-476). `FRAME_CSP` gains `media-src blob: data:`,
 so a voice note or a video plays from a `blob:` URL; the self-test checks it plays and that a network `src` doesn't.
 
 **The log.** Rust writes a line for each signature it makes for an applet (relay sign-in, event, NIP-98 request, media

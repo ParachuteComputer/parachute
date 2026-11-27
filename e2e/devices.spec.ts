@@ -66,7 +66,7 @@ test("rooms on a real relay: a voice note, a link, a saved file, an attached fil
     await expect(card).toContainText("Open web addresses in your browser: what it reads could leave in an address it opens");
     await expect(card).toContainText("Save files to your device's Downloads");
     await expect(card).toContainText("Ask you to pick a file or picture to give it");
-    await expect(card).toContainText("Keep up to 256 KB on this device for itself (drafts, what it last showed)");
+    await expect(card).toContainText("Keep up to 256 KB on this device for itself (drafts, what it last showed), and files it holds until they are sent (up to 100 MB)");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
     const list = app.getByRole("region", { name: "Your rooms" });
@@ -97,12 +97,12 @@ test("rooms on a real relay: a voice note, a link, a saved file, an attached fil
     const field = app.getByLabel(`Message Shed ${stamp}`);
     await field.fill(`the beds ${stamp}`);
     await app.getByRole("button", { name: "Send message" }).click();
-    await expect(log.locator("article.mine", { hasText: `the beds ${stamp}` }).getByRole("img", { name: "beds.png" })).toBeVisible({ timeout: 20_000 });
+    await expect(log.locator("article.mine:not(.unsent)", { hasText: `the beds ${stamp}` }).getByRole("img", { name: "beds.png" })).toBeVisible({ timeout: 20_000 });
 
     // a voice note on the shell's recorder sheet
     await app.getByRole("button", { name: "Record a voice note" }).click();
     await recordOnSheet(page, "Rooms");
-    const audio = log.locator("article.mine").getByLabel("Voice note voice.webm");
+    const audio = log.locator("article.mine:not(.unsent)").getByLabel("Voice note voice.webm");
     await expect(audio).toBeVisible({ timeout: 20_000 });
     // it plays: the relay's copy, through the shell, as the room shows it
     await expect.poll(() => audio.evaluate((a: HTMLAudioElement) => a.readyState), { timeout: 15_000 }).toBeGreaterThan(0);
@@ -264,7 +264,7 @@ test.describe(`on a phone 390 by ${height}, while recording`, () => {
       }).toPass({ intervals: [300, 600], timeout: 8000 });
       await sheet.getByRole("button", { name: "Send" }).click();
       await expect(sheet).toBeHidden();
-      await expect(log.locator("article.mine").getByLabel("Voice note voice.webm")).toBeAttached({ timeout: 20_000 });
+      await expect(log.locator("article.mine:not(.unsent)").getByLabel("Voice note voice.webm")).toBeAttached({ timeout: 20_000 });
       await expect(mic).not.toHaveAttribute("aria-pressed", "true");
     } finally {
       bob.close();
