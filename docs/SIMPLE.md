@@ -50,7 +50,8 @@ written then. A settings note already there is never changed this way. Settings 
   (`src/shell/App.tsx`). `/?with=vault` is the frame's own Notes (`src/frame/views/NotesHome.tsx`), the way back if
   Parachute's Notes won't run.
 - **Editing** is in Vault: a tap in a note's words, kept as you write (each save names the version it changes, so
-  words an AI changed meanwhile are never written over unasked: yours stay, with **Keep mine** and **Use theirs**).
+  words an AI changed meanwhile are never written over unasked: yours stay, with **Keep mine** and **Use theirs**,
+  and are kept as a note of their own if you leave with neither chosen).
   The shell's editor (`src/views/NoteEdit.tsx`, **Keep mine / Use theirs**) stays for the plain note view
   (`?with=vault`).
 

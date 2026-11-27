@@ -118,4 +118,96 @@ test.describe("Vault's notes", () => {
     await expect(vaultUi(page).getByRole("article", { name: "Compost log" })).toBeVisible();
     await expect(notes(page).getByRole("button", { name: /Tomato trellis ideas/ })).toBeVisible();
   });
+
+  // What a review of this screen found by walking it (T-476): each of these lost words or left the wrong thing open.
+  test("on a computer, New note left with no words leaves nothing: no note made, and the note beside the list untouched", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openVault(page);
+    // the newest note is open beside the list
+    const newest = vaultUi(page).getByRole("article", { name: "Tomato trellis ideas" });
+    await expect(newest).toContainText("Cattle panel arch over the path");
+    await vaultUi(page).getByRole("button", { name: "New note" }).click();
+    await expect(vaultUi(page).getByRole("textbox", { name: "The note's words" })).toBeFocused();
+    await vaultUi(page).getByRole("button", { name: "Done" }).click();
+    // back to the newest note, read, not an empty box in its name
+    await expect(newest).toContainText("Cattle panel arch over the path");
+    await expect(vaultUi(page).getByRole("textbox", { name: "The note's words" })).toHaveCount(0);
+    // and leaving it for another writes nothing anywhere
+    await notes(page).getByRole("button", { name: /Compost log/ }).click();
+    await expect(vaultUi(page).getByRole("article", { name: "Compost log" })).toBeVisible();
+    expect(await under("Notes/")).toHaveLength(0);
+    expect((await under("Garden/Tomato trellis ideas"))[0]?.content).toBe("# Tomato trellis ideas\n\nCattle panel arch over the path, or strings from a ridge pole.");
+  });
+
+  test("Done at once after typing waits for the words to be kept, then closes; one note, whole", async ({ page }) => {
+    await openVault(page);
+    await vaultUi(page).getByRole("button", { name: "New note" }).click();
+    const box = vaultUi(page).getByRole("textbox", { name: "The note's words" });
+    await box.pressSequentially("Frost dates\n\nFirst frost came on the 26th.");
+    await vaultUi(page).getByRole("button", { name: "Done" }).click();
+    await expect(vaultUi(page).getByRole("article", { name: "Frost dates" })).toContainText("First frost came on the 26th.");
+    await expect(box).toHaveCount(0);
+    expect((await under("Notes/")).map((n) => n.content)).toEqual(["Frost dates\n\nFirst frost came on the 26th."]);
+    // and in a note already there: type, Done at once
+    await vaultUi(page).getByRole("button", { name: `← ${VAULT}` }).click();
+    await notes(page).getByRole("button", { name: /Compost log/ }).click();
+    const note = vaultUi(page).getByRole("article", { name: "Compost log" });
+    await note.getByRole("button", { name: "Edit words" }).click();
+    const words = note.getByRole("textbox", { name: "The note's words" });
+    // a slow hub: the save is still on its way when Done is tapped (one tap must be enough)
+    await page.route(/\/vault\/[^/]+\/api\/(?:records|notes)\//, async (route) => { if (route.request().method() === "PATCH") await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
+    await words.press("Control+End");
+    await words.pressSequentially(" Needs water.");
+    await page.waitForRequest((r) => r.method() === "PATCH" && /\/api\/(?:records|notes)\//.test(r.url()), { timeout: 10_000 });
+    await note.getByRole("button", { name: "Done" }).click();
+    await expect(words).toHaveCount(0);
+    await page.unroute(/\/vault\/[^/]+\/api\/(?:records|notes)\//);
+    await expect(note).toContainText("It steams. Needs water.");
+    expect((await under("Garden/Compost log"))[0]?.content).toBe("Turned the pile on Sunday. It steams. Needs water.");
+  });
+
+  test("Back at once after typing a new note keeps it, and stays on the list", async ({ page }) => {
+    await openVault(page);
+    await vaultUi(page).getByRole("button", { name: "New note" }).click();
+    await vaultUi(page).getByRole("textbox", { name: "The note's words" }).pressSequentially("Hose\n\nFix the leak by the tap.");
+    await vaultUi(page).getByRole("button", { name: `← ${VAULT}` }).click();
+    await expect.poll(async () => (await under("Notes/")).map((n) => n.content), { timeout: 10_000 }).toEqual(["Hose\n\nFix the leak by the tap."]);
+    // it shows on the list as it lands, and the list is still what shows
+    await expect(notes(page).getByRole("button").first()).toContainText("Hose", { timeout: 10_000 });
+    await expect(vaultUi(page).getByRole("article")).toHaveCount(0);
+  });
+
+  test("a search stays with what it found, across a note opened from it and back", async ({ page }) => {
+    await openVault(page);
+    const search = vaultUi(page).getByRole("searchbox", { name: `Search ${VAULT}` });
+    await search.fill("ridge pole");
+    await vaultUi(page).getByRole("region", { name: "Found" }).getByRole("button", { name: /Tomato trellis ideas/ }).click();
+    await expect(vaultUi(page).getByRole("article", { name: "Tomato trellis ideas" })).toBeVisible();
+    await vaultUi(page).getByRole("button", { name: `← ${VAULT}` }).click();
+    await expect(search).toHaveValue("ridge pole");
+    await expect(vaultUi(page).getByRole("region", { name: "Found" }).getByRole("button")).toHaveCount(1);
+    await search.fill("");
+    await expect(notes(page).getByRole("button", { name: /Compost log/ })).toBeVisible();
+  });
+
+  test("words changed somewhere else while you wrote are never written over, and never lost: leaving keeps yours as a new note", async ({ page }) => {
+    test.setTimeout(60_000);
+    await openVault(page);
+    await notes(page).getByRole("button", { name: /Compost log/ }).click();
+    const note = vaultUi(page).getByRole("article", { name: "Compost log" });
+    await note.getByRole("button", { name: "Edit words" }).click();
+    const compost = (await under("Garden/Compost log"))[0];
+    await api(hub(), "PATCH", `notes/${compost.id}`, { content: "An AI rewrote this meanwhile.", force: true });
+    const words = note.getByRole("textbox", { name: "The note's words" });
+    await words.press("Control+End");
+    await words.pressSequentially(" Mine, from the phone.");
+    await expect(note.getByText("It changed somewhere else while you wrote. Your words are still here.")).toBeVisible({ timeout: 10_000 });
+    // Done doesn't write over the other change
+    await note.getByRole("button", { name: "Done" }).click();
+    expect((await under("Garden/Compost log"))[0]?.content).toBe("An AI rewrote this meanwhile.");
+    // leaving with neither chosen: the other change stands, and mine are a note of their own
+    await vaultUi(page).getByRole("button", { name: `← ${VAULT}` }).click();
+    await expect.poll(async () => (await under("Notes/")).map((n) => n.content), { timeout: 10_000 }).toEqual(["Turned the pile on Sunday. It steams. Mine, from the phone."]);
+    expect((await under("Garden/Compost log"))[0]?.content).toBe("An AI rewrote this meanwhile.");
+  });
 });
