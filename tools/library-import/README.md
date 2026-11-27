@@ -62,7 +62,23 @@ fields of `src/kit/packs/library.json` in the app repo (keep `TYPES` here and th
 already has keeps every field; only missing fields are added. A name the vault keeps as a plain tag (an older vault, or
 one Library wrote to before the pack) stays a tag, and the import writes it on its records as a tag.
 
-- **Front matter** (title page, copyright, printed contents, dedication) is one record. The cover goes on the book.
+- **Front matter** (title page, copyright, printed contents, dedication) is one record. A piece named like front matter
+  (title page, copyright, dedication, epigraph, "Books by …", "Also by …") before the book's first part or numbered
+  chapter joins it, even after a long foreword. The cover goes on the book.
+- **Headings and links** are plain words: emphasis around a heading (`<h2><em>Contents</em></h2>`) goes, a heading at
+  the top that only repeats the chapter's title goes, and a link's label is one line (a `<br/>` inside a title
+  becomes " – "). On a book imported before this, the next import takes that heading out, so a reading place (`at`)
+  in the chapter lands one paragraph later; quotes find their words again by the words around them.
+- **Ornaments** are left out: a picture with no words of its own (an empty alt, "Image", its file name) that the book
+  repeats three times or more (one before every verse), or that is no larger than 64 px. A picture with its own
+  description stays, however often it comes (a map, a drop cap "T"). The report counts what went.
+- **Verses:** a chapter over 6,000 words that runs on bold numbered verses (`**12. …**`: at least eight, never
+  counting back, almost all one after the other; a cookbook's steps start again at 1 and don't count) is cut into
+  pieces of about 2,500 words, each opening on a verse (with the heading just before it, if any). A top-level chapter
+  becomes a part holding its opening, the pieces under it (`Verses 1–5`); a chapter already inside a part keeps its
+  opening and the pieces go beside it in that part (`Five – Verses 1–3`).
+  On a book imported before, the long chapter keeps its path but now holds only its opening: a reading place or a
+  quote inside it opens the opening, and the reader goes on from there to the piece.
 - **Notes**: an epub's footnotes and endnotes go to the end of the chapter that cites them. In a folder, the Notes
   file is split by its chapter headings and each note becomes a footnote of its chapter (`[7]` in the text becomes
   `[^7]`). A printed index is left out.
@@ -93,14 +109,22 @@ Time stamps don't decide it, so attaching a picture never makes a record look ed
 - The hub restarting mid-run: a read waits and tries again, for about four minutes; a write is retried only when
   the hub refused the connection (so it can't have happened). A write that timed out stops the run with a line
   saying so: run it again and the receipt picks up from there.
+- **Stale and `--prune`:** a record an earlier import made at a path this plan no longer has (a better parse
+  renumbered or renamed its chapters) is listed in the report as `stale`. With `--prune` it is deleted, but only while it
+  holds exactly what the import wrote, no quote names it in `from` (a quote's type, tag, or place in `Quotes/`), and
+  the book's `at` doesn't point at it; links from other notes or a Languages word's `from` are not checked; anything else stays and stays listed. Pictures
+  stay in storage.
 - **Limit:** a record is found by its path, and the path holds the chapter's number and title. A parser change that
   renumbers or renames chapters makes new records beside the old ones, which stay (and stay in the receipt). Move
-  or delete those by hand, or keep the numbering stable.
+  or delete those by hand, run again with `--prune`, or keep the numbering stable. Library finds a renumbered
+  chapter by its title in its book, so a reading place (`at`) or a quote holding the old path still opens it (not a
+  title two chapters share).
 
 ## Tests
 
 ```sh
-python3 -I test_import_book.py        # the parser: a note's link back keeps its paragraph, italics keep their spaces
+python3 -I test_import_book.py        # the parser: a note's link back keeps its paragraph, italics keep their spaces,
+                                      # and the made-up sūtra book's shapes (make_test_epub.py --sutras) come out clean
 LIBRARY_TEST_VAULT=<throwaway> LIBRARY_TEST_TOKEN_FILE=W LIBRARY_TEST_TYPES_TOKEN_FILE=A python3 -I test_import_book.py
 ```
 
@@ -114,6 +138,9 @@ next, stays his.
 
 - A folder import of a whole book (57 records: the book, 28 chapters, 28 summaries; 9 pictures) into a throwaway
   vault and then a real one; a second run changed nothing (every `updatedAt` the same).
+- The made-up sūtra book (`make_test_epub.py --sutras`, T-531): imported by the old importer, then by this one, then
+  with `--prune`, into a throwaway hub: 9 records became 13, the 6 old paths were pruned, a third run changed nothing.
+  Read in Library in `e2e/libraryreading.spec.ts`.
 - A made-up epub (`make_test_epub.py`: parts, footnotes, endnotes, a picture, cross-references), drawn in Vault with
   its picture; and from a job, end to end, in `e2e/libraryadd.spec.ts`.
 
@@ -124,5 +151,5 @@ note targets is copied into each note; a short opening chapter (under 1,000 char
 is filed under Front matter. If a picture is taken off an imported chapter, the next import attaches it again. A field a newer plan no longer
 writes keeps its old value on the record (the hub merges fields, and the import never sends a null).
 
-Not here yet: verses and passages, summaries made by a model (an AI's step, per chapter), and the import in the
+Not here yet: an anchor per verse, summaries made by a model (an AI's step, per chapter), and the import in the
 app (`src/kit/epub.ts`), which will replace this script.
