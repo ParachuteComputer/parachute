@@ -86,7 +86,7 @@ jobs:
         run: npx vite build --config packages/applet-host/vite.config.ts && ls -l packages/applet-host/dist
       - uses: ./.github/actions/core
         with:
-          core: uni/t476-mcp-app
+          core: bc2e4cbbfd96d0b8dbc2b55fed486e65c8d0b516   # core next with #170 (the MCP App); move to a release when one carries it
       - name: The reference host (ext-apps basic-host, pinned)
         run: packages/applet-host/e2e/basic-host.sh "$RUNNER_TEMP/ext-apps" 47393
       - name: Install Chromium and WebKit
