@@ -290,30 +290,36 @@ def image_size(data):
 
 GENERIC_ALT = re.compile(r"(image|img|picture|figure|ornament|decoration|divider|separator|flourish|\*+|-+)?", re.I)
 ORNAMENT_SIDE = 64       # a picture no larger than this, with no words of its own, is an ornament
-ORNAMENT_REPEATS = 3     # the same picture this often in one book, with no words of its own or small, is an ornament
-ORNAMENT_REPEAT_SIDE = 200  # (a repeated map with its own words, or a large one, stays)
+ORNAMENT_REPEATS = 3     # the same picture this often in one book, with no words of its own, is an ornament
 SPLIT_WORDS = 6000       # a chapter longer than this is cut at its verses, when it has them
 PIECE_WORDS = 2500       # into pieces of about this many words
-VERSE = re.compile(r"\*\*(\d{1,3})\.\s+\S|(\d{1,3})\.\s+\S")
+VERSE = re.compile(r"\*\*(\d{1,3})\.\s+\S")  # a bold numbered line: `**12. Atha …**`
 FRONT_NAMES = re.compile(r"(half[- ])?title( page)?|copyright( page)?|dedication|epigraph|colophon|about the publisher|"
                          r"(other |also )?books by\b.*|also by\b.*|by the same (author|translator)\b.*", re.I)
 KEEP_NAMES = re.compile(r"(table of )?contents|foreword|preface|introduction|prologue|invocation", re.I)
-MAIN_START = re.compile(r"(chapter|book|part|canto|section)\s+(\d+|[ivxlc]+|one|first)\b|\d+\.?\s|[ivxlc]+\.\s", re.I)
+MAIN_START = re.compile(r"(chapter|book|part|canto|section)\s+(\d+|[ivxlc]+|one|first)\b|\d+\.\s|[ivxlc]+\.\s", re.I)
 
 
 def words_in(blocks): return sum(len(re.findall(r"\w+", b["md"])) for b in blocks)
 
 
 def verse_starts(blocks):
-    """Indices of the blocks that open a numbered verse (`**12. …**`, or a paragraph `12. …`), when the chapter
-    clearly runs on them: at least eight, from 1 or 2, almost all one after the other. Else []."""
+    """Indices of the blocks that open a numbered verse (a bold `**12. …**`), when the chapter clearly runs on them: at
+    least eight, from 1 or 2, never counting back (a cookbook's steps start again at 1 in each recipe), almost all one
+    after the other. A heading just before a verse opens it with the verse. Else []."""
     hits = []
     for i, b in enumerate(blocks):
         m = VERSE.match(b["md"])
-        if m and (m.group(1) or b["tag"] == "p"): hits.append((i, int(m.group(1) or m.group(2))))
+        if m and b["tag"] == "p": hits.append((i, int(m.group(1))))
     if len(hits) < 8 or hits[0][1] > 2: return []
-    steps = sum(1 for (_, a), (_, b) in zip(hits, hits[1:]) if b == a + 1)
-    return [i for i, _ in hits] if steps >= 0.8 * (len(hits) - 1) else []
+    pairs = list(zip(hits, hits[1:]))
+    if any(b <= a for (_, a), (_, b) in pairs): return []
+    if sum(1 for (_, a), (_, b) in pairs if b == a + 1) < 0.8 * len(pairs): return []
+    out, prev = [], 0
+    for i, _ in hits:
+        while i - 1 > prev and blocks[i - 1]["md"].startswith("#"): i -= 1
+        out.append(i); prev = i
+    return out
 
 
 def split_at_verses(c):
@@ -328,17 +334,32 @@ def split_at_verses(c):
         if cur and words_in([b for x in cur for b in x]) + words_in(u) > PIECE_WORDS: pieces.append(cur); cur = []
         cur.append(u)
     pieces.append(cur)
-    num = lambda u: int(next(g for g in VERSE.match(u[0]["md"]).groups() if g))
+    num = lambda u: int(next(VERSE.match(x["md"]).group(1) for x in u if VERSE.match(x["md"])))
+    # under a part already, the pieces go beside the chapter, in that part (Library groups one level deep)
+    beside = c["depth"] > 0
     kids = []
     for p in pieces:
         a, b = num(p[0]), num(p[-1])
+        label = f"Verses {a}–{b}" if a != b else f"Verse {a}"
         blocks = [x for u in p for x in u]
         cited = set(re.findall(r"\[\^(\d+)\]", "\n".join(x["md"] for x in blocks)))
-        kids.append({"label": f"Verses {a}–{b}" if a != b else f"Verse {a}", "depth": c["depth"] + 1, "blocks": blocks,
+        kids.append({"label": f"{c['label']} – {label}" if beside else label, "depth": c["depth"] + (0 if beside else 1), "blocks": blocks,
                      "notes": [d for d in c["notes"] if re.match(r"\[\^(\d+)\]", d).group(1) in cited], "gave": 0})
     given = {d for k in kids for d in k["notes"]}
     c = {**c, "blocks": c["blocks"][:starts[0]], "notes": [d for d in c["notes"] if d not in given]}
     return [c] + kids
+
+
+def nonempty(blocks):
+    """The blocks with words; an empty one's anchors go to the next block of the same file, so a link to them still
+    lands there."""
+    out, carry = [], None
+    for b in blocks:
+        if not b["md"]:
+            carry = (b["file"], (carry[1] if carry and carry[0] == b["file"] else set()) | b["ids"]); continue
+        if carry and carry[0] == b["file"]: b = {**b, "ids": b["ids"] | carry[1]}
+        carry = None; out.append(b)
+    return out
 
 
 def same_words(heading, label):
@@ -401,7 +422,7 @@ EPUB_PIC = re.compile(r"!\[([^\]]*)\]\(epub:([^)]+)\)")
 
 def drop_ornaments(e, blocks, hard):
     """Ornaments out of the text: a picture the book repeats (one before every verse), or a tiny one with no words of
-    its own (a flourish). A block left empty stays, empty, for the anchors it holds."""
+    its own (a flourish). A block left empty gives its anchors to the next (nonempty)."""
     def data(p):
         if p in e.inline_files: return e.inline_files[p][0]
         try: return e.z.read(p)
@@ -418,7 +439,7 @@ def drop_ornaments(e, blocks, hard):
         if not k: return False
         n, size = uses[k]
         no_words = GENERIC_ALT.fullmatch(alt.strip()) or alt.strip() == posixpath.basename(p)
-        if n >= ORNAMENT_REPEATS and (no_words or (size and max(size) <= ORNAMENT_REPEAT_SIDE)): return True
+        if n >= ORNAMENT_REPEATS and no_words: return True
         return bool(no_words and size and max(size) <= ORNAMENT_SIDE)
     gone = 0
     for b in blocks:
@@ -497,7 +518,7 @@ def read_epub(path, split_depth=None):
         chapters = [fm] + [c for c in chapters if c not in front]
     # short front matter after a long piece (a foreword before the dedication), up to the book's first part or numbered
     # chapter, joins it: a copyright page or a "Books by" is not a chapter to read
-    for c in chapters: c["blocks"] = [b for b in c["blocks"] if b["md"]]
+    for c in chapters: c["blocks"] = nonempty(c["blocks"])
     # the main text starts at the first part or numbered chapter, else at the first long piece (on this list, after the
     # merge above)
     main = next((k for k, c in enumerate(chapters) if roman(c["label"]) or MAIN_START.match(c["label"])
@@ -506,7 +527,7 @@ def read_epub(path, split_depth=None):
         main = next((k for k, c in enumerate(chapters) if sum(len(b["md"]) for b in c["blocks"]) >= 1000
                      and not re.fullmatch(r"(table of )?contents|front matter", c["label"], re.I)), 0)
     fold = [c for c in chapters[:main] if c["label"] != "Front matter" and not KEEP_NAMES.fullmatch(c["label"].strip())
-            and (FRONT_NAMES.fullmatch(c["label"].strip()) or words_in(c["blocks"]) < 200)]
+            and FRONT_NAMES.fullmatch(c["label"].strip()) and words_in(c["blocks"]) < 1000]
     if fold:
         fm = next((c for c in chapters if c["label"] == "Front matter"), None)
         if fm is None:
@@ -588,7 +609,7 @@ def read_epub(path, split_depth=None):
         return f"[[chap:{to}|{plain(m.group(1))}]]" if to and to != here else plain(m.group(1))
 
     for c in chapters:
-        label = plain(c["label"])
+        label = unemph(c["label"])
         blocks = c["blocks"]
         while len(blocks) > 1 and blocks[0]["md"].startswith("#") and same_words(blocks[0]["md"], label): blocks = blocks[1:]
         body = "\n\n".join(b["md"] for b in blocks)
@@ -1158,6 +1179,9 @@ def run(book, recs, hub, source, types_hub=None, prune=False):
     planned = {r["path"] for r in recs}
     gone = [p for p, m in made.items() if p not in planned and m.get("id") and not m.get("pending")]
     cited = cited_by_quotes(hub) if prune and gone else set()
+    if prune and gone:  # and where he stopped reading: the book's `at`
+        at = str(((hub.get(recs[0]["path"]) or {}).get("fields") or {}).get("at") or "").split("#")[0].strip()
+        if at: cited.add(re.sub(r"\.md$", "", at))
     for p in gone:
         mine, cur = made[p], hub.get(p)
         if cur is None:

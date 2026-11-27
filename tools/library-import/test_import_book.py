@@ -211,6 +211,55 @@ class Shapes(unittest.TestCase):
         with zipfile.ZipFile(p, "a") as z: z.writestr("OEBPS/map.png", big)
         self.assertEqual(sum(b.count("](file:") for b in chapters(p).values()), 3)
 
+    def test_a_cookbooks_numbered_steps_are_not_verses(self):
+        p = os.path.join(self.dir, "cook.epub")
+        recipe = lambda k: f"<h3>Pudding {k}</h3><p>Butter, sugar, eggs.</p>" + "".join(f"<p>{n}. Stir the pot slowly and wait for it, then stir again. " + "And again. " * 25 + "</p>" for n in range(1, 6))
+        epub(p, {"desserts.xhtml": "<h2>Desserts</h2>" + "".join(recipe(k) for k in range(40))})
+        self.assertEqual(list(chapters(p)), ["Desserts"])
+
+    def test_a_title_that_starts_with_a_number_doesnt_fold_the_chapters_before_it(self):
+        p = os.path.join(self.dir, "salads.epub")
+        docs = {f"r{k:02d}.xhtml": f"<h2>Salad {k}</h2><p>Greens, oil and salt, tossed well.</p>" for k in range(1, 20)}
+        docs["3 bean salad.xhtml"] = "<h2>3 bean salad</h2><p>Beans.</p>"  # its contents entry: "3 Bean Salad"
+        epub(p, docs)
+        labels = list(chapters(p))
+        self.assertNotIn("Front matter", labels)
+        self.assertEqual(len(labels), 20)
+
+    def test_a_heading_before_a_verse_goes_with_that_verse(self):
+        p = os.path.join(self.dir, "sec.epub")
+        # seven verses fill a piece, so the cut falls at verse 8, just after the heading
+        v = lambda n: f"<p><strong>{n}. Verse number {n}.</strong></p>" + "<p>" + "Commentary words. " * 170 + "</p>"
+        epub(p, {"one.xhtml": "<h2>One</h2><p>Opening.</p>" + "".join(v(n) for n in range(1, 8)) + "<h3>The second section</h3>" + "".join(v(n) for n in range(8, 22))})
+        book = ib["read_epub"](p)
+        piece = next(c for c in book["chapters"] if re.search(r"(?m)^\*\*8\. ", c["body"]))
+        self.assertIn("#### The second section\n\n**8. ", piece["body"])
+        for c in book["chapters"]: self.assertFalse(c["body"].rstrip().endswith("#### The second section"))
+
+    def test_a_long_chapter_inside_a_part_is_cut_into_pieces_beside_it(self):
+        # the reader groups chapters under parts one level deep: pieces of a chapter in a part stay in that part
+        p = os.path.join(self.dir, "nested.epub")
+        v = lambda n: f"<p><strong>{n}. Verse number {n}.</strong></p>" + "<p>" + "Commentary words. " * 400 + "</p>"
+        epub(p, {"part.xhtml": "<h1>Part One</h1><p>" + "Intro. " * 300 + "</p>", "five.xhtml": "<h2>Five</h2><p>Opening.</p>" + "".join(v(n) for n in range(1, 21)),
+                 "six.xhtml": "<h2>Six</h2><p>" + "Plain words. " * 300 + "</p>"})
+        with zipfile.ZipFile(p) as z: files = {n: z.read(n) for n in z.namelist()}
+        # Five and Six nested under Part in the contents
+        ncx = files["OEBPS/toc.ncx"].decode()
+        ncx = ncx.replace('<content src="part.xhtml"/></navPoint>', '<content src="part.xhtml"/>').replace('</navMap>', '</navPoint></navMap>')
+        files["OEBPS/toc.ncx"] = ncx.encode()
+        with zipfile.ZipFile(p, "w") as z:
+            for n, d in files.items(): z.writestr(n, d)
+        book = ib["read_epub"](p)
+        part = next(c for c in book["chapters"] if c["label"] == "Part")
+        self.assertEqual({c["part"] for c in book["chapters"] if c is not part}, {part["key"]})
+        self.assertEqual(max(c["depth"] for c in book["chapters"]), 1)
+        self.assertEqual([c["label"] for c in book["chapters"]][:3], ["Part", "Five", "Five – Verses 1–3"])
+
+    def test_a_repeated_small_picture_with_words_of_its_own_stays(self):
+        p = os.path.join(self.dir, "cap.epub")
+        epub(p, {f"c{i}.xhtml": f'<h2>C{i}</h2><p><img src="t.png" alt="T"/>he words begin. ' + "Words here. " * 200 + "</p>" for i in range(3)}, pictures=["t.png"])
+        self.assertEqual(sum(b.count("](file:") for b in chapters(p).values()), 3)
+
     def test_picture_sizes_are_read_from_their_headers(self):
         self.assertEqual(ib["image_size"](mk["png"](24, 12, (1, 2, 3))), (24, 12))
         jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xc0\x00\x11\x08\x00\x20\x00\x30\x03"
@@ -351,6 +400,16 @@ class Reimport(unittest.TestCase):
         self.assertEqual(self.rec("00 Seeds").get("body"), "Seeds, in my words.")
         self.assertIsNotNone(self.rec("01 Water again"))
         self.assertEqual(ib["run"](moved, ib["plan"](moved), self.hub, "x.epub", self.types_hub, prune=True)["pruned"], [])
+
+    def test_a_moved_record_where_he_stopped_reading_is_kept(self):
+        book = self.fresh_book()
+        self.run_import(book)
+        b = self.hub.get(self.folder)
+        self.hub.req("PATCH", f"/records/{b['id']}", {"fields": {"at": f"{self.folder}/01 Water#p3"}, "if_updated_at": ib["updated_of"](b)})
+        moved = copy.deepcopy(book)
+        moved["chapters"][1]["label"] = "Water again"
+        did = ib["run"](moved, ib["plan"](moved), self.hub, "x.epub", self.types_hub, prune=True)
+        self.assertEqual((did["stale"], did["pruned"]), ([f"{self.folder}/01 Water"], []))
 
     def test_a_moved_record_a_quote_cites_is_kept(self):
         book = self.fresh_book()
