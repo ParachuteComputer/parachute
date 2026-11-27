@@ -7,7 +7,7 @@
 
 The hub checks write a made-up book into the vault named; give them a fresh throwaway one.
 """
-import copy, os, struct, sys, tempfile, unittest, urllib.parse, zipfile, zlib
+import copy, os, re, struct, sys, tempfile, unittest, urllib.parse, zipfile, zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ib = {"__name__": "import_book"}
@@ -91,6 +91,181 @@ class Parser(unittest.TestCase):
         a, b = ib["book_id"]({"title": "Война и мир"}), ib["book_id"]({"title": "道德經"})
         self.assertNotEqual(a, b)
         self.assertNotEqual(a, "book-")
+
+
+mk = {"__name__": "make_test_epub"}
+exec(compile(open(os.path.join(HERE, "make_test_epub.py")).read(), "make_test_epub.py", "exec"), mk)
+WIKI = re.compile(r"\[\[([^\]|]*)\|([^\]]*)\]\]")
+
+
+class Shapes(unittest.TestCase):
+    """T-531: what a real sūtra book's import showed, made up in make_test_epub.py --sutras, comes out clean."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = tempfile.mkdtemp()
+        cls.src = os.path.join(cls.dir, "sutras.epub")
+        mk["sutras"](cls.src)
+        cls.book = ib["read_epub"](cls.src)
+        cls.recs = ib["plan"](cls.book)
+        cls.by = {r["path"].split("/", 2)[-1]: r for r in cls.recs}
+        cls.labels = [c["label"] for c in cls.book["chapters"]]
+
+    def chapter(self, label):
+        return next(c for c in self.book["chapters"] if c["label"] == label)
+
+    def test_contents_links_are_one_line_of_plain_words(self):
+        body = next(r["body"] for p, r in self.by.items() if p.endswith(" Contents"))
+        links = WIKI.findall(body)
+        self.assertGreaterEqual(len(links), 3)
+        for target, label in links:
+            self.assertNotIn("\n", label); self.assertNotIn("\\", label); self.assertNotIn("*", label)
+        self.assertIn("Book One – Ārambha Pāda (Portion on Beginning)", [label for _, label in links])
+        self.assertIn("Glossary of Made-up Terms", [label for _, label in links])
+        self.assertRegex(body, r"(?m)^Index$")  # the plain line with no link stays a plain line
+
+    def test_headings_carry_no_emphasis_and_titles_no_asterisks(self):
+        for c in self.book["chapters"]:
+            self.assertNotIn("*", c["label"])
+            for line in c["body"].split("\n"):
+                if line.startswith("#"): self.assertNotIn("*", line, f"{c['label']}: {line}")
+
+    def test_a_heading_that_only_repeats_the_title_goes(self):
+        self.assertFalse(self.chapter("Foreword")["body"].startswith("#"))
+        self.assertFalse(self.chapter("Book One – Ārambha Pāda (Portion on Beginning)")["body"].startswith("#"))
+
+    def test_ornaments_are_left_out_and_real_pictures_kept(self):
+        z = zipfile.ZipFile(self.src)
+        shas = {n: ib["sha"](z.read("OEBPS/images/" + n)) for n in ("ornament.png", "flourish.png", "streams.png")}
+        self.assertNotIn(shas["ornament.png"], self.book["files"])  # the same small picture before every verse
+        self.assertNotIn(shas["flourish.png"], self.book["files"])  # tiny, once, with no words of its own
+        self.assertIn(shas["streams.png"], self.book["files"])
+        bodies = "\n".join(c["body"] for c in self.book["chapters"])
+        self.assertEqual(bodies.count("](file:"), 1)
+        self.assertNotRegex(bodies, r"\n\n\n")
+        self.assertTrue(any("ornament" in h for h in self.book["hard"]))
+
+    def test_short_front_matter_is_one_record(self):
+        for gone in ("Title Page", "Copyright", "Dedication", "Books by the Same Made-up Teacher"):
+            self.assertNotIn(gone, self.labels)
+        self.assertEqual(self.labels[0], "Front matter")
+        front = self.chapter("Front matter")["body"]
+        for words in ("No rights reserved", "For everyone who reads slowly", "The Small Lamp"):
+            self.assertIn(words, front)
+        self.assertIn("Foreword", self.labels)  # long enough to be read as its own
+        self.assertIn("Contents", self.labels)
+
+    def test_a_long_part_is_cut_at_its_verses(self):
+        part = self.chapter("Book One – Ārambha Pāda (Portion on Beginning)")
+        kids = [c for c in self.book["chapters"] if c["part"] == part["key"]]
+        self.assertEqual(part["kind"], "part")
+        self.assertIn("This first book sets out the ground", part["body"])
+        self.assertNotIn("**1.", part["body"])
+        self.assertGreaterEqual(len(kids), 3)
+        seen = []
+        for k in kids:
+            self.assertRegex(k["body"], r"^\*\*\d+\. ")  # each piece opens on a verse
+            self.assertLessEqual(k["words"], 3500)
+            seen += [int(n) for n in re.findall(r"(?m)^\*\*(\d+)\. ", k["body"])]
+            first, last = re.fullmatch(r"Verses (\d+)–(\d+)", k["label"]).groups()
+            self.assertEqual((int(first), int(last)), (int(re.findall(r"(?m)^\*\*(\d+)\. ", k["body"])[0]), int(re.findall(r"(?m)^\*\*(\d+)\. ", k["body"])[-1])))
+        self.assertEqual(seen, list(range(1, 31)))
+        self.assertIn("The four streams", kids[-1]["body"])  # what follows the last verse stays with it
+        self.assertEqual(self.chapter("Book Two – Sādhana Pāda (Portion on Practice)")["kind"], "chapter")  # short: whole
+        recs = {r["path"]: r for r in self.recs}
+        for k in kids:
+            r = next(r for r in self.recs if r["path"].endswith(" " + k["label"]))
+            self.assertTrue(recs[r["fields"]["part"]]["path"].endswith(part["label"]))
+        orders = [r["fields"]["order"] for r in self.recs if "order" in r["fields"]]
+        self.assertEqual(orders, sorted(orders))
+
+    def test_a_book_without_these_shapes_keeps_its_paths(self):
+        g = os.path.join(self.dir, "garden.epub"); mk["garden"](g)
+        self.assertEqual([r["path"] for r in ib["plan"](ib["read_epub"](g))], [
+            "Books/A Small Garden", "Books/A Small Garden/00 Part One – The Garden", "Books/A Small Garden/01 Seeds",
+            "Books/A Small Garden/02 Water", "Books/A Small Garden/03 Part Two – The Harvest", "Books/A Small Garden/04 Picking"])
+
+    def test_a_heading_keeps_its_picture_and_its_link(self):
+        p = os.path.join(self.dir, "h.epub")
+        epub(p, {"one.xhtml": '<h2><em>One</em> <img src="mark.png" alt="A map of the hills"/></h2><p>' + "Words. " * 300 + "</p>",
+                 "two.xhtml": '<h2><a href="one.xhtml">Back to <em>One</em></a></h2><p>' + "More words. " * 300 + "</p>"},
+             pictures=["mark.png"])
+        bodies = chapters(p)
+        self.assertRegex(bodies["One"], r"^### One !\[A map of the hills\]\(file:[0-9a-f]{64}\)")
+        self.assertIn("### [[chap:c0|Back to One]]", bodies["Two"])
+
+    def test_short_unnumbered_chapters_after_the_front_matter_stay_chapters(self):
+        p = os.path.join(self.dir, "f.epub")
+        epub(p, {"title.xhtml": "<p>A Book</p>", "copyright.xhtml": "<p>No rights.</p>", "dedication.xhtml": "<p>For you.</p>",
+                 "river.xhtml": "<h2>The River</h2><p>" + "Water runs. " * 200 + "</p>",
+                 "night.xhtml": "<h2>Night</h2><p>A short poem of the night, in a few lines only.</p>",
+                 "dawn.xhtml": "<h2>Dawn</h2><p>" + "Light comes. " * 200 + "</p>"})
+        labels = [c["label"] for c in ib["read_epub"](p)["chapters"]]
+        self.assertEqual(labels, ["Front matter", "River", "Night", "Dawn"])
+
+    def test_a_picture_the_book_repeats_with_words_of_its_own_stays(self):
+        p = os.path.join(self.dir, "r.epub")
+        big = mk["png"](300, 200, (10, 20, 30))
+        docs = {f"c{i}.xhtml": f'<h2>C{i}</h2><p>' + "Words here. " * 200 + '</p><p><img src="map.png" alt="Map of the region"/></p>' for i in range(3)}
+        epub(p, docs)
+        with zipfile.ZipFile(p, "a") as z: z.writestr("OEBPS/map.png", big)
+        self.assertEqual(sum(b.count("](file:") for b in chapters(p).values()), 3)
+
+    def test_a_cookbooks_numbered_steps_are_not_verses(self):
+        p = os.path.join(self.dir, "cook.epub")
+        recipe = lambda k: f"<h3>Pudding {k}</h3><p>Butter, sugar, eggs.</p>" + "".join(f"<p>{n}. Stir the pot slowly and wait for it, then stir again. " + "And again. " * 25 + "</p>" for n in range(1, 6))
+        epub(p, {"desserts.xhtml": "<h2>Desserts</h2>" + "".join(recipe(k) for k in range(40))})
+        self.assertEqual(list(chapters(p)), ["Desserts"])
+
+    def test_a_title_that_starts_with_a_number_doesnt_fold_the_chapters_before_it(self):
+        p = os.path.join(self.dir, "salads.epub")
+        docs = {f"r{k:02d}.xhtml": f"<h2>Salad {k}</h2><p>Greens, oil and salt, tossed well.</p>" for k in range(1, 20)}
+        docs["3 bean salad.xhtml"] = "<h2>3 bean salad</h2><p>Beans.</p>"  # its contents entry: "3 Bean Salad"
+        epub(p, docs)
+        labels = list(chapters(p))
+        self.assertNotIn("Front matter", labels)
+        self.assertEqual(len(labels), 20)
+
+    def test_a_heading_before_a_verse_goes_with_that_verse(self):
+        p = os.path.join(self.dir, "sec.epub")
+        # seven verses fill a piece, so the cut falls at verse 8, just after the heading
+        v = lambda n: f"<p><strong>{n}. Verse number {n}.</strong></p>" + "<p>" + "Commentary words. " * 170 + "</p>"
+        epub(p, {"one.xhtml": "<h2>One</h2><p>Opening.</p>" + "".join(v(n) for n in range(1, 8)) + "<h3>The second section</h3>" + "".join(v(n) for n in range(8, 22))})
+        book = ib["read_epub"](p)
+        piece = next(c for c in book["chapters"] if re.search(r"(?m)^\*\*8\. ", c["body"]))
+        self.assertIn("#### The second section\n\n**8. ", piece["body"])
+        for c in book["chapters"]: self.assertFalse(c["body"].rstrip().endswith("#### The second section"))
+
+    def test_a_long_chapter_inside_a_part_is_cut_into_pieces_beside_it(self):
+        # the reader groups chapters under parts one level deep: pieces of a chapter in a part stay in that part
+        p = os.path.join(self.dir, "nested.epub")
+        v = lambda n: f"<p><strong>{n}. Verse number {n}.</strong></p>" + "<p>" + "Commentary words. " * 400 + "</p>"
+        epub(p, {"part.xhtml": "<h1>Part One</h1><p>" + "Intro. " * 300 + "</p>", "five.xhtml": "<h2>Five</h2><p>Opening.</p>" + "".join(v(n) for n in range(1, 21)),
+                 "six.xhtml": "<h2>Six</h2><p>" + "Plain words. " * 300 + "</p>"})
+        with zipfile.ZipFile(p) as z: files = {n: z.read(n) for n in z.namelist()}
+        # Five and Six nested under Part in the contents
+        ncx = files["OEBPS/toc.ncx"].decode()
+        ncx = ncx.replace('<content src="part.xhtml"/></navPoint>', '<content src="part.xhtml"/>').replace('</navMap>', '</navPoint></navMap>')
+        files["OEBPS/toc.ncx"] = ncx.encode()
+        with zipfile.ZipFile(p, "w") as z:
+            for n, d in files.items(): z.writestr(n, d)
+        book = ib["read_epub"](p)
+        part = next(c for c in book["chapters"] if c["label"] == "Part")
+        self.assertEqual({c["part"] for c in book["chapters"] if c is not part}, {part["key"]})
+        self.assertEqual(max(c["depth"] for c in book["chapters"]), 1)
+        self.assertEqual([c["label"] for c in book["chapters"]][:3], ["Part", "Five", "Five – Verses 1–3"])
+
+    def test_a_repeated_small_picture_with_words_of_its_own_stays(self):
+        p = os.path.join(self.dir, "cap.epub")
+        epub(p, {f"c{i}.xhtml": f'<h2>C{i}</h2><p><img src="t.png" alt="T"/>he words begin. ' + "Words here. " * 200 + "</p>" for i in range(3)}, pictures=["t.png"])
+        self.assertEqual(sum(b.count("](file:") for b in chapters(p).values()), 3)
+
+    def test_picture_sizes_are_read_from_their_headers(self):
+        self.assertEqual(ib["image_size"](mk["png"](24, 12, (1, 2, 3))), (24, 12))
+        jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xc0\x00\x11\x08\x00\x20\x00\x30\x03"
+        self.assertEqual(ib["image_size"](jpeg), (48, 32))
+        self.assertEqual(ib["image_size"](b"GIF89a\x10\x00\x08\x00"), (16, 8))
+        self.assertIsNone(ib["image_size"](b"not a picture"))
 
 
 @unittest.skipUnless(os.environ.get("LIBRARY_TEST_VAULT"), "needs a throwaway vault on a hub (LIBRARY_TEST_VAULT)")
@@ -206,6 +381,49 @@ class Reimport(unittest.TestCase):
         self.assertIn(f"{self.folder}/00 Seeds", did["changed_since"])
         self.assertEqual(self.rec("00 Seeds").get("body"), "Seeds, in my words.")
 
+
+    def test_records_a_better_parse_moved_are_pruned_only_when_still_the_imports(self):
+        # T-531: a better parse renumbers or renames chapters; the old records are listed, and with prune deleted, unless
+        # someone changed one since or a quote cites it
+        book = self.fresh_book()
+        self.run_import(book)
+        moved = copy.deepcopy(book)
+        for c in moved["chapters"]: c["label"] += " again"
+        self.edit("00 Seeds", body="Seeds, in my words.")
+        did = self.run_import(moved)
+        self.assertEqual(sorted(did["stale"]), [f"{self.folder}/00 Seeds", f"{self.folder}/01 Water"])
+        self.assertIsNotNone(self.rec("01 Water"))  # listed, not deleted, without prune
+        did = ib["run"](moved, ib["plan"](moved), self.hub, "x.epub", self.types_hub, prune=True)
+        self.assertEqual(did["pruned"], [f"{self.folder}/01 Water"])
+        self.assertEqual(did["stale"], [f"{self.folder}/00 Seeds"])
+        self.assertIsNone(self.hub.get(f"{self.folder}/01 Water"))
+        self.assertEqual(self.rec("00 Seeds").get("body"), "Seeds, in my words.")
+        self.assertIsNotNone(self.rec("01 Water again"))
+        self.assertEqual(ib["run"](moved, ib["plan"](moved), self.hub, "x.epub", self.types_hub, prune=True)["pruned"], [])
+
+    def test_a_moved_record_where_he_stopped_reading_is_kept(self):
+        book = self.fresh_book()
+        self.run_import(book)
+        b = self.hub.get(self.folder)
+        self.hub.req("PATCH", f"/records/{b['id']}", {"fields": {"at": f"{self.folder}/01 Water#p3"}, "if_updated_at": ib["updated_of"](b)})
+        moved = copy.deepcopy(book)
+        moved["chapters"][1]["label"] = "Water again"
+        did = ib["run"](moved, ib["plan"](moved), self.hub, "x.epub", self.types_hub, prune=True)
+        self.assertEqual((did["stale"], did["pruned"]), ([f"{self.folder}/01 Water"], []))
+
+    def test_a_moved_record_a_quote_cites_is_kept(self):
+        book = self.fresh_book()
+        self.run_import(book)
+        q = self.hub.req("POST", "/records", {"path": f"Quotes/{book['title']}/{os.urandom(3).hex()}", "body": "> Water at dawn.",
+                                              "fields": {"from": f"{self.folder}/01 Water", "book": self.folder}})  # as Library writes one: no type
+        try:
+            moved = copy.deepcopy(book)
+            moved["chapters"][1]["label"] = "Water again"
+            did = ib["run"](moved, ib["plan"](moved), self.hub, "x.epub", self.types_hub, prune=True)
+            self.assertEqual((did["stale"], did["pruned"]), ([f"{self.folder}/01 Water"], []))
+            self.assertIsNotNone(self.rec("01 Water"))
+        finally:
+            self.hub.req("DELETE", f"/records/{q['id']}")
 
     def fresh_book(self):
         """The same made-up book under a title of its own, so each check starts with nothing written."""
