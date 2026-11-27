@@ -1,7 +1,7 @@
 // The kit's Note draws text a vault holds, inside frames that run with no card (Parachute's own Vault and Journal:
 // docs/design/PARACHUTE-SOURCE.md). Raw HTML and script links in a note must stay text (security review, T-476).
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { Note } from "./parts-note";
 
 describe("Note draws a vault's text as text", () => {
@@ -47,4 +47,20 @@ describe("Note draws the pictures attached to its record (docs/design/PICTURES.m
     expect(container.textContent).toContain("owl sketch");
     expect(asked).toEqual([]);
   }));
+});
+
+describe("Note and the links Uni writes", () => {
+  const ID = "01KA3Z9V6B2W8XQJ4M7N5P0R1S";
+  const g = globalThis as unknown as { parachute?: unknown };
+  afterEach(() => { delete g.parachute; });
+  it("a web app's path alone in the words becomes a link; as a markdown link's own target it stands as written (T-476)", async () => {
+    g.parachute = { app: { links: async (links: string[]) => links.map(() => "note") } };
+    const path = `/surface/parachute/v/uni/n/${ID}`;
+    const { container } = render(<Note body={`Filed at ${path} today.\n\nOr [the note](${path}).`} />);
+    await act(() => new Promise((r) => setTimeout(r, 30)));
+    const links = [...container.querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href")]);
+    expect(links.map((l) => l[0])).toEqual([path, "the note"]);
+    // the labelled one keeps its target: not wrapped a second time into a dead address
+    expect(links[1][1]).toBe(path);
+  });
 });

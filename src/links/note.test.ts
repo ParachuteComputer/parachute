@@ -21,6 +21,10 @@ describe("parseNoteRef", () => {
     ["[[Tomato toast#Method|the toast]]", { kind: "wiki", target: "Tomato toast" }],
     [`https://hub.example/surface/parachute/v/kitchen/n/${ID}`, { kind: "address", issuer: "https://hub.example", vault: "kitchen", note: ID }],
     [`http://127.0.0.1:4000/vault/kitchen/view/${ID}`, { kind: "address", issuer: "http://127.0.0.1:4000", vault: "kitchen", note: ID }],
+    // as Uni writes them: the web app's address with a closing slash, and its path with no hub (a vault by its name)
+    [`https://hub.example/surface/parachute/v/uni/n/${ID}/`, { kind: "address", issuer: "https://hub.example", vault: "uni", note: ID }],
+    [`/surface/parachute/v/uni/n/${ID}`, { kind: "short", vault: "uni", note: ID }],
+    [`/surface/notes/v/uni/n/${ID}/`, { kind: "short", vault: "uni", note: ID }],
   ])("reads %s", (raw, ref) => expect(parseNoteRef(raw)).toEqual(ref));
 
   it.each([
@@ -36,6 +40,8 @@ describe("parseNoteRef", () => {
     [`https://hub.example/evil/vault/kitchen/view/${ID}`],
     ["[[]]"], ["[[a\nb]]"], [`[[${"a".repeat(600)}]]`],
     ["mailto:me@example.com"], [""],
+    // a path with no hub names a note by its id only: no other path of the web app, no climbing
+    ["/surface/parachute/v/uni"], ["/surface/parachute/v/uni/n/Journal"], [`/surface/parachute/v/uni/n/${ID}/edit`], [`/v/uni/n/${ID}`], [`/surface/../v/uni/n/${ID}`],
   ])("refuses %j", (raw) => expect(parseNoteRef(raw)).toBeNull());
 });
 
@@ -50,6 +56,14 @@ describe("findLinks", () => {
   it("gives other web addresses with no ref, and keeps a bracket the address opened", () => {
     const f = findLinks("see (https://en.wikipedia.org/wiki/Bean_(plant)) and https://example.com/a?b=c!");
     expect(f.map((x) => [x.raw, x.ref])).toEqual([["https://en.wikipedia.org/wiki/Bean_(plant)", null], ["https://example.com/a?b=c", null]]);
+  });
+  it("finds a web app's path with no hub, alone in a sentence, and not inside an address or another path", () => {
+    const text = `Filed at /surface/parachute/v/uni/n/${ID}/. Also https://hub.example/surface/parachute/v/uni/n/${ID}/ (same note).`;
+    const f = findLinks(text);
+    expect(f.map((x) => x.raw)).toEqual([`/surface/parachute/v/uni/n/${ID}/`, `https://hub.example/surface/parachute/v/uni/n/${ID}/`]);
+    expect(f.map((x) => x.ref?.kind)).toEqual(["short", "address"]);
+    expect(findNoteRefs(`~/Code/surface/parachute/v/uni/n/${ID}`)).toEqual([]);
+    expect(findNoteRefs(`/surface/parachute/v/uni/n/${ID}/edit`)).toEqual([]);
   });
   it("doesn't take a short form inside an address, a mail address or a word", () => {
     expect(findNoteRefs(`https://hub.example/x?ref=kitchen:${ID}`)).toEqual([]);

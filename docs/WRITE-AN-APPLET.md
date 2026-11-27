@@ -413,7 +413,8 @@ The kit also reads two short forms, which applets read but never write:
 - `[[Path or Title]]` inside a note: a note in the same vault, by its path, or beside the note it is in, and only in the
   folders the applet may read (a path can be guessed: the app won't say what is there to an applet that can't read it).
 
-And the address Parachute's web app shows for a note (`https://<hub>/surface/parachute/v/<vault>/n/<id>`).
+And the address Parachute's web app shows for a note (`https://<hub>/surface/parachute/v/<vault>/n/<id>`), or its path alone
+(`/surface/parachute/v/<vault>/n/<ULID>`, read as `<vault>:<ULID>`).
 
 Draw links only with the kit: `Linked` for text you show as it is (a message, a mail), `Link` for one link you place,
 and `Note` for a note's text. Each asks the app what a note link leads to, and the app answers from the vaults the

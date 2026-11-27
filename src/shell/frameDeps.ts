@@ -24,7 +24,7 @@ import { dismissVault, newVaultsOn, opensAs, startAddVault } from "../vault/newV
 import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
 import { barOwnIds, bundleMissing, bundleNewer, barNow, openBundleNow, pinApplet, startApplet } from "./homeSettings";
-import { offered, offersIn, namesApplet, type Bundle } from "./bundles";
+import { offered, offersIn, offersOwn, namesApplet, type Bundle } from "./bundles";
 import { chooseStart, forgetStart, START_WAIT_MS } from "./start";
 import { parachutesNow } from "./parachutes";
 
@@ -53,14 +53,15 @@ export const homeNow = () => {
 /** A home's copy of one of Parachute's own (the old Add Capture wrote these), listed beside Parachute's own: said so. */
 function copyNote(rec: VaultRecord, manifestId: string): { note: string } | null {
   const home = homeVault(), of = officialCopyOf(manifestId);
-  return of && home?.key === rec.key && openBundleNow().parachute ? { note: `your copy of Parachute's ${of}` } : null;
+  return of && home?.key === rec.key && offersOwn(openBundleNow(), of.name) ? { note: `your copy of Parachute's ${of.shown}` } : null;
 }
 /** Parachute's own applets, listed in the home (docs/design/PARACHUTE-SOURCE.md): from the app, never read from a vault. */
 function officialNow(): { official?: FrameApplet[] } {
   const home = homeVault();
   if (!home || !openBundleNow().parachute) return {};
   const status = "ok" as const;
-  return { official: OFFICIAL_NAMES.map((n) => { const f = officialFace(n); return { noteId: officialId(n), path: f.name, vault: home.key, opens: [], status,
+  const bundle = openBundleNow();
+  return { official: OFFICIAL_NAMES.filter((n) => offersOwn(bundle, n)).map((n) => { const f = officialFace(n); return { noteId: officialId(n), path: f.name, vault: home.key, opens: [], status,
     manifest: { id: `parachute-${n}`, name: f.name, glyph: f.glyph, ...(f.note ? { note: f.note } : {}), screens: f.screens } }; }) };
 }
 /** Vault, Parachute's own (docs/design/PARACHUTE-SOURCE.md): where a record no other applet opens goes (docs/VAULT.md),
@@ -69,7 +70,7 @@ function viewerNow(): { viewer?: FrameViewer } {
   const home = homeVault();
   if (!home) return {};
   // Parachute's own runs before the self-test is known (AppletScreen): always "ok"
-  if (openBundleNow().parachute) return { viewer: { vault: home.key, noteId: officialId("vault"), status: "ok" } };
+  if (offersOwn(openBundleNow(), "vault")) return { viewer: { vault: home.key, noteId: officialId("vault"), status: "ok" } };
   // a bundle that leaves Parachute's own out: a copy of Vault the person keeps in their home, as before (its card asks)
   const a = appletsNow(home.key);
   const e = a?.state === "ok" ? a.found.entries.find((x) => x.manifest.id === "vault-view") : undefined;

@@ -34,7 +34,7 @@ import { homeVault, setHome } from "./frameSource";
 import { parseHub } from "../vault/parachute";
 import { normalUrl } from "../applet/services";
 import type { Levels } from "./levels";
-import { ANY_HUB, recordOf, BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, defaultBundles, followed, isAppPlace, newerBundle, NEWCOMER_BUNDLE, openBundle, BUNDLE_FOLDER, type AppPlace, type BarEntry, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
+import { ANY_HUB, recordOf, BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, defaultBundles, followed, isAppPlace, newerBundle, NEWCOMER_BUNDLE, offersOwn, openBundle, BUNDLE_FOLDER, type AppPlace, type BarEntry, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
 
 export const SETTINGS_TAG = "parachute-settings";
 export const SETTINGS_PATH = "Parachute/Settings";
@@ -112,7 +112,7 @@ function findLive(p: Place): Found | null {
   const rec = vaultFor(p);
   const which = officialOf(p.applet);
   // one of Parachute's own (parachuteSource.ts): in the home vault only, named as this app names it
-  if (which) { const home = homeVault(); return rec && home && rec.key === home.key && openBundleNow().parachute ? { vault: rec.key, noteId: officialId(which), name: officialFace(which).name, glyph: officialFace(which).glyph, href: officialPath(rec.key, which) } : null; }
+  if (which) { const home = homeVault(); return rec && home && rec.key === home.key && offersOwn(openBundleNow(), which) ? { vault: rec.key, noteId: officialId(which), name: officialFace(which).name, glyph: officialFace(which).glyph, href: officialPath(rec.key, which) } : null; }
   if (!rec) return null;
   const a = appletsNow(rec.key);
   if (a?.state !== "ok") return null;

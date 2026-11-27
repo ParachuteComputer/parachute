@@ -26,6 +26,7 @@ import BottomBar from "./BottomBar";
 import { keptId, KeptApplets } from "./kept";
 import { atFirstEntry } from "../ui/history";
 import { startNow, startPlace } from "./start";
+import { offersOwn } from "./bundles";
 import { openBundleNow, readSettings, settingsReadNow, subscribeSettings, useSettings } from "./homeSettings";
 import { relistVaults } from "../vault/newVaults";
 import { isMine } from "../vault/whose";
@@ -182,7 +183,7 @@ function ShellRoutes() {
   // Parachute Simplified's home is Parachute's own Notes (docs/design/PARACHUTE-SOURCE.md); where the bundle leaves
   // Parachute's own out, the frame's Notes stays (and `/?with=vault`, the way back if Notes won't run)
   const homeKey = homeVault(vaults)?.key;
-  if (location.pathname === "/" && !location.search.includes("with=vault") && !shell && homeKey && openBundleNow().look === "notes" && openBundleNow().parachute)
+  if (location.pathname === "/" && !location.search.includes("with=vault") && !shell && homeKey && openBundleNow().look === "notes" && offersOwn(openBundleNow(), "notes"))
     return <Navigate to={officialPath(homeKey, "notes")} replace />;
   const bar = withBar(location.pathname, shell) && vaults.length > 0;
   const own = keptId(location) !== null;

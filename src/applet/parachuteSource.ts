@@ -186,10 +186,10 @@ export const officialPath = (homeKey: string, name: OfficialName) => `/v/${encod
 
 /** The official applet a vault's applet copies by its manifest id (the old Add Capture wrote such copies into the home),
  *  by name; null for any other. Only for telling the two apart in a list: a copy is still an ordinary applet. */
-export function officialCopyOf(manifestId: string): string | null {
+export function officialCopyOf(manifestId: string): { name: OfficialName; shown: string } | null {
   for (const n of OFFICIAL_NAMES) {
     const a = BUNDLED[n].record.fields.applet as { id?: string; name?: string } | undefined;
-    if (a?.id === manifestId) return a.name ?? n;
+    if (a?.id === manifestId) return { name: n, shown: a.name ?? n };
   }
   return null;
 }

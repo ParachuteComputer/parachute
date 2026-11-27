@@ -8,6 +8,7 @@
 //   <vault>:<ULID>             a vault of the person's by its name, and a note's id (`uni:01K…` as Uni writes in chat)
 //   [[Path or Title]]          inside a note: a note in the same vault (resolved by the shell)
 //   https://<hub>[/surface/<name> | /app]/v/<vault>/n/<id>    the address Parachute's web app shows for a note
+//   /surface/<name>/v/<vault>/n/<ULID>     the same with no hub (as an agent pastes a path): read as <vault>:<ULID>
 // What a link names is only a candidate: the shell opens it only when it holds that vault (links/resolve.ts).
 import { isLoopback, VAULT_NAME } from "../vault/address";
 
@@ -58,6 +59,9 @@ export function parseNoteRef(raw: string): NoteRef | null {
   }
   const short = /^([a-z0-9][a-z0-9_-]{0,63}):([0-9A-HJKMNP-TV-Z]{26})$/.exec(s);
   if (short) return { kind: "short", vault: short[1], note: short[2] };
+  // a web app's path with no hub names what the short form names: a vault of the person's by its name, a note by its id
+  const path = /^\/surface\/[a-z0-9][a-z0-9_-]*\/v\/([a-z0-9][a-z0-9_-]{0,63})\/n\/([0-9A-HJKMNP-TV-Z]{26})\/?$/.exec(s);
+  if (path) return { kind: "short", vault: path[1], note: path[2] };
   if (!/^https?:\/\//i.test(s)) return null;
   const a = parseNoteAddress(s);
   return a.ok ? { kind: "address", issuer: a.issuer, vault: a.vault, note: a.note } : null;
@@ -65,9 +69,9 @@ export function parseNoteRef(raw: string): NoteRef | null {
 
 export type Found = { start: number; end: number; raw: string; ref: NoteRef | null };
 
-// a web address in running text (its trailing punctuation is the sentence's), and the short form, standing alone (not
-// inside an address, a mail address or a link's label)
-const IN_TEXT = /\bhttps?:\/\/[^\s<>"'`]+|(?<![\w:/.@\[-])[a-z0-9][a-z0-9_-]{0,63}:[0-9A-HJKMNP-TV-Z]{26}(?![\w])/g;
+// a web address in running text (its trailing punctuation is the sentence's), and the short form or a web app's path
+// with no hub, standing alone (not inside an address, a mail address or a link's label)
+const IN_TEXT = /\bhttps?:\/\/[^\s<>"'`]+|(?<![\w:/.@\[-])[a-z0-9][a-z0-9_-]{0,63}:[0-9A-HJKMNP-TV-Z]{26}(?![\w])|(?<![\w:/.@\[-])\/surface\/[a-z0-9][a-z0-9_-]*\/v\/[a-z0-9][a-z0-9_-]{0,63}\/n\/[0-9A-HJKMNP-TV-Z]{26}\/?(?![\w/])/g;
 
 /** The links in plain text, in order: each web address (`ref` set when it is a note's) and each `<vault>:<ULID>`.
  *  Wikilinks are a note's, not text's. */

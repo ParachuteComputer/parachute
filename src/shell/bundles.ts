@@ -20,7 +20,7 @@ import { plain, stripExt } from "../applet/contract";
 import { APP_LEVEL, tooNew } from "../applet/level";
 import { askedOf, stricterAsked, type Asked } from "./levelRules";
 import defaults from "./default-bundles.json";
-import { officialFace, PARACHUTE_PUBLISHER } from "../applet/parachuteSource";
+import { OFFICIAL_NAMES, officialFace, PARACHUTE_PUBLISHER, type OfficialName } from "../applet/parachuteSource";
 
 export const BUNDLE_TAG = "parachute-bundle";
 export const BUNDLE_FOLDER = "Parachute/Bundles/";
@@ -60,6 +60,10 @@ export type Bundle = {
    *  default offers them only once it names them). A record can leave the source out; it can never give a publisher a
    *  key: Parachute's keys are the app's own. */
   parachute: boolean;
+  /** Which of Parachute's own it offers, when its publisher entry names them (`"applets": ["vault"]`); null: all of
+   *  them. A bundle of the person's own that has its own Home and Journal takes only Vault this way. Read with
+   *  `offersOwn`. */
+  own: OfficialName[] | null;
   /** An app someone else offers, followed live: where its record is. */
   live?: { hub: string; vault: string; path: string };
   /** Where this bundle's record is: the home vault's note id, or none for a default no record changes. */
@@ -142,11 +146,25 @@ export function bundleOf(raw: unknown, path: string | null, noteId: string | nul
     opens: list(raw.opens, 200, opensOf),
     keep,
     security: askedOf(raw.security),
-    parachute: Array.isArray(raw.publishers) ? raw.publishers.slice(0, 20).some((p) => plain(p) && p.url === PARACHUTE_PUBLISHER) : d?.parachute ?? false,
+    ...ownOf(raw.publishers, d),
     ...(live ? { live } : {}),
     noteId,
   };
 }
+
+/** What a record's `publishers` says of Parachute's own applets: all of them, the ones its entry names (`applets`), or
+ *  none. Naming only narrows, so it is read strictly: a list that isn't names is none, and a name this build doesn't
+ *  know (a newer app's applet) is left out. A build from before this (#241) doesn't read `applets` and offers all six. */
+function ownOf(publishers: unknown, d: Bundle | null): { parachute: boolean; own: OfficialName[] | null } {
+  if (!Array.isArray(publishers)) return { parachute: d?.parachute ?? false, own: d?.own ?? null };
+  const entry = publishers.slice(0, 20).find((p) => plain(p) && p.url === PARACHUTE_PUBLISHER) as Record<string, unknown> | undefined;
+  if (!entry) return { parachute: false, own: null };
+  if (entry.applets === undefined) return { parachute: true, own: null };
+  const own = Array.isArray(entry.applets) && entry.applets.every((n) => typeof n === "string") ? OFFICIAL_NAMES.filter((n) => (entry.applets as string[]).includes(n)) : [];
+  return own.length ? { parachute: true, own } : { parachute: false, own: null };
+}
+/** Does this bundle offer this one of Parachute's own applets (listed, pinnable, where a record opens)? */
+export const offersOwn = (b: Pick<Bundle, "parachute" | "own">, name: OfficialName): boolean => b.parachute && (!b.own || b.own.includes(name));
 
 /** Stands for every hub, from `everywhere` only: no source can say it (`hubOk` refuses it). */
 export const ANY_HUB = "*";
@@ -204,7 +222,7 @@ export function recordOf(app: Bundle): Record<string, unknown> {
     ...(app.hide.length ? { hide: app.hide } : {}), ...(app.bar ? { bar: app.bar } : {}), ...(app.start !== undefined ? { start: app.start } : {}),
     ...(app.opens.length ? { opens: app.opens } : {}), ...(app.keep !== "auto" ? { keep: app.keep } : {}),
     ...(Object.keys(app.security).length ? { security: app.security } : {}),
-    publishers: app.parachute ? [{ url: PARACHUTE_PUBLISHER }] : [],
+    publishers: app.parachute ? [{ url: PARACHUTE_PUBLISHER, ...(app.own ? { applets: app.own } : {}) }] : [],
   };
 }
 
