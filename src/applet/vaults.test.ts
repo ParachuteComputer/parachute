@@ -104,6 +104,13 @@ describe("the vaults word", () => {
     expect(recOf({ id: "a", path: "Books/A", content: "x", tags: ["book", "fav"], metadata: { s: 1 } }, new Set(["book"]))).toMatchObject({ types: ["book"], tags: ["fav"], body: "x", fields: { s: 1 } });
     expect(queryPath({ vault: "v", type: "book", where: [], limit: 10, offset: 0 }, "notes")).toContain("include_metadata=true");
   });
+  it("a list row carries the hub's one-line preview (a list has no body): a notes list's line under the title", () => {
+    expect(recOf({ id: "a", path: "Garden/Compost log", preview: "Turned the pile on Sunday. It steams.", displayTitle: "Turned the pile" })!.preview).toBe("Turned the pile on Sunday. It steams.");
+    // none said, none carried; a long one is cut; anything but words is left out
+    expect("preview" in recOf({ id: "a", path: "A" })!).toBe(false);
+    expect(recOf({ id: "a", path: "A", preview: "x".repeat(900) })!.preview).toHaveLength(300);
+    expect("preview" in recOf({ id: "a", path: "A", preview: { html: "<b>" } })!).toBe(false);
+  });
   it("links come both ways", () => {
     const r = recOf({ id: "a", path: "A", links: [{ sourceId: "a", targetId: "b", targetNote: { path: "B" }, relationship: "wikilink" }, { sourceId: "c", targetId: "a", sourceNote: { path: "C" }, relationship: "wikilink" }] });
     expect(r!.links).toEqual([{ dir: "out", id: "b", path: "B", relationship: "wikilink" }, { dir: "in", id: "c", path: "C", relationship: "wikilink" }]);

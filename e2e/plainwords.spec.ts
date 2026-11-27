@@ -233,12 +233,14 @@ const STOPS: Stop[] = [
       await p.waitForTimeout(600);
     }
     await see(p, "letters"); } },
-  { name: "vault", go: async (p) => { await vaultApplet(p).getByRole("button", { name: new RegExp(`^${VAULT}`) }).first().click(); await see(p, "Lately"); } },
-  // the app's own records: out of Lately, a tap away under Parachute's own, by plain names
+  { name: "vault", go: async (p) => { await vaultApplet(p).getByRole("button", { name: new RegExp(`^${VAULT}`) }).first().click(); await see(p, "Types and tables"); await expect(vaultApplet(p).getByRole("region", { name: "Notes" })).toBeVisible(); } },
+  // the vault's types and tables are one step from its notes
+  { name: "types and tables", go: async (p) => { await vaultApplet(p).getByRole("button", { name: "Types and tables" }).click(); await see(p, "New type"); } },
+  // the app's own records: out of the notes, a tap away under Parachute's own, by plain names
   { name: "parachute's own", go: async (p) => { await vaultApplet(p).getByRole("button", { name: "Parachute's own" }).click(); await see(p, "Approval"); await expect(vaultApplet(p).getByRole("region", { name: "Parachute's own" })).toContainText("Approval"); } },
-  { name: "vault, Lately again", go: async (p) => { await vaultApplet(p).getByRole("button", { name: "Parachute's own" }).click(); await see(p, "Lately"); await expect(vaultApplet(p).getByRole("region", { name: "Lately" })).not.toContainText("Approval"); } },
+  { name: "vault, notes again", go: async (p) => { await vaultApplet(p).getByRole("button", { name: "Parachute's own" }).click(); await vaultApplet(p).getByRole("button", { name: `← ${VAULT}` }).click(); await see(p, "Types and tables"); await expect(vaultApplet(p).getByRole("region", { name: "Notes" })).not.toContainText("Approval"); } },
   { name: "vault search", go: async (p) => { await vaultApplet(p).getByRole("searchbox").first().fill("roof"); await see(p, "Found"); } },
-  { name: "type", go: async (p) => { if (!world.types) return; await vaultApplet(p).getByRole("searchbox").first().fill(""); await vaultApplet(p).locator('[data-type="book"]').click(); await see(p, "The Overstory"); } },
+  { name: "type", go: async (p) => { if (!world.types) return; await vaultApplet(p).getByRole("searchbox").first().fill(""); await vaultApplet(p).getByRole("button", { name: "Types and tables" }).click(); await vaultApplet(p).locator('[data-type="book"]').click(); await see(p, "The Overstory"); } },
   { name: "record and its history", go: async (p) => { await p.goto(official("vault", `?vault=${VAULT}&record=${world.ids.untitled}`)); await see(p, "History"); } },
   { name: "changes", go: async (p) => { await p.goto(official("vault", `?vault=${VAULT}&show=changes`)); await see(p, /Changes/); await p.waitForTimeout(1500); } },
   { name: "sharing", go: async (p) => { await p.goto(official("vault", `?vault=${VAULT}&show=sharing`)); await see(p, "Sharing"); await p.waitForTimeout(2500); } },

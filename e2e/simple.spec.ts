@@ -45,24 +45,25 @@ test("Parachute Simplified: sign in → Notes → find, edit and write a note �
     const vault = page.frameLocator('iframe.applet-frame[title="Vault"]');
     const rec = vault.getByRole("article", { name: `Garden plan ${stamp}` });
     await rec.getByRole("button", { name: "Edit words" }).click();
-    const words = rec.getByLabel("The record's words");
+    const words = rec.getByLabel("The note's words");
     await expect(words).toHaveValue(/Kale in the north bed/);
     await words.fill(`# Garden plan ${stamp}\n\nKale in the north bed. Garlic by the gate.`);
-    // the sign-in asked the home at write (Parachute's own applets write there): the first Save saves
-    await rec.getByRole("button", { name: "Save" }).click();
+    // the sign-in asked the home at write (Parachute's own applets write there): the words are kept as they are written
+    await expect(rec.getByText("Saved", { exact: true })).toBeVisible({ timeout: 10_000 });
+    await rec.getByRole("button", { name: "Done" }).click();
     await expect(rec.getByText("Garlic by the gate.")).toBeVisible();
     expect(((await api(hub, "GET", `notes/${note.id}?include_content=true`)) as Row).content).toContain("Garlic by the gate.");
     await expect(page.getByRole("dialog")).toHaveCount(0);
 
-    // a note changed elsewhere (an AI) while it was being written: Save says so, the person's words stay, and Save
-    // again keeps them
+    // a note changed elsewhere (an AI) while it was being written: it says so, the person's words stay, and Keep mine
+    // keeps them
     await rec.getByRole("button", { name: "Edit words" }).click();
     await api(hub, "PATCH", `notes/${note.id}`, { content: `# Garden plan ${stamp}\n\nWritten by an AI meanwhile.`, force: true });
     await words.fill(`# Garden plan ${stamp}\n\nMine, from the phone.`);
-    await rec.getByRole("button", { name: "Save" }).click();
-    await expect(vault.getByText("It changed meanwhile. It's read again: try once more.")).toBeVisible();
+    await expect(vault.getByText("It changed somewhere else while you wrote. Your words are still here.")).toBeVisible();
     await expect(words).toHaveValue(/Mine, from the phone/);
-    await rec.getByRole("button", { name: "Save" }).click();
+    await rec.getByRole("button", { name: "Keep mine" }).click();
+    await rec.getByRole("button", { name: "Done" }).click();
     await expect(rec.getByText("Mine, from the phone.")).toBeVisible();
     expect(((await api(hub, "GET", `notes/${note.id}?include_content=true`)) as Row).content).toContain("Mine, from the phone.");
 

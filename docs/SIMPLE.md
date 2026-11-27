@@ -17,7 +17,7 @@ their AI writes into their home shows on Notes under **Your applets**, where its
 | **Notes** | the home (`/`) | Every vault's newest notes in one list, a search across all of them, the vaults as tabs, **New note** (its first line names it), and the applets in the home. A note opens where notes open: in Vault (Parachute's own applets claim no notes), or an applet of the person's that claims it. Each vault the sign-in didn't read is a line in Settings, not here. |
 | **Journal** | the bar | The Uni app's Journal: a line a day or many, written or said, kept by day in `Journal/` of the home vault, or of the vault you pick for it (*Journal keeps its notes in kitchen · Change*, [ACCESS.md](ACCESS.md) proposal 5). |
 | **Capture** | the bar | Write a line, or **Say it** (the app's own recorder): it lands in `Inbox/` of the home vault (or the vault you pick for it) as a note of its own, and a voice note gets its words from the hub's transcription. |
-| **Vault** | the bar | Parachute's own viewer ([VAULT.md](VAULT.md)): each vault's types and counts, a type's records as a table, a record's fields (changed where they stand), words (**Edit words**), links and history, and Changes: what your AI changed, with **Put it back**. |
+| **Vault** | the bar | Parachute's own viewer ([VAULT.md](VAULT.md)): a vault's notes first (a list, a tap to read, a tap in the words to write, **New note**), and one step away its types and counts, a type's records as a table, a record's fields (changed where they stand), links and history, and Changes: what your AI changed, with **Put it back**. |
 | **Connect** | the bar | The hub's one address for an AI (`https://…/mcp`: every vault you give it there) with **Copy**, how to add it to Claude and ChatGPT, what to ask it for next (an applet, with the guide's address, **Copy**), and each vault's own address under **Just one vault**. A hub without one (older, or Parachute Cloud today) shows each vault's own address. |
 
 Each is one of Parachute's own applets (`applets/notes`, `journal`, `capture`, `vault`, `connect`), at
@@ -49,9 +49,10 @@ written then. A settings note already there is never changed this way. Settings 
 - **The home** `/` goes to Notes when the open bundle's `look` is `"notes"` and it keeps Parachute's source
   (`src/shell/App.tsx`). `/?with=vault` is the frame's own Notes (`src/frame/views/NotesHome.tsx`), the way back if
   Parachute's Notes won't run.
-- **Editing** is Vault's **Edit words**, saved with `if_updated_at`: if an AI changed the note meanwhile, it says so,
-  reads it again and keeps the person's words; Save again keeps them. The shell's editor (`src/views/NoteEdit.tsx`,
-  **Keep mine / Use theirs**) stays for the plain note view (`?with=vault`).
+- **Editing** is in Vault: a tap in a note's words, kept as you write (each save names the version it changes, so
+  words an AI changed meanwhile are never written over unasked: yours stay, with **Keep mine** and **Use theirs**).
+  The shell's editor (`src/views/NoteEdit.tsx`, **Keep mine / Use theirs**) stays for the plain note view
+  (`?with=vault`).
 
 ## As a bundle record
 

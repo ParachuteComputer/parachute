@@ -11,7 +11,7 @@ import { vaultLaunchOf } from "../services/notifyLink";
 /** What the address hands on to Vault: a vault and a record in it (its launch, read as the applet's screen reads it). */
 const handOn = (search: string) => {
   const l = vaultLaunchOf(new URLSearchParams(search));
-  return l ? `?${new URLSearchParams({ vault: l.vault, ...(l.record ? { record: l.record } : {}) })}` : "";
+  return l ? `?${new URLSearchParams({ vault: l.vault, ...(l.record ? { record: l.record } : {}), ...(l.show ? { show: l.show } : {}) })}` : "";
 };
 
 export default function OfficialRoute({ which }: { which: OfficialName }) {
