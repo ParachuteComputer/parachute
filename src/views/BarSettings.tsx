@@ -6,7 +6,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { appletsNow, subscribeApplets } from "../applet/useApplets";
 import { OFFICIAL_NAMES, officialFace, officialId } from "../applet/parachuteSource";
-import { offered } from "../shell/bundles";
+import { offered, offersOwn } from "../shell/bundles";
 import { barOwnIds, copyBundle, move, pinApplet, useSettings } from "../shell/homeSettings";
 import { homeVault } from "../shell/frameSource";
 import { useVaults } from "../vault/hooks";
@@ -28,7 +28,7 @@ export default function BarSettings() {
   };
   const pinned = new Set(bar.pins.map((p) => `${p.vault} ${p.noteId}`));
   // what the bundle offers and isn't on the bar: Parachute's own (when it offers them), then each vault's, as the list has them
-  const own = bundle.parachute ? OFFICIAL_NAMES.map((n) => ({ vault: home.key, noteId: officialId(n), name: officialFace(n).name, glyph: officialFace(n).glyph, where: "" })) : [];
+  const own = OFFICIAL_NAMES.filter((n) => offersOwn(bundle, n)).map((n) => ({ vault: home.key, noteId: officialId(n), name: officialFace(n).name, glyph: officialFace(n).glyph, where: "" }));
   const theirs = vaults.flatMap((v) => { const e = appletsNow(v.key); return e?.state === "ok" ? e.found.entries
     .filter((a) => offered(bundle, { hub: originOf(v.issuer), vault: v.vault }, a, originOf(home.issuer)))
     .map((a) => ({ vault: v.key, noteId: a.noteId, name: a.manifest.name, glyph: a.manifest.glyph, where: v.vault })) : []; });

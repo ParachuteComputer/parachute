@@ -2,7 +2,9 @@
 // vault (the person's agent, a token, the hub) can change it without a signature. Such a change may move the home, the
 // pins and the list, and nothing else: it never lowers how careful approving is, grants nothing and carries no code.
 import { describe, expect, it } from "vitest";
-import { bundleOf, followed, openBundle, bundlesFrom, recordOf } from "./bundles";
+import { readFileSync } from "node:fs";
+import { bundleOf, followed, offersOwn, openBundle, bundlesFrom, recordOf } from "./bundles";
+import { OFFICIAL_NAMES, PARACHUTE_PUBLISHER } from "../applet/parachuteSource";
 import { DEFAULTS, fullOf, raise } from "./levelRules";
 
 /** What a hostile writer might put in a record: a home and pins, plus every field that would loosen or grant. */
@@ -17,7 +19,7 @@ const HOSTILE = {
   publishers: [{ url: "https://evil.example/applets/", keys: ["3ea0evil"] }],
 };
 /** Everything a record can carry into the running app: an App's own fields. */
-const APP_FIELDS = ["id", "name", "glyph", "note", "look", "sources", "hide", "bar", "base", "start", "opens", "keep", "security", "parachute", "live", "noteId", "hubOf"];
+const APP_FIELDS = ["id", "name", "glyph", "note", "look", "sources", "hide", "bar", "base", "start", "opens", "keep", "security", "parachute", "own", "live", "noteId", "hubOf"];
 
 
 describe("an unsigned bundle record", () => {
@@ -30,6 +32,29 @@ describe("an unsigned bundle record", () => {
     expect(bundleOf({ contract: 1, id: "uni", name: "Uni" }, "Parachute/Bundles/uni", "01UNI")!.parachute).toBe(false);
     expect(bundleOf({ contract: 1, id: "simple", publishers: [] }, "Parachute/Bundles/simple", "01S")!.parachute).toBe(false);
     expect(bundleOf({ contract: 1, id: "simple" }, "Parachute/Bundles/simple", "01S")!.parachute).toBe(true);
+  });
+  it("can name which of Parachute's own it offers (`applets`): only those, and naming never widens", () => {
+    const uni = (applets: unknown) => bundleOf({ contract: 1, id: "uni", name: "Uni", publishers: [{ url: PARACHUTE_PUBLISHER, applets }] }, "Parachute/Bundles/uni", "01UNI")!;
+    // Aaron's `uni` bundle has its own Home and Journal: it takes Vault alone
+    const vault = uni(["vault"]);
+    expect(OFFICIAL_NAMES.filter((n) => offersOwn(vault, n))).toEqual(["vault"]);
+    // what the app writes back (a pin made on the device) keeps the names
+    expect(recordOf(vault).publishers).toEqual([{ url: PARACHUTE_PUBLISHER, applets: ["vault"] }]);
+    expect(OFFICIAL_NAMES.filter((n) => offersOwn(bundleOf(recordOf(vault), "Parachute/Bundles/uni", "01UNI")!, n))).toEqual(["vault"]);
+    // a name this build doesn't know is left out; a list that isn't names, or names nothing known, offers none
+    expect(OFFICIAL_NAMES.filter((n) => offersOwn(uni(["vault", "prism", "connect"]), n))).toEqual(["vault", "connect"]);
+    for (const bad of [[], "vault", "*", ["*"], [["vault"]], [{ name: "vault" }], null, 6, ["prism"]]) expect(OFFICIAL_NAMES.filter((n) => offersOwn(uni(bad), n))).toEqual([]);
+    // none named: all of them, as before
+    const all = bundleOf({ contract: 1, id: "uni", name: "Uni", publishers: [{ url: PARACHUTE_PUBLISHER }] }, "Parachute/Bundles/uni", "01UNI")!;
+    expect(OFFICIAL_NAMES.filter((n) => offersOwn(all, n))).toEqual([...OFFICIAL_NAMES]);
+    expect(recordOf(all).publishers).toEqual([{ url: PARACHUTE_PUBLISHER }]);
+    // a default's own record that names some narrows the default
+    expect(OFFICIAL_NAMES.filter((n) => offersOwn(bundleOf({ contract: 1, id: "simple", publishers: [{ url: PARACHUTE_PUBLISHER, applets: ["notes", "vault"] }] }, "Parachute/Bundles/simple", "01S")!, n))).toEqual(["notes", "vault"]);
+  });
+  it("scripts/install-applets.ts names the same publisher and applets as the app (it can't import the app's build)", () => {
+    const script = readFileSync("scripts/install-applets.ts", "utf8");
+    expect(script).toContain(`const PARACHUTE_PUBLISHER = ${JSON.stringify(PARACHUTE_PUBLISHER)};`);
+    expect(script).toContain(`const OFFICIAL_NAMES = ${JSON.stringify([...OFFICIAL_NAMES]).replace(/,/g, ", ")};`);
   });
   it("changes only the home, the pins and the list: every other word it says is read as nothing", () => {
     const app = bundleOf(HOSTILE, "Parachute/Bundles/uni", "01UNI")!;

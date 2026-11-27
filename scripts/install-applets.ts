@@ -12,7 +12,9 @@
 // else Everything. --bundle uni [--bundle-name Uni] makes Parachute/Bundles/uni if it isn't there: every applet in the
 // vault (and each --source: "*" for every vault on the hub, a vault, or vault/applet path), and makes it the bundle a
 // device opens. A bundle the app ships (src/shell/default-bundles.json) is written with only what changes (and its
-// name); the rest stays the app's. As the app does, a new record takes the names the vault already uses (the older
+// name); the rest stays the app's. --parachute vault (or vault,connect, or all) has the bundle offer Parachute's own
+// applets of those names (docs/design/PARACHUTE-SOURCE.md): they come with the app, so nothing is written for them but
+// the bundle's `publishers` line; --parachute none takes it out. On --bar and --start, `parachute:vault` names one. As the app does, a new record takes the names the vault already uses (the older
 // ones, which builds from before 11-20 read, until one is under the newer). (--app and --app-name are their older names, read until 2026-12-20.)
 // An area's applet (applets/area.json) is one per area: --applet area --set area=Garden --set area_id=garden
 // --set area_room=<the room's id> (with relay and uni), again with other values for the next area.
@@ -24,11 +26,15 @@ import { readFileSync } from "node:fs";
 import { appletRecord, withImports, type AppletRecord } from "../applets/record.ts";
 const defaults = JSON.parse(readFileSync(new URL("../src/shell/default-bundles.json", import.meta.url), "utf8")) as { id: string; name?: string; bar?: unknown[] }[];
 const shipped = defaults.map((b) => b.id);
+// Parachute's own applets and where they are published: as src/applet/parachuteSource.ts has them (it imports the
+// app's build, so it can't be read from here; src/shell/bundleTrust.test.ts holds the two in step)
+const PARACHUTE_PUBLISHER = "https://parachute.computer/applets/";
+const OFFICIAL_NAMES = ["notes", "journal", "capture", "vault", "connect", "home"];
 
-type Args = { hub: string; vault: string; token: string; applets: string[]; vars: Record<string, string>; bar: string[] | null; start: string | null; services: { name: string; kind: string; url: string }[]; apply: boolean; bundle: string | null; bundleName: string | null; sources: string[] };
+type Args = { hub: string; vault: string; token: string; applets: string[]; vars: Record<string, string>; bar: string[] | null; start: string | null; services: { name: string; kind: string; url: string }[]; apply: boolean; bundle: string | null; bundleName: string | null; sources: string[]; parachute: string[] | "all" | null };
 
 function args(argv: string[]): Args {
-  const a: Args = { hub: "", vault: "", token: "", applets: [], vars: {}, bar: null, start: null, services: [], apply: false, bundle: null, bundleName: null, sources: [] };
+  const a: Args = { hub: "", vault: "", token: "", applets: [], vars: {}, bar: null, start: null, services: [], apply: false, bundle: null, bundleName: null, sources: [], parachute: null };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i], v = argv[i + 1];
     const take = () => { i++; if (v === undefined) throw new Error(`${k} needs a value`); return v; };
@@ -44,6 +50,16 @@ function args(argv: string[]): Args {
     else if (k === "--bundle" || k === "--app") { a.bundle = take(); if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(a.bundle)) throw new Error(`${k} is an id: lower case, digits and dashes`); }
     else if (k === "--bundle-name" || k === "--app-name") a.bundleName = take();
     else if (k === "--source") a.sources.push(take());
+    else if (k === "--parachute") {
+      const v = take();
+      if (v === "all") a.parachute = "all";
+      else {
+        const names = v === "none" ? [] : v.split(",").filter(Boolean);
+        const unknown = names.filter((n) => !OFFICIAL_NAMES.includes(n));
+        if (unknown.length || (v !== "none" && !names.length)) throw new Error(`--parachute is all, none, or names from ${OFFICIAL_NAMES.join(", ")}${unknown.length ? ` (not ${unknown.join(", ")})` : ""}`);
+        a.parachute = [...new Set([...(Array.isArray(a.parachute) ? a.parachute : []), ...names])];
+      }
+    }
     else throw new Error(`unknown ${k}`);
   }
   if (!a.hub || !a.vault || !a.token) throw new Error("--hub, --vault and --token-file are needed");
@@ -106,7 +122,8 @@ async function main() {
     const dropNeeds = fieldsWere.needs !== undefined && rec.fields.needs === undefined ? { needs: null } : {};
     if (a.apply) await api.write("update", { id: was.id, body: rec.body, fields: { ...fieldsWere, ...dropNeeds, ...rec.fields }, ...(was.updatedAt ? { if_updated_at: was.updatedAt } : {}) });
   }
-  const place = (n: string) => { const r = records[n] ?? (() => { try { return appletRecord(n, new Proxy({}, { has: () => true, get: () => "" })); } catch { return null; } })(); if (!r) throw new Error(`no applet ${n}`); return { vault: a.vault, applet: r.path }; };
+  const own = (n: string) => { const o = n.startsWith("parachute:") ? n.slice(10) : null; if (o !== null && !OFFICIAL_NAMES.includes(o)) throw new Error(`no applet ${n}`); return o; };
+  const place = (n: string) => { if (own(n)) return { vault: a.vault, applet: n }; const r = records[n] ?? (() => { try { return appletRecord(n, new Proxy({}, { has: () => true, get: () => "" })); } catch { return null; } })(); if (!r) throw new Error(`no applet ${n}`); return { vault: a.vault, applet: r.path }; };
   const rows = await api.findTag("parachute-settings");
   if (rows.length > 1) throw new Error(`the vault has ${rows.length} settings notes; keep one`);
   const was = rows[0] ?? null;
@@ -114,7 +131,7 @@ async function main() {
 
   // the bundle record: the bar and the home live there, never in the settings note
   const id = a.bundle ?? (typeof p.bundle === "string" ? p.bundle : typeof p.app === "string" ? p.app : "everything");
-  if (a.bundle || a.bar || a.start) {
+  if (a.bundle || a.bar || a.start || a.parachute) {
     const fresh = await api.find(`Parachute/Bundles/${id}`), old = fresh ? null : await api.find(`Parachute/Apps/${id}`);
     // a new record takes the names the vault already uses: the older ones (which builds from before 11-20 read) until one
     // is under the newer
@@ -127,10 +144,13 @@ async function main() {
     // (and its name, which a build from before 11-20 needs to read a record)
     const named = (x: string) => a.bundleName ?? x[0].toUpperCase() + x.slice(1);
     const made = had ? {} : !shipped.includes(id) ? { name: named(id), look: "launcher", sources } : { name: a.bundleName ?? defaults.find((d) => d.id === id)?.name ?? named(id) };
-    const bundle = { ...body, ...made, ...(a.bundleName ? { name: a.bundleName } : {}), ...(a.sources.length ? { sources } : {}),
+    // Parachute's own: every other publisher the record names stays; in the order the app lists them, so a second run changes nothing
+    const publishers = a.parachute === null ? null : [...(Array.isArray(body.publishers) ? body.publishers as { url?: unknown }[] : []).filter((x) => x?.url !== PARACHUTE_PUBLISHER),
+      ...(a.parachute === "all" ? [{ url: PARACHUTE_PUBLISHER }] : a.parachute.length ? [{ url: PARACHUTE_PUBLISHER, applets: OFFICIAL_NAMES.filter((n) => a.parachute!.includes(n)) }] : [])];
+    const bundle = { ...body, ...made, ...(a.bundleName ? { name: a.bundleName } : {}), ...(a.sources.length ? { sources } : {}), ...(publishers ? { publishers } : {}),
       // a bundle the app ships keeps its own places (Notes, Journal, Connect…) before the pins, as the app shows them,
       // every run (so running it again changes nothing)
-      ...(a.bar ? { bar: [...(defaults.find((d) => d.id === id)?.bar ?? []), ...a.bar.map(place)] } : {}), ...(a.start ? { start: place(a.start) } : {}) };
+      ...(a.bar ? { bar: [...(defaults.find((d) => d.id === id)?.bar ?? []), ...a.bar.map((n) => (own(n) ? { shipped: own(n) } : place(n)))] } : {}), ...(a.start ? { start: place(a.start) } : {}) };
     if (had && same(body, bundle)) console.log(`bundle ${id}: unchanged`);
     else {
       say(`${had ? "update" : "add"} the bundle ${id} at ${path}${old ? " (under its older names until it is moved)" : ""}: ${JSON.stringify(bundle)}`);
