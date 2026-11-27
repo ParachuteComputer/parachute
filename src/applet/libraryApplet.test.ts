@@ -8,7 +8,10 @@ import { join } from "node:path";
 import { transform } from "sucrase";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { render } from "@testing-library/react";
 import { checkAppletRecord, type AppletRecordInput } from "./check";
+import { Note } from "../kit/parts-note";
 
 const src = readFileSync(`${process.cwd()}/applets/library.tsx`, "utf8");
 const start = src.indexOf("// ── pure helpers (tested in src/applet/libraryApplet.test.ts) ──");
@@ -37,7 +40,7 @@ const api = new Function(
   `${code}; return {
     extractCoverPath, formatReadingAt, parseReadingAt, formatQuoteBody, parseQuoteBody,
     makeQuotePath, markdownPreview, createQuoteLocator, locateQuote, buildHighlightRanges,
-    organizeLibrary, readFolder, chapterDisplayTitle, normalizeRef
+    organizeLibrary, readFolder, chapterDisplayTitle, normalizeRef, readingBody, chapterFor
   };`,
 )() as {
   extractCoverPath: (body?: string, fields?: Record<string, unknown>) => string;
@@ -72,6 +75,8 @@ const api = new Function(
   readFolder: (query: (q: Record<string, unknown>) => Promise<LibraryRecord[]>, base: Record<string, unknown>) => Promise<{ rows: LibraryRecord[]; capped: boolean }>;
   chapterDisplayTitle: (rec: Pick<LibraryRecord, "path" | "fields">) => string;
   normalizeRef: (raw: unknown) => string;
+  readingBody: (body: string, leads: (target: string) => boolean) => string;
+  chapterFor: <T>(byKey: Map<string, T>, ref: string) => T | undefined;
 };
 
 describe("Quote locator round-trip", () => {
@@ -301,6 +306,56 @@ describe("Quote body, reading position (`at`), cover extraction, and library org
     expect(g.map((x) => [x.part?.id ?? null, x.chapters.map((c) => c.id)])).toEqual([
       [null, ["front", "intro"]], ["partone", ["seeds", "water"]], ["parttwo", ["picking"]], [null, ["epilogue", "thanks"]],
     ]);
+  });
+});
+
+// T-531: what a real book's import put in its text, drawn cleanly
+describe("Reading an imported book: links, headings, a chapter found again after a better import", () => {
+  const BOOK = "Books/The Made-up Sutras";
+  const contents = [
+    "## *Contents*",
+    `[[${BOOK}/05 Book One – Ārambha Pāda (Portion on Beginning)|Book One\\\n*Ārambha Pāda* (Portion on Beginning)]]`,
+    `[[${BOOK}/07 Glossary of Made-up Terms|*Glossary of Made-up Terms*]]`,
+    `[[${BOOK}/99 Index|Index]]`,
+    "Index",
+  ].join("\n\n");
+  const leads = (t: string) => !t.endsWith("99 Index");
+
+  it("makes each link's label one line of plain words, a link that leads nowhere plain text, and headings plain", () => {
+    const out = api.readingBody(contents, leads);
+    expect(out).toContain(`[[${BOOK}/05 Book One – Ārambha Pāda (Portion on Beginning)|Book One – Ārambha Pāda (Portion on Beginning)]]`);
+    expect(out).toContain(`[[${BOOK}/07 Glossary of Made-up Terms|Glossary of Made-up Terms]]`);
+    expect(out).not.toContain("99 Index");
+    expect(out.split("\n\n")).toEqual(expect.arrayContaining(["## Contents", "Index"]));
+    // a link to a place in a chapter is asked about its chapter, as the Note's tap gives it
+    expect(api.readingBody("[[Books/W/02 Water#dawn|At *dawn*]]", (t) => t === "Books/W/02 Water")).toBe("[[Books/W/02 Water#dawn|At dawn]]");
+    // as written in code it stays
+    expect(api.readingBody("~~~\n[[x|*y*]]\n~~~", () => false)).toBe("~~~\n[[x|*y*]]\n~~~");
+    expect(api.readingBody("```\n[[x|*y*]]\n```", () => false)).toBe("```\n[[x|*y*]]\n```");
+  });
+
+  it("draws a label with a line break and emphasis as one clean link, and a link to a missing chapter as plain text", () => {
+    const { container } = render(createElement(Note, { body: api.readingBody(contents, leads), path: `${BOOK}/03 Contents`, onLink: () => {} }));
+    const links = [...container.querySelectorAll("a")].map((a) => a.textContent);
+    expect(links).toEqual(["Book One – Ārambha Pāda (Portion on Beginning)", "Glossary of Made-up Terms"]);
+    expect(container.textContent).not.toMatch(/\[\[|\]\]|\*/);
+    expect(container.querySelectorAll("h1, h2, h3, h4, h5, h6")[0]?.textContent).toBe("Contents");
+    expect(container.querySelector("h2 em, h2 strong")).toBeNull();
+  });
+
+  it("finds a chapter again by its title when a better import numbered it anew, never a title two chapters share", () => {
+    const ch = (id: string, path: string, order: number): LibraryRecord => ({ id, path: `${BOOK}/${path}`, updatedAt: "2026-11-27T09:00:00Z", tags: ["chapter"], fields: { book: BOOK, order } });
+    const lib = api.organizeLibrary([
+      { id: "b", path: BOOK, updatedAt: "2026-11-27T10:00:00Z", tags: ["book"], fields: {}, body: "" },
+      ch("contents", "02 Contents", 2), ch("one", "03 Book One – Ārambha Pāda (Portion on Beginning)", 3),
+      ch("v1", "04 Verses 1–5", 4), ch("two", "10 Book Two – Sādhana Pāda", 10), ch("v1b", "11 Verses 1–5", 11),
+    ]) as unknown as { chapterByKey: Map<string, { chapter: LibraryRecord }> };
+    const id = (ref: string) => api.chapterFor(lib.chapterByKey, ref)?.chapter.id;
+    expect(id(`${BOOK}/02 Contents`)).toBe("contents");
+    expect(id(`${BOOK}/04 Contents`)).toBe("contents");
+    expect(id(`${BOOK}/05 Book One – Ārambha Pāda (Portion on Beginning).md`)).toBe("one");
+    expect(id(`${BOOK}/09 Verses 1–5`)).toBeUndefined();
+    expect(id("Books/Another Book/02 Contents")).toBeUndefined();
   });
 });
 

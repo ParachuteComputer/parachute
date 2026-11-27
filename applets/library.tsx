@@ -209,6 +209,43 @@ function chapterDisplayTitle(rec: Pick<LibraryRecord, "path" | "fields">): strin
   return base.replace(/^\d{1,3}[\s._-]+/, "").trim() || base;
 }
 
+/** A chapter found again by its title in its book (`title:` + the book's path + `/` + the title, lowercased): a better
+ *  import may number a chapter anew, and a reading place, a quote or a link holding its old path still finds it. */
+function titleKey(ref: string): string {
+  const clean = stripMd(ref);
+  const cut = clean.lastIndexOf("/");
+  return cut < 0 ? "" : `title:${clean.slice(0, cut)}/${chapterDisplayTitle({ path: clean })}`.toLowerCase();
+}
+
+/** The chapter a path (or id) names: as written, in any case, or by its title in its book when renumbered. */
+function chapterFor<T>(byKey: Map<string, T>, ref: string): T | undefined {
+  if (!ref) return undefined;
+  const clean = stripMd(ref);
+  return byKey.get(ref) ?? byKey.get(clean) ?? byKey.get(clean.toLowerCase()) ?? (titleKey(clean) ? byKey.get(titleKey(clean)) : undefined);
+}
+
+/** A label as plain words on one line: a book's Contents put a line break (`\` + newline) and italics inside them. */
+function plainLabel(s: string): string {
+  return s.replace(/\s*\\\n\s*/g, " – ").replace(/(?<!\\)\*+/g, "").replace(/\s+/g, " ").trim();
+}
+
+/** A chapter's text as the reader draws it: each `[[link|label]]` one line of plain words, a link that leads nowhere in
+ *  the library its words alone (never a link that can only fail), and a heading's emphasis gone (`## *Contents*`).
+ *  Fenced code stays as written. Block count is unchanged, so a reading place and quotes keep their paragraphs. */
+function readingBody(body: string, leads: (target: string) => boolean): string {
+  const asked = new Map<string, boolean>();
+  const goes = (t: string) => { let v = asked.get(t); if (v === undefined) { v = leads(t); asked.set(t, v); } return v; };
+  return body.split(/(^(?:```|~~~)[^\n]*\n[\s\S]*?^(?:```|~~~)[^\n]*$)/m).map((part, i) => i % 2 ? part : part
+    .replace(/\[\[([^\]|\n]+)(?:\|((?:[^\]]|\](?!\]))*))?\]\]/g, (_m, target: string, label?: string) => {
+      const t = target.trim();
+      const words = plainLabel(label ?? "");
+      // asked without its #anchor, as the Note's tap gives it
+      if (!goes(t.split("#")[0].trim())) return words || chapterDisplayTitle({ path: t.split("#")[0] });
+      return words ? `[[${t}|${words}]]` : `[[${t}]]`;
+    })
+    .replace(/^(#{1,6})[ \t]+(.+)$/gm, (_m, h: string, text: string) => `${h} ${plainLabel(text)}`)).join("");
+}
+
 function cleanPathSegment(raw: string, maxLen = 64): string {
   return raw
     .replace(/[\\/:*?"<>|#[\]\u0000-\u001f\u007f]/g, " ")
@@ -671,6 +708,7 @@ function organizeLibrary(records: readonly LibraryRecord[]): OrganizedLibrary {
   };
 
   const chapterByKey = new Map<string, { chapter: LibraryRecord; book: BookBundle }>();
+  const titleSeen = new Set<string>(), titleTwice = new Set<string>();
   for (const ch of chapterRecs) {
     const bundle = findBookForPath(ch.path, normalizeRef(ch.fields?.book));
     if (!bundle) continue;
@@ -678,6 +716,13 @@ function organizeLibrary(records: readonly LibraryRecord[]): OrganizedLibrary {
     chapterByKey.set(ch.id, { chapter: ch, book: bundle });
     chapterByKey.set(stripMd(ch.path), { chapter: ch, book: bundle });
     chapterByKey.set(stripMd(ch.path).toLowerCase(), { chapter: ch, book: bundle });
+    const tk = titleKey(ch.path);
+    if (tk) (titleSeen.has(tk) ? titleTwice : titleSeen).add(tk);
+  }
+  // by title, for a path a better import numbered anew; a title two chapters share (two "Verses 1–5") finds neither
+  for (const ch of chapterRecs) {
+    const tk = titleKey(ch.path), hit = chapterByKey.get(ch.id);
+    if (tk && hit && !titleTwice.has(tk)) chapterByKey.set(tk, hit);
   }
 
   // Group chapters by parts in each book while keeping reading order
@@ -712,7 +757,7 @@ function organizeLibrary(records: readonly LibraryRecord[]): OrganizedLibrary {
       }
       const pref = normalizeRef(ch.fields?.part);
       if (pref) {
-        const partHit = chapterByKey.get(pref) ?? chapterByKey.get(pref.toLowerCase());
+        const partHit = chapterFor(chapterByKey, pref);
         const key = partHit ? stripMd(partHit.chapter.path).toLowerCase() : pref.toLowerCase();
         const title = partHit ? chapterDisplayTitle(partHit.chapter) : chapterDisplayTitle({ path: pref });
         const g = ensureGroup(key, partHit?.chapter ?? null, title);
@@ -732,7 +777,7 @@ function organizeLibrary(records: readonly LibraryRecord[]): OrganizedLibrary {
   const summaryByKey = new Map<string, { summary: LibraryRecord; book: BookBundle; chapter: LibraryRecord | null }>();
   for (const sum of summaryRecs) {
     const ofRef = normalizeRef(sum.fields?.of);
-    const chHit = ofRef ? (chapterByKey.get(ofRef) ?? chapterByKey.get(ofRef.toLowerCase())) : undefined;
+    const chHit = ofRef ? (chapterFor(chapterByKey, ofRef)) : undefined;
     const bookHit = chHit?.book ?? findBookForPath(sum.path, ofRef);
     if (!bookHit) continue;
     if (chHit) {
@@ -756,7 +801,7 @@ function organizeLibrary(records: readonly LibraryRecord[]): OrganizedLibrary {
   for (const q of parsedQuotes) {
     quoteByKey.set(q.record.id, q);
     quoteByKey.set(stripMd(q.record.path), q);
-    const chHit = q.chapterRef ? (chapterByKey.get(q.chapterRef) ?? chapterByKey.get(q.chapterRef.toLowerCase())) : undefined;
+    const chHit = q.chapterRef ? (chapterFor(chapterByKey, q.chapterRef)) : undefined;
     const bookHit = chHit?.book ?? (q.bookRef ? (bookByKey.get(q.bookRef) ?? bookByKey.get(q.bookRef.toLowerCase())) : undefined);
     if (bookHit) bookHit.quotes.push(q);
   }
@@ -1020,6 +1065,7 @@ const ChapterProse = memo(function ChapterProse({
   focusQuoteId,
   targetBlock,
   onLink,
+  linkLeads,
   onOpenQuote,
   onSelection,
   onActiveBlock,
@@ -1029,6 +1075,8 @@ const ChapterProse = memo(function ChapterProse({
   focusQuoteId: string | null;
   targetBlock: number | null;
   onLink: (target: string) => void;
+  /** Whether a wikilink leads somewhere in the library; one that doesn't is drawn as its words */
+  linkLeads: (target: string) => boolean;
   onOpenQuote: (quoteId: string) => void;
   onSelection: (loc: QuoteLocator | null) => void;
   onActiveBlock: (block: number) => void;
@@ -1040,12 +1088,14 @@ const ChapterProse = memo(function ChapterProse({
   onBlockRef.current = onActiveBlock;
   const scrolledKey = useRef("");
   // a new body is a new Note (never redrawn under the marks); the marks effect runs on the same change
+  // the text as drawn: links one line of plain words, a link to nowhere its words (the same blocks as the body)
+  const shown = useMemo(() => readingBody(chapter.body ?? "", linkLeads), [chapter.body, linkLeads]);
   const bodyKey = useMemo(() => {
-    const b = chapter.body ?? "";
+    const b = shown;
     let h = 5381;
     for (let i = 0; i < b.length; i++) h = ((h * 33) ^ b.charCodeAt(i)) >>> 0;
     return `${chapter.id}|${b.length}|${h}`;
-  }, [chapter.id, chapter.body]);
+  }, [chapter.id, shown]);
 
   const quotesSig = useMemo(
     () => quotes.map((q) => `${q.record.id}:${q.text}:${q.block ?? ""}:${q.before}:${q.after}`).join("\n"),
@@ -1081,7 +1131,7 @@ const ChapterProse = memo(function ChapterProse({
       cancelAnimationFrame(raf);
       if (containerRef.current) clearMarks(containerRef.current);
     };
-  }, [chapter.id, chapter.body, quotesSig, focusQuoteId, targetBlock]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chapter.id, shown, quotesSig, focusQuoteId, targetBlock]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track user text selection cleanly via rAF so selection feels instant
   useEffect(() => {
@@ -1164,7 +1214,7 @@ const ChapterProse = memo(function ChapterProse({
       <Note
         key={bodyKey}
         id={chapter.id}
-        body={chapter.body ?? ""}
+        body={shown}
         path={chapter.path}
         tags={chapter.tags}
         fields={chapter.fields}
@@ -1363,9 +1413,29 @@ const STYLES = `
 .lib-reader .pa-note p {
   margin: 0 0 1.05em;
 }
+/* a book's headings, at the text's own size so the space around them is the same whatever their level: a run of
+   them (Book One / its name / its subtitle) sits close together, the text after them a short step below */
+.lib-reader .pa-note :is(h2, h3, h4, h5, h6) {
+  margin: 1.6em 0 0.45em;
+  font: 600 var(--fs-lead)/1.35 var(--serif);
+  letter-spacing: normal;
+  text-transform: none;
+  font-variant-caps: normal;
+  color: var(--text);
+}
+.lib-reader .pa-note :is(h4, h5, h6) {
+  font-style: italic;
+}
+.lib-reader .pa-note :is(h2, h3, h4, h5, h6) + :is(h2, h3, h4, h5, h6) {
+  margin-top: 0;
+}
+.lib-reader .pa-note > :first-child,
+.lib-reader .pa-note :is(h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
 .lib-reader .pa-note img {
   display: block;
-  margin: var(--gap) auto;
+  margin: 0 auto;
   border-radius: var(--radius);
 }
 .lib-mark {
@@ -1758,7 +1828,7 @@ export default function Library() {
     }
     const qHit = l.quoteByKey.get(note.id) ?? l.quoteByKey.get(stripMd(note.path));
     if (qHit) {
-      const qCh = l.chapterByKey.get(qHit.chapterRef) ?? l.chapterByKey.get(qHit.chapterRef.toLowerCase());
+      const qCh = chapterFor(l.chapterByKey, qHit.chapterRef);
       if (qCh) {
         void openChapter(qCh.book.book.id, qCh.chapter.id, { focusQuoteId: qHit.record.id, targetBlock: qHit.block ?? 1 });
         return;
@@ -1889,42 +1959,37 @@ export default function Library() {
 
   const currentBook = route.view !== "home" ? lib.bookByKey.get(route.bookId) ?? null : null;
 
-  // Handle internal wikilinks inside a chapter (e.g. `[[02 Water|watering]]` or `[[Books/Walden/02 Where I Lived]]`)
-  const followLink = useCallback((target: string) => {
+  // Where an internal wikilink in a chapter leads (e.g. `[[02 Water|watering]]` or `[[Books/Walden/02 Where I Lived]]`):
+  // a chapter, a book or a summary in the library, or nowhere (drawn as plain words: readingBody)
+  type LinkEnd = { chapter: LibraryRecord; book: BookBundle } | { book: BookBundle; chapter?: undefined; summary?: undefined }
+    | { summary: LibraryRecord; book?: undefined; chapter?: undefined };
+  const resolveLink = useCallback((target: string): LinkEnd | null => {
     const clean = normalizeRef(target);
-    if (!clean) return;
+    if (!clean) return null;
     const l = libRef.current;
-    const direct = l.chapterByKey.get(clean) ?? l.chapterByKey.get(clean.toLowerCase());
-    if (direct) {
-      void openChapter(direct.book.book.id, direct.chapter.id);
-      return;
-    }
-    // Relative wikilink within the same book (e.g. `[[02 Water]]`)
-    if (activeReadRef.current) {
-      const b = l.bookByKey.get(activeReadRef.current.bookId);
-      if (b) {
-        const rel = `${stripMd(b.book.path)}/${clean}`;
-        const hit = l.chapterByKey.get(rel) ?? l.chapterByKey.get(rel.toLowerCase())
-          ?? b.chapters.find((c) => basenameOf(c.path).toLowerCase() === clean.toLowerCase() || chapterDisplayTitle(c).toLowerCase() === clean.toLowerCase());
-        if (hit) {
-          const ch = "chapter" in hit ? hit.chapter : hit;
-          void openChapter(b.book.id, ch.id);
-          return;
-        }
-      }
+    const direct = chapterFor(l.chapterByKey, clean);
+    if (direct) return direct;
+    // relative to the book being read (e.g. `[[02 Water]]`)
+    const b = activeReadRef.current ? l.bookByKey.get(activeReadRef.current.bookId) : undefined;
+    if (b) {
+      const hit = chapterFor(l.chapterByKey, `${stripMd(b.book.path)}/${clean}`)?.chapter
+        ?? b.chapters.find((c) => basenameOf(c.path).toLowerCase() === clean.toLowerCase() || chapterDisplayTitle(c).toLowerCase() === clean.toLowerCase());
+      if (hit) return { chapter: hit, book: b };
     }
     const bHit = l.bookByKey.get(clean) ?? l.bookByKey.get(clean.toLowerCase());
-    if (bHit) {
-      leaveChapter({ view: "book", bookId: bHit.book.id });
-      return;
-    }
+    if (bHit) return { book: bHit };
     const sHit = l.summaryByKey.get(clean) ?? l.summaryByKey.get(clean.toLowerCase());
-    if (sHit) {
-      openSummaryDrawer(chapterDisplayTitle(sHit.summary), [sHit.summary]);
-      return;
-    }
-    toast(`Could not find “${clean}” in your library.`);
-  }, [openChapter, leaveChapter, openSummaryDrawer]);
+    return sHit ? { summary: sHit.summary } : null;
+  }, []);
+  const followLink = useCallback((target: string) => {
+    const end = resolveLink(target);
+    if (!end) { if (normalizeRef(target)) toast(`Could not find “${normalizeRef(target)}” in your library.`); return; }
+    if (end.chapter) void openChapter(end.book.book.id, end.chapter.id);
+    else if (end.book) leaveChapter({ view: "book", bookId: end.book.book.id });
+    else openSummaryDrawer(chapterDisplayTitle(end.summary), [end.summary]);
+  }, [resolveLink, openChapter, leaveChapter, openSummaryDrawer]);
+  // a new function when the library changes, so a chapter's links are drawn again against it
+  const linkLeads = useCallback((target: string) => resolveLink(target) !== null, [resolveLink, lib]); // eslint-disable-line react-hooks/exhaustive-deps
   // the same function for the life of the applet: a Note given a new one draws again, and the chapter's Note holds the
   // quote marks, which React must not redraw under
   const followLinkRef = useRef(followLink);
@@ -1996,7 +2061,7 @@ export default function Library() {
   };
 
   const openQuoteFromList = useCallback((q: ParsedQuote) => {
-    const chHit = q.chapterRef ? (lib.chapterByKey.get(q.chapterRef) ?? lib.chapterByKey.get(q.chapterRef.toLowerCase())) : undefined;
+    const chHit = q.chapterRef ? (chapterFor(lib.chapterByKey, q.chapterRef)) : undefined;
     if (chHit) {
       void openChapter(chHit.book.book.id, chHit.chapter.id, { focusQuoteId: q.record.id, targetBlock: q.block ?? 1 });
       return;
@@ -2110,7 +2175,7 @@ export default function Library() {
     const filteredQuotes = !quoteFilter
       ? lib.quotes
       : lib.quotes.filter((q) => {
-        const chHit = lib.chapterByKey.get(q.chapterRef) ?? lib.chapterByKey.get(q.chapterRef.toLowerCase());
+        const chHit = chapterFor(lib.chapterByKey, q.chapterRef);
         const bHit = chHit?.book ?? lib.bookByKey.get(q.bookRef) ?? lib.bookByKey.get(q.bookRef.toLowerCase());
         const hay = [q.text, q.note, q.by, bHit?.title ?? basenameOf(q.bookRef), chHit ? chapterDisplayTitle(chHit.chapter) : basenameOf(q.chapterRef)]
           .join(" ")
@@ -2120,7 +2185,7 @@ export default function Library() {
 
     const map = new Map<string, { title: string; book: BookBundle | null; quotes: ParsedQuote[] }>();
     for (const q of filteredQuotes) {
-      const chHit = lib.chapterByKey.get(q.chapterRef) ?? lib.chapterByKey.get(q.chapterRef.toLowerCase());
+      const chHit = chapterFor(lib.chapterByKey, q.chapterRef);
       const bHit = chHit?.book ?? lib.bookByKey.get(q.bookRef) ?? lib.bookByKey.get(q.bookRef.toLowerCase()) ?? null;
       const key = bHit?.book.id ?? (q.bookRef.toLowerCase() || "__other__");
       const title = bHit?.title ?? (q.bookRef ? bookTitleOf(q.bookRef) : "Other quotes");
@@ -2146,14 +2211,15 @@ export default function Library() {
     // Summaries for this chapter (or its part / book as fallback)
     const chSummaries = chapter ? (currentBook.summariesByChapter.get(chapter.id) ?? []) : [];
     const partRef = chapter ? normalizeRef(chapter.fields?.part) : "";
-    const partHit = partRef ? (lib.chapterByKey.get(partRef) ?? lib.chapterByKey.get(partRef.toLowerCase())) : undefined;
+    const partHit = partRef ? (chapterFor(lib.chapterByKey, partRef)) : undefined;
     const partSummaries = partHit ? (currentBook.summariesByChapter.get(partHit.chapter.id) ?? []) : [];
     const availableSummaries = chSummaries.length ? chSummaries : (partSummaries.length ? partSummaries : currentBook.bookSummaries);
     const summaryLabel = chSummaries.length ? "Chapter summary" : (partSummaries.length ? "Part summary" : "Book summary");
 
     const chapterKey = chapter ? stripMd(chapter.path).toLowerCase() : "";
     const chapterQuotes = currentBook.quotes.filter(
-      (q) => q.chapterRef.toLowerCase() === chapterKey || q.chapterRef === chapter?.id,
+      (q) => q.chapterRef.toLowerCase() === chapterKey || q.chapterRef === chapter?.id
+        || (!!chapter && chapterFor(lib.chapterByKey, q.chapterRef)?.chapter.id === chapter.id),
     );
     const viewedQuote = viewedQuoteId ? lib.quoteByKey.get(viewedQuoteId) ?? null : null;
 
@@ -2195,6 +2261,7 @@ export default function Library() {
                 focusQuoteId={route.focusQuoteId}
                 targetBlock={route.targetBlock}
                 onLink={handleChapterLink}
+                linkLeads={linkLeads}
                 onOpenQuote={(qid) => { setEditingQuoteNote(null); setViewedQuoteId(qid); }}
                 onSelection={setPendingSel}
                 onActiveBlock={(blk) => { stoppedBlockRef.current = blk; }}
@@ -2392,7 +2459,7 @@ export default function Library() {
     const coverUrl = currentBook.coverSrc ? coverUrls[`${currentBook.book.id}|${currentBook.coverSrc}`] : undefined;
     const stopped = parseReadingAt(currentBook.fields.at);
     const stoppedHit = stopped
-      ? (lib.chapterByKey.get(stopped.chapterRef) ?? lib.chapterByKey.get(stopped.chapterRef.toLowerCase()))
+      ? (chapterFor(lib.chapterByKey, stopped.chapterRef))
       : undefined;
     const partIds = new Set(currentBook.groups.map((g) => g.part?.id).filter((id): id is string => Boolean(id)));
     const chapterCount = currentBook.chapters.filter((c) => !partIds.has(c.id)).length || currentBook.chapters.length;
@@ -2481,7 +2548,8 @@ export default function Library() {
                     rows={groupChapters.map((ch) => {
                       const isPart = grp.part?.id === ch.id;
                       const chKey = stripMd(ch.path).toLowerCase();
-                      const chQuotes = currentBook.quotes.filter((q) => q.chapterRef.toLowerCase() === chKey || q.chapterRef === ch.id);
+                      const chQuotes = currentBook.quotes.filter((q) => q.chapterRef.toLowerCase() === chKey || q.chapterRef === ch.id
+                        || chapterFor(lib.chapterByKey, q.chapterRef)?.chapter.id === ch.id);
                       const chSums = currentBook.summariesByChapter.get(ch.id) ?? [];
                       const sumBody = chSums[0] ? (summaryBodies[chSums[0].id]?.body ?? chSums[0].body) : "";
                       const sumPreview = markdownPreview(sumBody, 120);
@@ -2547,7 +2615,7 @@ export default function Library() {
                 label={`Quotes · ${currentBook.quotes.length}`}
                 hideLabel
                 rows={currentBook.quotes.map((q) => {
-                  const chHit = lib.chapterByKey.get(q.chapterRef) ?? lib.chapterByKey.get(q.chapterRef.toLowerCase());
+                  const chHit = chapterFor(lib.chapterByKey, q.chapterRef);
                   const place = [
                     chHit ? chapterDisplayTitle(chHit.chapter) : basenameOf(q.chapterRef),
                     q.block ? `¶ ${q.block}` : "",
@@ -2695,7 +2763,7 @@ export default function Library() {
                         const coverUrl = b.coverSrc ? coverUrls[`${b.book.id}|${b.coverSrc}`] : undefined;
                         const stopped = parseReadingAt(b.fields.at);
                         const stoppedCh = stopped
-                          ? (lib.chapterByKey.get(stopped.chapterRef) ?? lib.chapterByKey.get(stopped.chapterRef.toLowerCase()))?.chapter
+                          ? (chapterFor(lib.chapterByKey, stopped.chapterRef))?.chapter
                           : undefined;
                         const firstCh = b.chapters.find((c) => !b.groups.some((g) => g.part?.id === c.id)) ?? b.chapters[0];
                         const resumeCh = stoppedCh ?? firstCh;
@@ -2810,7 +2878,7 @@ export default function Library() {
                   key={grp.book?.book.id ?? grp.title}
                   label={`${grp.title} · ${grp.quotes.length}`}
                   rows={grp.quotes.map((q) => {
-                    const chHit = lib.chapterByKey.get(q.chapterRef) ?? lib.chapterByKey.get(q.chapterRef.toLowerCase());
+                    const chHit = chapterFor(lib.chapterByKey, q.chapterRef);
                     const place = [
                       chHit ? chapterDisplayTitle(chHit.chapter) : basenameOf(q.chapterRef),
                       q.block ? `¶ ${q.block}` : "",
