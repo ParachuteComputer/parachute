@@ -2,17 +2,22 @@
 // tested in e2e/services.spec.ts and src-tauri/tests). What is held here: a subscription made before the sign-in goes
 // out once; a live subscription stays open however many events pass through it; nothing connects after close.
 import { describe, expect, it, vi } from "vitest";
-import { createBroker, TAP_AGAIN } from "./broker";
+import { APPROVAL_GOES_AT_ONCE, createBroker, TAP_AGAIN } from "./broker";
+import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import type { Native, SignedEvent } from "./native";
 import type { Service } from "../applet/services";
 
 class FakeSocket {
   static all: FakeSocket[] = [];
+  /** the network away: a new socket closes without opening; `hang`: it neither opens nor closes */
+  static refuse = false;
+  static hang = false;
   sent: unknown[] = [];
   onopen: (() => void) | null = null;
   onmessage: ((m: { data: string }) => void) | null = null;
   onclose: (() => void) | null = null;
-  constructor(public url: string) { FakeSocket.all.push(this); setTimeout(() => this.onopen?.(), 0); }
+  opened = false;
+  constructor(public url: string) { FakeSocket.all.push(this); if (!FakeSocket.hang) setTimeout(() => { if (FakeSocket.refuse) this.onclose?.(); else { this.opened = true; this.onopen?.(); } }, 0); }
   send(s: string) { this.sent.push(JSON.parse(s)); }
   close() { setTimeout(() => this.onclose?.(), 0); }
   from(m: unknown) { this.onmessage?.({ data: JSON.stringify(m) }); }
@@ -34,10 +39,14 @@ const native = (): Native => ({
 const relay: Service = { id: "rooms", kind: "nostr-relay", url: "wss://relay.example", publish: [9], media: false, private: [] };
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
+/** every broker a test made: closed before the next test's, so none of them reconnects into another test */
+const made: { close(): void }[] = [];
 function setup(n: Native = native(), services: Service[] = [relay]) {
-  FakeSocket.all = [];
+  made.splice(0).forEach((x) => x.close());
+  FakeSocket.all = []; FakeSocket.refuse = false; FakeSocket.hang = false;
   const emitted: { event: string; data: any }[] = [];
   const b = createBroker({ native: n, session: "s", applet: { name: "Rooms", subject: "v\u0000n" }, services, hubs: [], emit: (event, data) => emitted.push({ event, data }), socket: (u) => new FakeSocket(u) as unknown as WebSocket });
+  made.push(b);
   return { b, emitted };
 }
 async function signIn(sock: FakeSocket, wait: () => Promise<unknown> = () => tick()) {
@@ -56,6 +65,72 @@ describe("what the broker asks the shell to sign", () => {
     }
     await expect(b.publish({ service: "rooms", event: { kind: 27235, content: "", tags: [] } })).rejects.toMatchObject({ code: "out_of_scope" });
     expect(signEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("a post signed before, sent as it is (a retry keeps its id: T-476)", () => {
+  const sk = generateSecretKey();
+  const real = (): Native => ({ ...native(), open: async () => ({ pubkey: getPublicKey(sk) }), signEvent: async (_s, _v, t) => finalizeEvent({ ...t, created_at: Math.floor(Date.now() / 1000) }, sk) as SignedEvent });
+  const sent = (sock: FakeSocket) => sock.sent.filter((m) => Array.isArray(m) && m[0] === "EVENT").map((m) => (m as [string, SignedEvent])[1]);
+
+  it("signs without sending; publishing that event sends it whole, and again on a retry, the same id each time", async () => {
+    const { b } = setup(real());
+    b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+    await tick();
+    const sock = FakeSocket.all[0];
+    await signIn(sock);
+    const ev = await b.sign({ service: "rooms", event: { kind: 9, content: "kept", tags: [["h", "r"]] } });
+    await tick(5);
+    expect(sent(sock)).toHaveLength(0);
+    const first = b.publish({ service: "rooms", event: { ...ev } });
+    await tick(5);
+    sock.from(["OK", ev.id, false, "error: try later"]);
+    await expect(first).resolves.toMatchObject({ ok: false });
+    const second = b.publish({ service: "rooms", event: { ...ev } });
+    await tick(5);
+    sock.from(["OK", ev.id, true, "duplicate:"]);
+    await expect(second).resolves.toMatchObject({ ok: true, id: ev.id });
+    expect(sent(sock).map((e) => e.id)).toEqual([ev.id, ev.id]);
+    expect(sent(sock)[1]).toMatchObject({ id: ev.id, pubkey: ev.pubkey, created_at: ev.created_at, kind: 9, content: "kept", tags: ev.tags, sig: ev.sig });
+  });
+
+  it("refuses one changed after signing, another key's, one outside its kinds, or one with more than an event's fields", async () => {
+    const { b } = setup(real());
+    const ev = await b.sign({ service: "rooms", event: { kind: 9, content: "kept", tags: [["h", "r"]] } });
+    await expect(b.publish({ service: "rooms", event: { ...ev, content: "changed" } })).rejects.toMatchObject({ code: "out_of_scope" });
+    const other = finalizeEvent({ kind: 9, created_at: Math.floor(Date.now() / 1000), content: "theirs", tags: [["h", "r"]] }, generateSecretKey());
+    await expect(b.publish({ service: "rooms", event: other })).rejects.toMatchObject({ code: "out_of_scope" });
+    const reaction = finalizeEvent({ kind: 7, created_at: Math.floor(Date.now() / 1000), content: "+", tags: [["h", "r"]] }, sk);
+    await expect(b.publish({ service: "rooms", event: reaction })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(b.publish({ service: "rooms", event: { ...ev, extra: 1 } })).rejects.toMatchObject({ code: "bad_params" });
+  });
+
+  it("a bot's /approve is never signed to keep (it could go later, untapped); one handed back signed needs a tap every time", async () => {
+    const svc: Service = { ...relay, approvals: { from: ["c".repeat(64)] } } as Service;
+    let taps = 0;
+    const shell = { tap: () => (taps-- > 0 ? true as const : false), secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null };
+    FakeSocket.all = []; FakeSocket.refuse = false;
+    const b = createBroker({ native: real(), session: "s", applet: { name: "Rooms", subject: "v\u0000n" }, services: [svc], hubs: [], emit: () => {}, socket: (u) => new FakeSocket(u) as unknown as WebSocket, shell });
+    made.push(b);
+    taps = 1;
+    await expect(b.sign({ service: "rooms", event: { kind: 9, content: "/approve", tags: [["h", "r"]] } })).rejects.toMatchObject({ code: "not_granted", message: APPROVAL_GOES_AT_ONCE });
+    await expect(b.sign({ service: "rooms", event: { kind: 9, content: "@Uni /deny", tags: [["h", "r"]] } })).rejects.toMatchObject({ code: "not_granted" });
+    // signed and sent at its tap, as before
+    taps = 1;
+    const first = b.publish({ service: "rooms", event: { kind: 9, content: "/approve", tags: [["h", "r"]] } });
+    await tick(5);
+    const sock = FakeSocket.all[0];
+    await signIn(sock);
+    await tick(5);
+    const ev = sent(sock)[0];
+    sock.from(["OK", ev.id, false, "error: try later"]);
+    await expect(first).resolves.toMatchObject({ ok: false });
+    // that event handed back to go again: a tap again, each time
+    await expect(b.publish({ service: "rooms", event: { ...ev } })).rejects.toMatchObject({ code: "not_granted" });
+    taps = 1;
+    void b.publish({ service: "rooms", event: { ...ev } });
+    await tick(5);
+    expect(sent(sock).map((e) => e.id)).toEqual([ev.id, ev.id]);
   });
 });
 
@@ -120,34 +195,225 @@ describe("the broker's relay connection", () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it("doesn't send later a post it said had failed when the connection dropped", async () => {
+  it("sends a post in flight again, the same event, when a dropped connection comes back, and resolves it on that OK (T-476)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+      await vi.advanceTimersByTimeAsync(1);
+      const first = FakeSocket.all[0];
+      await signIn(first, () => vi.advanceTimersByTimeAsync(1));
+      const posted = b.publish({ service: "rooms", event: { kind: 9, content: "hello", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(1);
+      const sent = first.sent.find((m) => Array.isArray(m) && m[0] === "EVENT") as [string, SignedEvent];
+      expect(sent).toBeTruthy();
+      // the connection drops before the relay's OK (Aaron's "connection closed"): not told it failed
+      first.onclose?.();
+      let told: unknown = null;
+      void posted.then((r) => { told = r; });
+      await vi.advanceTimersByTimeAsync(1100);
+      expect(told).toBeNull();
+      const second = FakeSocket.all[1];
+      await signIn(second, () => vi.advanceTimersByTimeAsync(1));
+      await vi.advanceTimersByTimeAsync(1);
+      const again = second.sent.filter((m) => Array.isArray(m) && m[0] === "EVENT") as [string, SignedEvent][];
+      expect(again).toHaveLength(1);
+      expect(JSON.stringify(again[0][1])).toBe(JSON.stringify(sent[1]));
+      // the relay had it from the first time
+      second.from(["OK", sent[1].id, true, "duplicate:"]);
+      await expect(posted).resolves.toMatchObject({ ok: true, id: sent[1].id });
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("the same event published twice while it waits: one send, and both are told its answer (a second tap)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const n = native();
+      n.signEvent = async (_s, _v, t) => ({ ...ev("same"), ...t, pubkey: "a".repeat(64) });
+      const { b } = setup(n);
+      const one = b.publish({ service: "rooms", event: { kind: 9, content: "hi", tags: [["h", "r"]] } });
+      const two = b.publish({ service: "rooms", event: { kind: 9, content: "hi", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(1);
+      FakeSocket.refuse = true;
+      FakeSocket.all[0].onclose?.();
+      await vi.advanceTimersByTimeAsync(15_500);
+      await expect(one).resolves.toMatchObject({ ok: false });
+      await expect(two).resolves.toMatchObject({ ok: false });
+      FakeSocket.refuse = false;
+      const three = b.publish({ service: "rooms", event: { kind: 9, content: "hi", tags: [["h", "r"]] } });
+      const four = b.publish({ service: "rooms", event: { kind: 9, content: "hi", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(10);
+      const sock = FakeSocket.all[FakeSocket.all.length - 1];
+      await signIn(sock, () => vi.advanceTimersByTimeAsync(1));
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sock.sent.filter((m) => Array.isArray(m) && m[0] === "EVENT")).toHaveLength(1);
+      sock.from(["OK", "same", true, ""]);
+      await expect(three).resolves.toMatchObject({ ok: true });
+      await expect(four).resolves.toMatchObject({ ok: true });
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("doesn't send later a post told it failed: the connection didn't come back within its wait", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const { b } = setup();
       const posted = b.publish({ service: "rooms", event: { kind: 9, content: "hello", tags: [["h", "r"]] } });
       await vi.advanceTimersByTimeAsync(1);
-      const first = FakeSocket.all[0];
-      first.onclose?.();
-      await expect(posted).resolves.toMatchObject({ ok: false });
-      await vi.advanceTimersByTimeAsync(1100);
-      const second = FakeSocket.all[1];
-      await signIn(second, () => vi.advanceTimersByTimeAsync(1));
-      expect(second.sent.some((m) => Array.isArray(m) && m[0] === "EVENT")).toBe(false);
+      FakeSocket.refuse = true;
+      FakeSocket.all[0].onclose?.();
+      await vi.advanceTimersByTimeAsync(15_500);
+      await expect(posted).resolves.toMatchObject({ ok: false, message: "can't reach the relay" });
+      FakeSocket.refuse = false;
+      await vi.advanceTimersByTimeAsync(31_000);
+      const back = FakeSocket.all[FakeSocket.all.length - 1];
+      await signIn(back, () => vi.advanceTimersByTimeAsync(1));
+      await vi.advanceTimersByTimeAsync(1);
+      expect(back.sent.some((m) => Array.isArray(m) && m[0] === "EVENT")).toBe(false);
     } finally { vi.useRealTimers(); }
+  });
+
+  it("woken (the network back, the app in front), connects at once instead of waiting out its pause; a post does too", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+      await vi.advanceTimersByTimeAsync(1);
+      FakeSocket.refuse = true;
+      FakeSocket.all[0].onclose?.();
+      // a few tries while away: the pause grows to 8 s
+      await vi.advanceTimersByTimeAsync(1000 + 2000 + 4000 + 10);
+      const tries = FakeSocket.all.length;
+      FakeSocket.refuse = false;
+      window.dispatchEvent(new Event("online"));
+      await vi.advanceTimersByTimeAsync(1);
+      expect(FakeSocket.all.length).toBe(tries + 1);
+      await signIn(FakeSocket.all[tries], () => vi.advanceTimersByTimeAsync(1));
+      expect(FakeSocket.all[tries].reqs().map((r) => r[1])).toEqual(["a:a"]);
+      // away again, then a post: it doesn't wait for the pause either
+      FakeSocket.refuse = true;
+      FakeSocket.all[tries].onclose?.();
+      await vi.advanceTimersByTimeAsync(1000 + 2000 + 10);
+      FakeSocket.refuse = false;
+      const n = FakeSocket.all.length;
+      void b.publish({ service: "rooms", event: { kind: 9, content: "now", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(FakeSocket.all.length).toBe(n + 1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("back in front after a while, an open connection that gives no sign of life is dropped for a new one; the post goes on it", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const vis = vi.spyOn(document, "visibilityState", "get");
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+      await vi.advanceTimersByTimeAsync(1);
+      const first = FakeSocket.all[0];
+      await signIn(first, () => vi.advanceTimersByTimeAsync(1));
+      vis.mockReturnValue("hidden"); document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(60_000);
+      // the socket died while the phone slept: it says nothing, and sending on it goes nowhere
+      vis.mockReturnValue("visible"); document.dispatchEvent(new Event("visibilitychange"));
+      const probe = first.reqs().at(-1)!;
+      expect(probe[2]).toMatchObject({ limit: 1 });
+      const posted = b.publish({ service: "rooms", event: { kind: 9, content: "after waking", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(4010);
+      const second = FakeSocket.all[1];
+      expect(second).toBeTruthy();
+      await vi.advanceTimersByTimeAsync(1);
+      await signIn(second, () => vi.advanceTimersByTimeAsync(1));
+      await vi.advanceTimersByTimeAsync(1);
+      const ev = second.sent.find((m) => Array.isArray(m) && m[0] === "EVENT") as [string, SignedEvent];
+      expect(ev[1].content).toBe("after waking");
+      second.from(["OK", ev[1].id, true, ""]);
+      await expect(posted).resolves.toMatchObject({ ok: true });
+    } finally { vis.mockRestore(); vi.useRealTimers(); }
+  });
+
+  it("a socket that never opens (the network changed under it) is given up after 10 s and tried again; the network back gives it up at once", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { b } = setup();
+      FakeSocket.hang = true;
+      b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+      await vi.advanceTimersByTimeAsync(9000);
+      expect(FakeSocket.all).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1000 + 1000 + 10);
+      expect(FakeSocket.all).toHaveLength(2);
+      FakeSocket.hang = false;
+      window.dispatchEvent(new Event("online"));
+      await vi.advanceTimersByTimeAsync(5);
+      expect(FakeSocket.all).toHaveLength(3);
+      await signIn(FakeSocket.all[2], () => vi.advanceTimersByTimeAsync(1));
+      expect(FakeSocket.all[2].reqs().map((r) => r[1])).toContain("a:a");
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("a post with no answer on an open socket asks it for a sign of life; a busy relay's CLOSED to that ask counts as one", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+      await vi.advanceTimersByTimeAsync(1);
+      const sock = FakeSocket.all[0];
+      await signIn(sock, () => vi.advanceTimersByTimeAsync(1));
+      const posted = b.publish({ service: "rooms", event: { kind: 9, content: "into the void", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(15_100);
+      await expect(posted).resolves.toMatchObject({ ok: false, message: "no answer from the relay" });
+      const probe = sock.reqs().at(-1)!;
+      expect(probe[2]).toMatchObject({ limit: 1 });
+      sock.from(["CLOSED", probe[1], "rate-limited: slow down"]);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(FakeSocket.all).toHaveLength(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("a relay that lets the socket open and then closes it before any sign-in is asked less and less often, not each second", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+      // each socket opens, then the relay closes it at once
+      for (let t = 0; t < 31_000; t += 100) {
+        await vi.advanceTimersByTimeAsync(100);
+        const last = FakeSocket.all[FakeSocket.all.length - 1];
+        if (last?.opened && !(last as unknown as { shut?: boolean }).shut) { (last as unknown as { shut: boolean }).shut = true; last.onclose?.(); }
+      }
+      // 1 + 2 + 4 + 8 + 16 s of pauses: six sockets in 31 s, where resetting at each open would make about thirty
+      expect(FakeSocket.all.length).toBeLessThanOrEqual(6);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("an open connection that answers the sign-of-life is kept", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const vis = vi.spyOn(document, "visibilityState", "get");
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+      await vi.advanceTimersByTimeAsync(1);
+      const first = FakeSocket.all[0];
+      await signIn(first, () => vi.advanceTimersByTimeAsync(1));
+      vis.mockReturnValue("hidden"); document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(60_000);
+      vis.mockReturnValue("visible"); document.dispatchEvent(new Event("visibilitychange"));
+      first.from(["EOSE", first.reqs().at(-1)![1]]);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(FakeSocket.all).toHaveLength(1);
+    } finally { vis.mockRestore(); vi.useRealTimers(); }
   });
 
   it("doesn't send a post queued behind a sign-in the relay refused, nor one it said had timed out", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const slow = native();
-      slow.relayAuth = () => new Promise((r) => setTimeout(() => r({ ...ev("auth"), kind: 22242 }), 12_000));
+      slow.relayAuth = () => new Promise((r) => setTimeout(() => r({ ...ev("auth"), kind: 22242 }), 17_000));
       const { b } = setup(slow);
       const late = b.publish({ service: "rooms", event: { kind: 9, content: "late", tags: [["h", "r"]] } });
       await vi.advanceTimersByTimeAsync(1);
       const sock = FakeSocket.all[0];
       sock.from(["AUTH", "challenge"]);
       // the sign-in takes longer than a post waits: it is told it failed
-      await vi.advanceTimersByTimeAsync(10_500);
+      await vi.advanceTimersByTimeAsync(15_500);
       await expect(late).resolves.toMatchObject({ ok: false });
       await vi.advanceTimersByTimeAsync(2000);
       const refused = b.publish({ service: "rooms", event: { kind: 9, content: "refused", tags: [["h", "r"]] } });

@@ -114,6 +114,43 @@ describe("the vault, from inside a frame", () => {
     expect(errors.filter((c) => c === "rate_limited")).toHaveLength(10);
     expect(f.out.filter((m) => "id" in m)).toHaveLength(70);
   });
+  it("past the 60, a call only a tap can make still gets through, ten at most: a busy frame doesn't starve a tap (T-476)", async () => {
+    const f = frame();
+    for (let i = 0; i < 60; i++) f.session.handle({ uni: 1, id: `t${i}`, ns: "theme", method: "get" });
+    f.session.handle({ uni: 1, id: "busy", ns: "theme", method: "get" });
+    for (let i = 0; i < 12; i++) f.session.handle({ uni: 1, id: `r${i}`, ns: "voice", method: "record", params: {} });
+    await new Promise((r) => setTimeout(r, 10));
+    const code = (id: string) => (f.out.find((m) => "id" in m && m.id === id) as { error?: { code: string } } | undefined)?.error?.code;
+    expect(code("busy")).toBe("rate_limited");
+    // the module answers these (this frame has no microphone): not the limiter, for ten of them
+    expect(Array.from({ length: 12 }, (_, i) => code(`r${i}`)).filter((c) => c === "rate_limited")).toHaveLength(2);
+    // a post is not a tap's call, unless it is a bot's approval (the broker asks the tap for it)
+    const g = frame();
+    for (let i = 0; i < 60; i++) g.session.handle({ uni: 1, id: `t${i}`, ns: "theme", method: "get" });
+    g.session.handle({ uni: 1, id: "post", ns: "services", method: "publish", params: { service: "rooms", event: { kind: 9, content: "hello", tags: [] } } });
+    g.session.handle({ uni: 1, id: "approve", ns: "services", method: "publish", params: { service: "rooms", event: { kind: 9, content: "@Uni /approve", tags: [] } } });
+    await new Promise((r) => setTimeout(r, 10));
+    const gc = (id: string) => (g.out.find((m) => "id" in m && m.id === id) as { error?: { code: string } } | undefined)?.error?.code;
+    expect(gc("post")).toBe("rate_limited");
+    expect(gc("approve")).not.toBe("rate_limited");
+    // what it keeps on the device itself has its own 60: a busy frame's draft still goes (T-476); the kit's own saved
+    // state stays on the shared 60 (it puts a refused save back in line itself)
+    g.session.handle({ uni: 1, id: "draft", ns: "storage", method: "set", params: { key: "d", value: "half a thought" } });
+    g.session.handle({ uni: 1, id: "kept", ns: "saved", method: "put", params: { entries: { a: 1 } } });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(gc("draft")).toBeDefined();
+    expect(gc("draft")).not.toBe("rate_limited");
+    expect(gc("kept")).toBe("rate_limited");
+    // and that budget is 60 of its own: the 61st device call is refused, while the other calls' budget is untouched
+    const h = frame();
+    for (let i = 0; i < 61; i++) h.session.handle({ uni: 1, id: `s${i}`, ns: "storage", method: "get", params: { key: "d" } });
+    await new Promise((r) => setTimeout(r, 10));
+    h.session.handle({ uni: 1, id: "theme", ns: "theme", method: "get" });
+    await new Promise((r) => setTimeout(r, 10));
+    const hc = (id: string) => (h.out.find((m) => "id" in m && m.id === id) as { error?: { code: string } } | undefined)?.error?.code;
+    expect(Array.from({ length: 61 }, (_, i) => hc(`s${i}`)).filter((c) => c === "rate_limited")).toHaveLength(1);
+    expect(hc("theme")).toBeUndefined();
+  });
   it("refuses an unknown namespace and a malformed message", async () => {
     const f = frame();
     f.session.handle({ uni: 1, id: "c1", ns: "chat", method: "recent" });

@@ -29,7 +29,7 @@ It says what the applet would do by what it means to a person:
   vault**: each its own line.
 - **Its notes**: each folder it reads or changes, as the details say it.
 - **Also**: the small everyday asks on one line: the microphone when you press record, files you pick, saving to
-  Downloads, 256 KB for drafts, opening notes of a type you tap, your bar.
+  Downloads, drafts and unsent files, opening notes of a type you tap, your bar.
 - **Someone else's vault** is said at the top, and on Android the card ends with *On this device an applet could send
   what it reads to the internet: allow only code you trust.*
 

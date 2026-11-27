@@ -36,6 +36,8 @@
 //                                      (docs/design/KEYRING.md "Voice, files, links, storage")
 //   uni.storage.get/set/keys         → (storage) a little JSON kept by the shell on this device for it, 256 KB in all (a
 //                                      value of any size within it: set sends it as bytes)
+//   uni.storage.setFile/getFile/fileKeys → (storage) files kept on this device until it lets them go (what it hasn't
+//                                      sent yet: a recording, a picture), 25 MB each, 100 MB in all
 //   uni.saved.get(key) / .set(key, value) / .all() / .flush() → what it saves on this device as the person goes (drafts,
 //                                      the screen it was on): handed back in ready, so get() answers at once after it;
 //                                      set() reaches the shell 250 ms after the last change (a second at most while
@@ -84,7 +86,7 @@ export const FRAME_KIT = String.raw`(function () {
   var readied = false;
   // the person may take a while: a recording of up to 10 minutes and then Send, a file being chosen; and the shell may:
   // a Notion export is chosen, then its records written and up to 150 MB of its files uploaded one at a time
-  var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000, "vaults.importNotion": 3600000, "vaults.addPack": 600000, "vaults.file": 120000, "vault.file": 120000, "vault.attachFrom": 120000,
+  var WAITS = { "storage.setFile": 120000, "storage.getFile": 120000, "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000, "vaults.importNotion": 3600000, "vaults.addPack": 600000, "vaults.file": 120000, "vault.file": 120000, "vault.attachFrom": 120000,
     // a picked file carried in pieces by the shell (docs/design/UPLOADS.md): 2 GB over a slow phone line takes hours
     "vault.upload": 8 * 3600000 };
   // bytes as an ArrayBuffer (what the shell takes), from an ArrayBuffer or a view of one
@@ -97,14 +99,14 @@ export const FRAME_KIT = String.raw`(function () {
   // what the person is waiting on goes ahead of the line: a tap's call (it needs the tap still fresh: a link, a file,
   // an answer to Uni's card, trusting its key, a secret), a post, the frame's height. One of the 8 places is kept for
   // these, so a tap is sent at once however many pictures and card checks are out.
-  var FIRST = { "app.openLink": 1, "app.follow": 1, "app.save": 1, "app.pick": 1, "app.open": 1, "voice.record": 1, "services.publish": 1, "page.layout": 1,
+  var FIRST = { "app.openLink": 1, "app.follow": 1, "app.save": 1, "app.pick": 1, "app.open": 1, "voice.record": 1, "services.publish": 1, "services.sign": 1, "page.layout": 1,
     "services.answer": 1, "services.trust": 1, "services.secret": 1, "services.forgetSecret": 1, "back.hold": 1 };
   // what must land in the order it was asked goes one at a time, each kind in a lane of its own: what the applet keeps
   // on the device (one store: a read is in the lane too, so it sees the writes asked before it), the frame's height
   // (the last one sent is the one that counts) and its private notes on a relay. A later one is never out while an
   // earlier one may still be refused for being busy and sent again. Posts keep no lane: one waiting on a slow relay
   // would hold a tap's post (an approval) past its tap.
-  var LANE = { "storage.set": "kept", "storage.get": "kept", "storage.keys": "kept", "saved.put": "kept", "saved.all": "kept", "page.layout": "layout", "services.savePrivate": "private" }, lanes = {};
+  var LANE = { "storage.set": "kept", "storage.get": "kept", "storage.keys": "kept", "storage.setFile": "kept", "storage.getFile": "kept", "storage.fileKeys": "kept", "saved.put": "kept", "saved.all": "kept", "page.layout": "layout", "services.savePrivate": "private" }, lanes = {};
   function free(j) { if (j.lane && lanes[j.lane] === j) delete lanes[j.lane]; }
   function pump() {
     for (var i = 0; i < line.length;) {
@@ -528,7 +530,17 @@ export const FRAME_KIT = String.raw`(function () {
         if (text === undefined) return Promise.reject(new TypeError("storage keeps JSON"));
         return call("storage", "set", { key: key, bytes: new TextEncoder().encode(text).buffer });
       },
-      keys: function () { return call("storage", "keys", {}); }
+      keys: function () { return call("storage", "keys", {}); },
+      // a file kept on this device until it lets it go (what it hasn't sent yet: a recording, a picture), 25 MB each,
+      // 100 MB in all; null removes it
+      setFile: function (key, bytes) {
+        if (bytes === null || bytes === undefined) return call("storage", "setFile", { key: key, bytes: null });
+        var b = buf(bytes);
+        if (!b) return Promise.reject(new TypeError("setFile takes bytes (an ArrayBuffer)"));
+        return call("storage", "setFile", { key: key, bytes: b });
+      },
+      getFile: function (key) { return call("storage", "getFile", { key: key }); },
+      fileKeys: function () { return call("storage", "fileKeys", {}); }
     }),
     // the servers it declared (docs/design/SERVICES.md): the shell talks to them for it, and signs as the person
     services: Object.freeze({
@@ -564,7 +576,9 @@ export const FRAME_KIT = String.raw`(function () {
           subscribe: function (filters, onEvents, onEose) { return many([filters], onEvents, onEose); },
           subscribeMany: many,
           query: function (filters) { return call("services", "query", { service: service, filters: filters }); },
+          // an event it signed before (sign, or a publish's answer) is sent as it is: a retry, never a second copy
           publish: function (ev) { return call("services", "publish", { service: service, event: ev }); },
+          sign: function (ev) { return call("services", "sign", { service: service, event: ev }); },
           loadPrivate: function (d) { return call("services", "loadPrivate", { service: service, d: d }); },
           savePrivate: function (d, text) { return call("services", "savePrivate", { service: service, d: d, text: text }); },
           onStatus: function (cb) { var f = function (s) { if (s && s.service === service) cb(s); }; svcStatus.push(f); return function () { var i = svcStatus.indexOf(f); if (i >= 0) svcStatus.splice(i, 1); }; }

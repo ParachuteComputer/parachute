@@ -107,14 +107,14 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a p
     await app.getByRole("listbox", { name: "People in this room" }).getByRole("button", { name: bobName }).click();
     await field.pressSequentially(`see you at noon ${stamp}`);
     await app.getByRole("button", { name: "Send message" }).click(); // on a phone Enter is a new line
-    await expect(log.locator("article.mine", { hasText: `see you at noon ${stamp}` })).toBeVisible({ timeout: 15_000 });
+    await expect(log.locator("article.mine:not(.unsent)", { hasText: `see you at noon ${stamp}` })).toBeVisible({ timeout: 15_000 });
 
     // a reply in a thread
     await beans.getByRole("button", { name: "Reply" }).click();
     await expect(app.getByRole("heading", { name: "Thread" })).toBeVisible();
     await app.getByLabel(`Message Garden ${stamp}`).fill(`In the thread ${stamp}`);
     await app.getByRole("button", { name: "Send message" }).click();
-    await expect(app.getByRole("log").locator("article.mine", { hasText: `In the thread ${stamp}` })).toBeVisible({ timeout: 15_000 });
+    await expect(app.getByRole("log").locator("article.mine:not(.unsent)", { hasText: `In the thread ${stamp}` })).toBeVisible({ timeout: 15_000 });
     await app.getByRole("button", { name: `← Garden ${stamp}` }).click();
     await expect(log.locator("article", { hasText: `are up ${stamp}` }).getByRole("button", { name: "1 reply" })).toBeVisible();
 
@@ -123,16 +123,16 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a p
     await page.getByRole("dialog", { name: "Rooms asks for files" }).locator("input[type=file]").setInputFiles({ name: "beds.png", mimeType: "image/png", buffer: png });
     await field.fill(`the beds ${stamp}`);
     await app.getByRole("button", { name: "Send message" }).click(); // on a phone Enter is a new line
-    await expect(log.locator("article.mine", { hasText: `the beds ${stamp}` }).getByRole("img", { name: "beds.png" })).toBeVisible({ timeout: 20_000 });
+    await expect(log.locator("article.mine:not(.unsent)", { hasText: `the beds ${stamp}` }).getByRole("img", { name: "beds.png" })).toBeVisible({ timeout: 20_000 });
 
     const bedsEv = (await bob.query({ kinds: [9], "#h": [g], authors: [alice], limit: 50 })).find((e) => e.content.includes(`the beds ${stamp}`));
     expect(bedsEv?.tags.some((t) => t[0] === "imeta")).toBe(true);
     // she edits her picture's line, then deletes it: bob sees both
-    const beds = log.locator("article.mine", { hasText: `the beds ${stamp}` });
+    const beds = log.locator("article.mine:not(.unsent)", { hasText: `the beds ${stamp}` });
     await beds.getByRole("button", { name: "Edit" }).click();
     await app.getByLabel("Edit your message").fill(`the raised beds ${stamp}`);
     await app.getByRole("button", { name: "Save" }).click();
-    const raised = log.locator("article.mine", { hasText: `the raised beds ${stamp}` });
+    const raised = log.locator("article.mine:not(.unsent)", { hasText: `the raised beds ${stamp}` });
     await expect(raised).toContainText("(edited)");
     await raised.getByRole("button", { name: "Delete" }).click();
     await raised.getByRole("button", { name: "Tap again to delete" }).click();
@@ -436,7 +436,7 @@ test("a room opens at once from what the list holds, at its newest once its own 
     // and what you send takes you to the newest, as in any chat
     await app.getByLabel(`Message Yard ${stamp}`).fill(`Back at the yard ${stamp}`);
     await app.getByRole("button", { name: "Send message" }).click();
-    await expect(app.getByRole("log").locator("article.mine", { hasText: `Back at the yard ${stamp}` })).toBeVisible({ timeout: 15_000 });
+    await expect(app.getByRole("log").locator("article.mine:not(.unsent)", { hasText: `Back at the yard ${stamp}` })).toBeVisible({ timeout: 15_000 });
     await expect.poll(async () => (await where()).newestShown, { timeout: 5_000 }).toBe(true);
   } finally {
     await made.remove();
@@ -623,7 +623,7 @@ test.describe(`on a phone 390 wide, ${which}`, () => {
       await page.keyboard.type(`On my way ${stamp}`);
       await expect(field).toHaveValue(`On my way ${stamp}`);
       await (await tap("Send", app.getByRole("button", { name: "Send message" }))).at();
-      const mine = log.locator("article.mine", { hasText: `On my way ${stamp}` });
+      const mine = log.locator("article.mine:not(.unsent)", { hasText: `On my way ${stamp}` });
       await expect(mine).toBeVisible({ timeout: 15_000 });
       await expect(field).toHaveValue("");
       await page.waitForTimeout(600);

@@ -5,6 +5,7 @@
 import { inShell } from "../vault/oauth";
 import type { StorageDeps } from "../applet/modules/storage";
 import { deviceSaved } from "./saved";
+import { deviceFiles } from "./keptFiles";
 import { ContractError, ERROR_CODES } from "../applet/contract";
 import { PICTURE_MAX, pictureType } from "../applet/files";
 
@@ -68,10 +69,11 @@ export async function saveFileOut(name: string, bytes: ArrayBuffer, type: string
 }
 
 /** Where an applet's storage is kept: the saved store (shell/saved.ts), one per applet (its grant's subject). */
-export function storageFor(subject: string): StorageDeps {
-  const store = deviceSaved();
+export function storageFor(subject: string, store = deviceSaved(), kept = deviceFiles()): StorageDeps {
   return {
-    read: () => store.load(subject),
+    files: { put: (key, bytes) => kept.put(subject, key, bytes), get: (key) => kept.get(subject, key), drop: (key) => kept.drop(subject, key), keys: () => kept.keys(subject) },
+    // a store that can't be read is a refusal, never an empty store (T-476: Rooms' outbox would take it as empty)
+    read: () => store.read(subject),
     async write(all) {
       // what is gone from it is removed, the rest set: one write to the same store the kit's saved state uses
       const entries: Record<string, unknown> = Object.fromEntries([...Object.entries(all), ...Object.keys(store.now(subject)).filter((k) => !Object.hasOwn(all, k)).map((k) => [k, null] as const)]);

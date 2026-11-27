@@ -4,6 +4,7 @@
 // own (src-tauri/src/saved.rs: synced, then renamed, so a force-stop or a reboot keeps the last whole copy); in a
 // browser to localStorage. Never synced, never in a vault. The applet's `saved` and `storage` calls are one store.
 import { inShell } from "../vault/oauth";
+import { deviceFiles } from "./keptFiles";
 
 /** The most one applet keeps, as JSON. */
 export const SAVED_MAX = 256 * 1024;
@@ -86,6 +87,9 @@ export function createSavedStore(backend: SavedBackend) {
   return {
     /** What the applet saved (handed to it before it starts); nothing when it can't be read just now. */
     load(subject: string): Promise<Values> { return read(subject).then((v) => ({ ...v }), () => ({})); },
+    /** What it saved, or a refusal when the store can't be read just now: an applet's own reads (`storage`) are told,
+     *  so an unreadable store never reads as an empty one (whose next write would erase it). */
+    read(subject: string): Promise<Values> { return read(subject).then((v) => ({ ...v })); },
     /** What it holds now (after `load`). */
     now(subject: string): Values { return { ...(memory.get(subject) ?? {}) }; },
     /** Set some keys (null removes one) and write the store through. Refused, and nothing changed, past SAVED_MAX.
@@ -120,6 +124,6 @@ export type SavedStore = ReturnType<typeof createSavedStore>;
 let device: SavedStore | null = null;
 /** This device's store: one for the whole app. */
 export const deviceSaved = (): SavedStore => (device ??= createSavedStore(inShell() ? nativeBackend() : browserBackend()));
-/** The person's Revoke of an applet, or signing out of its vault: what it saved goes from this device, so a draft isn't
- *  left behind for whatever is allowed there next. */
-export const forgetSaved = (subject: string): void => { void deviceSaved().clear(subject).catch(() => {}); };
+/** The person's Revoke of an applet, or signing out of its vault: what it saved goes from this device, and the files it
+ *  kept (shell/keptFiles.ts), so a draft isn't left behind for whatever is allowed there next. */
+export const forgetSaved = (subject: string): void => { void deviceSaved().clear(subject).catch(() => {}); void deviceFiles().clear(subject).catch(() => {}); };

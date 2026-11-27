@@ -5,7 +5,7 @@
 
 | Spec | Needs |
 |---|---|
-| `e2e/rooms.spec.ts`, `roomlinks`, `area`, `today`, `devices`, `approvals` | `BUZZ_RELAY` (a Buzz relay), `BUZZ_KEYS` (a folder with `owner.hex`, `alice.hex`, `bob.hex`) |
+| `e2e/rooms.spec.ts`, `roomlinks`, `area`, `today`, `devices`, `approvals`, `unsent` | `BUZZ_RELAY` (a Buzz relay), `BUZZ_KEYS` (a folder with `owner.hex`, `alice.hex`, `bob.hex`) |
 | `e2e/mail.spec.ts` | `MAIL_BRIDGE` (the Uni app's mail gateway in front of a Stalwart), `BUZZ_KEYS` (also `unibot.hex`) |
 | `e2e/mailread.spec.ts` | the mail stack as above, and `STALWART` with `MAIL_SECRETS` (up.sh writes them): fixture messages are put straight into alice's Inbox |
 | `e2e/matrix.spec.ts` | `MATRIX_HS` (a Matrix homeserver), `MATRIX_TOKENS` (a folder with `alice.token`, `bob.token`), `BUZZ_KEYS` |
@@ -22,7 +22,7 @@ and on every pull request that changes more than docs. A skip there fails the ru
 ```sh
 e2e/services/up.sh                      # starts and seeds every server; writes e2e/.services/env
 set -a; . e2e/.services/env; set +a
-npx playwright test e2e/{approvals,area,devices,mail,mailread,matrix,roomlinks,rooms,today}.spec.ts --project=phone
+npx playwright test e2e/{approvals,area,devices,mail,mailread,matrix,roomlinks,rooms,today,unsent}.spec.ts --project=phone
 cargo test --manifest-path src-tauri/Cargo.toml --test services_real
 e2e/services/down.sh                    # removes the containers, their volumes and e2e/.services
 ```

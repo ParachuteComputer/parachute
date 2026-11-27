@@ -7,16 +7,23 @@
 //   storage.set({key, bytes})   → the same, the value as JSON text in bytes (an ArrayBuffer): how the kit sends one, so a
 //                                 value may be any size within the 256 KB, past the 8 KB a call's parameters may be
 //   storage.keys()              → its keys, sorted
+//   storage.setFile({key, bytes}) → null: a file kept on this device until the applet lets it go (what it hasn't sent
+//                                 yet: a recording, a picture; T-476), 25 MB a file, 100 MB in all; bytes null removes it
+//   storage.getFile({key})      → its bytes (an ArrayBuffer), or null
+//   storage.fileKeys()          → the keys of the files it keeps, sorted
 import { ContractError, ERROR_CODES, hasHidden, hasOnly, plain, withinBudget } from "../contract.ts";
 import type { UniModule } from "../router.ts";
-import { asJson, STORAGE_KEY_MAX, STORAGE_MAX, storageSize } from "../files.ts";
+import { asJson, FILE_MAX, STORAGE_KEY_MAX, STORAGE_MAX, storageSize } from "../files.ts";
 
-export type StorageDeps = { read(): Promise<Record<string, unknown>> | Record<string, unknown>; write(all: Record<string, unknown>): Promise<void> | void };
+export type StorageDeps = { read(): Promise<Record<string, unknown>> | Record<string, unknown>; write(all: Record<string, unknown>): Promise<void> | void;
+  /** Its files (shell/keptFiles.ts), when this device keeps them. */
+  files?: { put(key: string, bytes: Uint8Array): Promise<"ok" | "full">; get(key: string): Promise<Uint8Array | null>; drop(key: string): Promise<void>; keys(): Promise<string[]> } };
 
 const keyOk = (k: unknown): k is string => typeof k === "string" && k.length >= 1 && k.length <= STORAGE_KEY_MAX && !hasHidden(k);
 
 export function createStorageModule(allowed: boolean, deps: StorageDeps): UniModule {
   const need = () => { if (!allowed) throw new ContractError(ERROR_CODES.notGranted); };
+  const files = () => { if (!deps.files) throw new ContractError(ERROR_CODES.failed, "this device keeps no files for applets"); return deps.files; };
   return {
     namespace: "storage",
     methods: {
@@ -52,6 +59,27 @@ export function createStorageModule(allowed: boolean, deps: StorageDeps): UniMod
         },
       },
       keys: { cap: null, validate: (p) => { need(); return plain(p) && hasOnly(p, []) ? { ok: true, value: null } : { ok: false }; }, run: async () => Object.keys(await deps.read()).filter((k) => !k.startsWith("parachute:")).sort() },
+      setFile: {
+        cap: null,
+        validate: (p) => {
+          need();
+          if (!plain(p) || !hasOnly(p, ["key", "bytes"]) || !keyOk(p.key) || !(p.bytes === null || p.bytes instanceof ArrayBuffer)) return { ok: false };
+          if (p.bytes && p.bytes.byteLength > FILE_MAX) throw new ContractError(ERROR_CODES.tooLarge, "a file it keeps is 25 MB at most");
+          return { ok: true, value: { key: p.key, bytes: p.bytes } };
+        },
+        run: async ({ key, bytes }: { key: string; bytes: ArrayBuffer | null }) => {
+          const f = files();
+          if (bytes === null) { await f.drop(key); return null; }
+          if ((await f.put(key, new Uint8Array(bytes))) === "full") throw new ContractError(ERROR_CODES.tooLarge, "its files on this device are full (100 MB)");
+          return null;
+        },
+      },
+      getFile: {
+        cap: null,
+        validate: (p) => { need(); return plain(p) && hasOnly(p, ["key"]) && keyOk(p.key) ? { ok: true, value: p.key } : { ok: false }; },
+        run: async (key: string) => { const b = await files().get(key); return b ? b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) : null; },
+      },
+      fileKeys: { cap: null, validate: (p) => { need(); return plain(p) && hasOnly(p, []) ? { ok: true, value: null } : { ok: false }; }, run: async () => (await files().keys()).sort() },
     },
   };
 }

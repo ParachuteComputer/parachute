@@ -93,7 +93,7 @@ describe("the face keeps every stressed line's facts", () => {
     const face = faceOf(g, folder, trusted);
     expect(grantLines(g, folder, trusted).length).toBeGreaterThanOrEqual(14);
     expect(face.lines.length).toBe(4);
-    expect(face.also).toEqual(["the microphone when you press record", "files you pick", "saving to Downloads", "256 KB for drafts"]);
+    expect(face.also).toEqual(["the microphone when you press record", "files you pick", "saving to Downloads", "drafts and unsent files"]);
     // notes and applets ride on the web addresses' line, so the card is no longer for them; without links they are an Also
     expect(face.lines.map(faceText)).toContain("Opens web addresses, notes and applets: what it reads could leave that way.");
     expect(faceOf({ ...g, app: ["open"] }, folder, trusted).also).toEqual(["the microphone when you press record", "takes you to notes and applets you tap"]);
