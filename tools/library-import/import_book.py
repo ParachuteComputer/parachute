@@ -10,7 +10,7 @@ summaries/). --job takes a `job` record Library's Add a book left (docs/design/U
 the epub from the pieces attached to it, imports it, and says on the job how it went. See README.md for what it
 writes and how a second run changes nothing.
 """
-import argparse, base64, calendar, hashlib, json, mimetypes, os, posixpath, re, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request, uuid, zipfile
+import argparse, base64, calendar, hashlib, json, mimetypes, os, posixpath, re, struct, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request, uuid, zipfile
 from html.parser import HTMLParser
 import xml.etree.ElementTree as ET
 
@@ -221,7 +221,8 @@ class Converter:
         cls = n.attrs.get("class", "")
         if t == "hr": md = "---"
         elif re.fullmatch(r"h[1-6]", t):
-            words = " ".join(w for w in self.inline(n, f).replace("\\\n", " ").split() if w != "\\")
+            # a heading is drawn bold already: emphasis around it (`<h2><em>Contents</em></h2>`) is only noise
+            words = " ".join(w for w in plain(self.inline(n, f).replace("\\\n", " ")).split() if w != "\\")
             md = "#" * min(6, int(t[1]) + 1) + " " + words if words else ""
         elif t in ("ul", "ol"):
             items = [k for k in n.kids if not isinstance(k, str) and k.tag == "li"]
@@ -254,6 +255,91 @@ def roman(s):
     for ch in reversed(m.group(1).upper()):
         x = v[ch]; r = r - x if x < prev else r + x; prev = max(prev, x)
     return r
+
+
+def plain(s):
+    """Markdown words as plain words: a link's label or a title. A line break (`\\` + newline, a `<br/>` in the
+    book) between two lines of a title becomes a dash; emphasis marks and footnote marks go."""
+    s = re.sub(r"\s*\\\n\s*", " – ", s)
+    s = re.sub(r"\[\^\d+\]", "", s)
+    s = re.sub(r"(?<!\\)\*+", "", s)
+    s = s.replace("[", "(").replace("]", ")").replace("|", "/")  # never inside a [[link|label]]
+    return " ".join(s.split()).strip(" –")
+
+
+def image_size(data):
+    """(width, height) from a PNG's, GIF's or JPEG's header; None for anything else."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) >= 24: return struct.unpack(">II", data[16:24])
+    if data[:6] in (b"GIF87a", b"GIF89a") and len(data) >= 10: return struct.unpack("<HH", data[6:10])
+    if data[:2] == b"\xff\xd8":
+        i = 2
+        while i + 9 < len(data):
+            if data[i] != 0xFF: i += 1; continue
+            m = data[i + 1]
+            if m in (0xD8, 0x01) or 0xD0 <= m <= 0xD7: i += 2; continue
+            if 0xC0 <= m <= 0xCF and m not in (0xC4, 0xC8, 0xCC):
+                h, w = struct.unpack(">HH", data[i + 5:i + 9]); return (w, h)
+            i += 2 + struct.unpack(">H", data[i + 2:i + 4])[0]
+    return None
+
+
+GENERIC_ALT = re.compile(r"(image|img|picture|figure|ornament|decoration|divider|separator|flourish|\*+|-+)?", re.I)
+ORNAMENT_SIDE = 64       # a picture no larger than this, with no words of its own, is an ornament
+ORNAMENT_REPEATS = 3     # the same picture this often in one book is an ornament, whatever it says
+SPLIT_WORDS = 6000       # a chapter longer than this is cut at its verses, when it has them
+PIECE_WORDS = 2500       # into pieces of about this many words
+VERSE = re.compile(r"\*\*(\d{1,3})\.\s+\S|(\d{1,3})\.\s+\S")
+FRONT_NAMES = re.compile(r"(half[- ])?title( page)?|copyright( page)?|dedication|epigraph|colophon|about the publisher|"
+                         r"(other |also )?books by\b.*|also by\b.*|by the same (author|translator)\b.*", re.I)
+KEEP_NAMES = re.compile(r"(table of )?contents|foreword|preface|introduction|prologue|invocation", re.I)
+MAIN_START = re.compile(r"(chapter|book|part|canto|section)\s+(\d+|[ivxlc]+|one|first)\b|\d+\.?\s|[ivxlc]+\.\s", re.I)
+
+
+def words_in(blocks): return sum(len(re.findall(r"\w+", b["md"])) for b in blocks)
+
+
+def verse_starts(blocks):
+    """Indices of the blocks that open a numbered verse (`**12. …**`, or a paragraph `12. …`), when the chapter
+    clearly runs on them: at least eight, from 1 or 2, almost all one after the other. Else []."""
+    hits = []
+    for i, b in enumerate(blocks):
+        m = VERSE.match(b["md"])
+        if m and (m.group(1) or b["tag"] == "p"): hits.append((i, int(m.group(1) or m.group(2))))
+    if len(hits) < 8 or hits[0][1] > 2: return []
+    steps = sum(1 for (_, a), (_, b) in zip(hits, hits[1:]) if b == a + 1)
+    return [i for i, _ in hits] if steps >= 0.8 * (len(hits) - 1) else []
+
+
+def split_at_verses(c):
+    """A long chapter as itself (what comes before its first verse) and its pieces, each a run of whole verses; or
+    None when it is short or has no clear verses."""
+    starts = verse_starts(c["blocks"])
+    if words_in(c["blocks"]) <= SPLIT_WORDS or not starts: return None
+    bounds = starts + [len(c["blocks"])]
+    units = [c["blocks"][a:b] for a, b in zip(bounds, bounds[1:])]
+    pieces, cur = [], []
+    for u in units:
+        if cur and words_in([b for x in cur for b in x]) + words_in(u) > PIECE_WORDS: pieces.append(cur); cur = []
+        cur.append(u)
+    pieces.append(cur)
+    num = lambda u: int(next(g for g in VERSE.match(u[0]["md"]).groups() if g))
+    kids = []
+    for p in pieces:
+        a, b = num(p[0]), num(p[-1])
+        blocks = [x for u in p for x in u]
+        cited = set(re.findall(r"\[\^(\d+)\]", "\n".join(x["md"] for x in blocks)))
+        kids.append({"label": f"Verses {a}–{b}" if a != b else f"Verse {a}", "depth": c["depth"] + 1, "blocks": blocks,
+                     "notes": [d for d in c["notes"] if re.match(r"\[\^(\d+)\]", d).group(1) in cited], "gave": 0})
+    given = {d for k in kids for d in k["notes"]}
+    c = {**c, "blocks": c["blocks"][:starts[0]], "notes": [d for d in c["notes"] if d not in given]}
+    return [c] + kids
+
+
+def same_words(heading, label):
+    """True when a heading says nothing its chapter's title doesn't."""
+    words = lambda s: re.findall(r"\w+", s.lower())
+    h = words(heading.lstrip("#"))
+    return bool(h) and set(h) <= set(words(label))
 
 
 
@@ -304,6 +390,41 @@ def drm_locked(z):
     return False
 
 
+EPUB_PIC = re.compile(r"!\[([^\]]*)\]\(epub:([^)]+)\)")
+
+
+def drop_ornaments(e, blocks, hard):
+    """Ornaments out of the text: a picture the book repeats (one before every verse), or a tiny one with no words of
+    its own (a flourish). A block left empty stays, empty, for the anchors it holds."""
+    def data(p):
+        if p in e.inline_files: return e.inline_files[p][0]
+        try: return e.z.read(p)
+        except KeyError: return None
+    shas, uses = {}, {}
+    for b in blocks:
+        for _, p in EPUB_PIC.findall(b["md"]):
+            if p not in shas:
+                d = data(p); shas[p] = sha(d) if d is not None else None
+                if d is not None and shas[p] not in uses: uses[shas[p]] = [0, image_size(d)]
+            if shas[p]: uses[shas[p]][0] += 1
+    def ornament(alt, p):
+        k = shas.get(p)
+        if not k: return False
+        n, size = uses[k]
+        if n >= ORNAMENT_REPEATS: return True
+        no_words = GENERIC_ALT.fullmatch(alt.strip()) or alt.strip() == posixpath.basename(p)
+        return bool(no_words and size and max(size) <= ORNAMENT_SIDE)
+    gone = 0
+    for b in blocks:
+        def one(m):
+            nonlocal gone
+            if not ornament(m.group(1), m.group(2)): return m.group(0)
+            gone += 1; return ""
+        md = EPUB_PIC.sub(one, b["md"])
+        if md != b["md"]: b["md"] = re.sub(r"(?:^|\n)\\(?=\n|$)", "", md).strip().rstrip("\\").strip()
+    if gone: hard.append(f"{gone} ornament pictures (repeated, or tiny with no words of their own) left out")
+
+
 def read_epub(path, split_depth=None):
     e = Epub(path)
     if drm_locked(e.z):
@@ -334,6 +455,8 @@ def read_epub(path, split_depth=None):
             ids = set().union(*[b["ids"] for b in blocks[before:]])
             del blocks[before:]
             blocks.append({"md": "", "ids": ids, "file": f, "tag": "p", "cls": "", "empty": True})
+
+    drop_ornaments(e, blocks, hard)
 
     toc = [x for x in e.toc if not re.search(r"project gutenberg", x[1], re.I)]
     if len(toc) < len(e.toc): hard.append("Project Gutenberg's licence and header left out.")
@@ -366,6 +489,23 @@ def read_epub(path, split_depth=None):
     if front:
         fm = {"label": "Front matter", "depth": 0, "blocks": [b for c in front for b in c["blocks"]]}
         chapters = [fm] + [c for c in chapters if c not in front]
+    # short front matter after a long piece (a foreword before the dedication), up to the book's first part or numbered
+    # chapter, joins it: a copyright page or a "Books by" is not a chapter to read
+    for c in chapters: c["blocks"] = [b for b in c["blocks"] if b["md"]]
+    main = next((k for k, c in enumerate(chapters) if roman(c["label"]) or MAIN_START.match(c["label"])
+                 or (k + 1 < len(chapters) and chapters[k + 1]["depth"] > c["depth"])), first_real)
+    fold = [c for c in chapters[:main] if c["label"] != "Front matter" and not KEEP_NAMES.fullmatch(c["label"].strip())
+            and (FRONT_NAMES.fullmatch(c["label"].strip()) or words_in(c["blocks"]) < 200)]
+    if fold:
+        fm = next((c for c in chapters if c["label"] == "Front matter"), None)
+        if fm is None:
+            fm = {"label": "Front matter", "depth": 0, "blocks": []}
+            chapters.insert(0, fm)
+        at = chapters.index(fm)
+        joined = sorted([fm] + fold, key=lambda c: chapters.index(c))
+        fm["blocks"] = [b for c in joined for b in c["blocks"]]
+        chapters = [c for c in chapters if c not in fold]
+        chapters.remove(fm); chapters.insert(min(at, len(chapters)), fm)
     # a printed index is left out: search does its work, and its page links make it the biggest record in a book
     index = [c for c in chapters if re.fullmatch(r"(general )?index", c["label"].strip(), re.I)]
     if index:
@@ -400,6 +540,15 @@ def read_epub(path, split_depth=None):
     # a notes page whose notes all went to their chapters: only its heading is left, so it goes
     chapters = [c for c in chapters if c["notes"] or not c["gave"] or any(not b["md"].startswith("#") for b in c["blocks"])]
 
+    # a long chapter that runs on numbered verses: itself (its opening) and its verses, a few thousand words a piece
+    cut = []
+    for c in chapters:
+        pieces = split_at_verses(c)
+        if pieces:
+            hard.append(f"{c['label']} is {words_in(c['blocks']):,} words; cut at its verses into {len(pieces) - 1} parts")
+        cut.extend(pieces or [c])
+    chapters = cut
+
     # keys, parts (the nearest shallower entry), internal links to the chapter that holds their target
     where = {}
     for n, c in enumerate(chapters):
@@ -426,14 +575,16 @@ def read_epub(path, split_depth=None):
 
     def xref(m, here):
         f, _, frag = m.group(2).partition("#"); to = where.get((f, frag)) or where.get((f, ""))
-        return f"[[chap:{to}|{m.group(1)}]]" if to and to != here else m.group(1)
+        return f"[[chap:{to}|{plain(m.group(1))}]]" if to and to != here else plain(m.group(1))
 
     for c in chapters:
-        body = "\n\n".join(b["md"] for b in c["blocks"])
+        label = plain(c["label"])
+        blocks = c["blocks"]
+        while len(blocks) > 1 and blocks[0]["md"].startswith("#") and same_words(blocks[0]["md"], label): blocks = blocks[1:]
+        body = "\n\n".join(b["md"] for b in blocks)
         if c["notes"]: body += "\n\n---\n\n" + "\n".join(c["notes"])
         body = re.sub(r"\[([^\]]*)\]\(xref:([^)]+)\)", lambda m: xref(m, c["key"]), body)
         body = re.sub(r"!\[([^\]]*)\]\(epub:([^)]+)\)", picture, body)
-        label = c["label"]
         if label.isupper():
             label = " ".join(w if re.fullmatch(r"[IVXLC]+\.?", w) else w.capitalize() for w in label.split())
         book["chapters"].append({"key": c["key"], "label": label_of(label), "depth": c["depth"], "part": c["part"],
@@ -675,6 +826,7 @@ def plan(book):
         def one(m):
             kind, key, text = m.group(1), m.group(2), m.group(3)
             to = folder if kind == "book" else (path if kind == "chap" else spath).get(key)
+            text = plain(text or "")
             if not to: return text or key
             return f"[[{to}|{text}]]" if text else f"[[{to}]]"
         return re.sub(r"\[\[(chap|sum|book):?([^\]|]*)(?:\|([^\]]*))?\]\]", one, body)
@@ -789,12 +941,28 @@ def book_id(book):
     return "book-" + (slug if slug else sha(book["title"].encode())[:12])  # a title in another script: by its hash
 
 
-def run(book, recs, hub, source, types_hub=None):
+def cited_by_quotes(hub):
+    """Every chapter path a quote in the vault names in its `from`: a record a quote cites is never pruned."""
+    out, off, seen = set(), 0, set()
+    while True:
+        page = hub.req("GET", f"/notes?tag=quote&include_metadata=true&limit=200&offset={off}") or []
+        new = [r for r in page if r.get("id") not in seen]
+        if not new: break
+        seen.update(r.get("id") for r in new); off += len(page)
+        for r in new:
+            ref = str((r.get("metadata") or r.get("fields") or {}).get("from") or "").strip()
+            ref = re.sub(r"^\[\[([^\]|]*)(\|[^\]]*)?\]\]$", r"\1", ref).strip()
+            if ref: out.add(re.sub(r"\.md$", "", ref))
+        if len(page) < 200: break
+    return out
+
+
+def run(book, recs, hub, source, types_hub=None, prune=False):
     t0 = time.time()
     rid = book_id(book)
     rpath = RECEIPTS + rid
     did = {"types": [], "fields": [], "created": [], "updated": [], "attached": 0, "uploaded": 0, "bytes": 0,
-           "unchanged": 0, "theirs": [], "changed_since": [], "deleted_since": []}
+           "unchanged": 0, "theirs": [], "changed_since": [], "deleted_since": [], "stale": [], "pruned": []}
 
     total = sum(len(v[1]) for v in book["files"].values())
     if total > FILES_MAX: raise SystemExit(f"the pictures come to {total // 2**20} MB, over 150 MB: nothing was written")
@@ -972,6 +1140,23 @@ def run(book, recs, hub, source, types_hub=None):
         made[r["path"]] = {"path": r["path"], "id": cur["id"], "updated_at": updated_of(cur), "hash": r["hash"],
                            "wrote": planned, "keys": sorted(r["fields"])}
         state["dirty"] = True; save()
+    # records an earlier import made where this plan has none (a better parse renumbered or renamed its chapters): listed
+    # as stale; with prune, deleted while still exactly what the import wrote and cited by no quote
+    planned = {r["path"] for r in recs}
+    gone = [p for p, m in made.items() if p not in planned and m.get("id") and not m.get("pending")]
+    cited = cited_by_quotes(hub) if prune and gone else set()
+    for p in gone:
+        mine, cur = made[p], hub.get(p)
+        if cur is None:
+            del made[p]; state["dirty"] = True; continue
+        if not prune or p in cited or print_of(cur, mine.get("keys") or []) != mine.get("wrote"):
+            did["stale"].append(p); continue
+        try:
+            hub.req("DELETE", f"/records/{cur['id']}")
+        except RuntimeError as err:
+            if ": 404 " not in str(err): raise
+            hub.req("DELETE", f"/notes/{cur['id']}")  # a 0.8 hub: the note door
+        del made[p]; state["dirty"] = True; did["pruned"].append(p)
     skipped = did["theirs"] + did["changed_since"]
     if sorted(skipped) != sorted(receipt.get("skipped") or []):
         receipt["skipped"] = skipped; state["dirty"] = True
@@ -1069,7 +1254,7 @@ def run_job(a, hub, types_hub=None):
             book = read_epub(path, a.split_depth)
             if a.title: book["title"] = slugless(a.title)
             recs = plan(book)
-            did = run(book, recs, hub, path, types_hub)
+            did = run(book, recs, hub, path, types_hub, getattr(a, "prune", False))
         folder = f"Books/{book['title']}"
         note = (f"{len(recs)} records ({len(book['chapters'])} chapters), {len(book['files'])} pictures."
                 + (f" Left as someone changed them: {', '.join(did['theirs'] + did['changed_since'])[:300]}" if did["theirs"] or did["changed_since"] else ""))
@@ -1135,6 +1320,8 @@ def main():
     ap.add_argument("--by", default="Uni", help="who does it: the summaries' `by`, and the taker a job names")
     ap.add_argument("--split-depth", type=int, help="epub: cut at contents entries down to this depth (default: "
                     "chapters under parts, else the top level)")
+    ap.add_argument("--prune", action="store_true", help="delete records an earlier import made at paths this one no "
+                    "longer writes (a better parse renumbered them), while still exactly what it wrote and cited by no quote")
     ap.add_argument("--dry", action="store_true", help="read and plan only; print what would be written")
     ap.add_argument("--report", help="write the run's report (paths and counts, never the book's text) here")
     a = ap.parse_args()
@@ -1159,7 +1346,7 @@ def main():
         if not a.token_file: ap.error("--token-file is needed to write (or use --dry)")
         token = read_token(a.token_file)
         types_hub = Hub(a.hub, a.vault, read_token(a.types_token_file)) if a.types_token_file else None
-        report["run"] = run(book, recs, Hub(a.hub, a.vault, token), a.source, types_hub)
+        report["run"] = run(book, recs, Hub(a.hub, a.vault, token), a.source, types_hub, a.prune)
     print(json.dumps(report, indent=1, ensure_ascii=False))
     if a.report:
         with open(a.report, "w") as f: json.dump(report, f, indent=1, ensure_ascii=False)
