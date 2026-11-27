@@ -137,9 +137,19 @@ describe("the vault, from inside a frame", () => {
     g.session.handle({ uni: 1, id: "draft", ns: "storage", method: "set", params: { key: "d", value: "half a thought" } });
     g.session.handle({ uni: 1, id: "kept", ns: "saved", method: "put", params: { entries: { a: 1 } } });
     await new Promise((r) => setTimeout(r, 10));
+    expect(gc("draft")).toBeDefined();
+    expect(gc("kept")).toBeDefined();
     expect(gc("draft")).not.toBe("rate_limited");
     expect(gc("kept")).not.toBe("rate_limited");
-    expect(gc("draft")).toBeDefined();
+    // and that budget is 60 of its own: the 61st device call is refused, while the other calls' budget is untouched
+    const h = frame();
+    for (let i = 0; i < 61; i++) h.session.handle({ uni: 1, id: `s${i}`, ns: "storage", method: "get", params: { key: "d" } });
+    await new Promise((r) => setTimeout(r, 10));
+    h.session.handle({ uni: 1, id: "theme", ns: "theme", method: "get" });
+    await new Promise((r) => setTimeout(r, 10));
+    const hc = (id: string) => (h.out.find((m) => "id" in m && m.id === id) as { error?: { code: string } } | undefined)?.error?.code;
+    expect(Array.from({ length: 61 }, (_, i) => hc(`s${i}`)).filter((c) => c === "rate_limited")).toHaveLength(1);
+    expect(hc("theme")).toBeUndefined();
   });
   it("refuses an unknown namespace and a malformed message", async () => {
     const f = frame();
