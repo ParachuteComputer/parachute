@@ -133,14 +133,14 @@ describe("the vault, from inside a frame", () => {
     const gc = (id: string) => (g.out.find((m) => "id" in m && m.id === id) as { error?: { code: string } } | undefined)?.error?.code;
     expect(gc("post")).toBe("rate_limited");
     expect(gc("approve")).not.toBe("rate_limited");
-    // what it keeps on the device has its own 60: a busy frame's draft still goes (T-476)
+    // what it keeps on the device itself has its own 60: a busy frame's draft still goes (T-476); the kit's own saved
+    // state stays on the shared 60 (it puts a refused save back in line itself)
     g.session.handle({ uni: 1, id: "draft", ns: "storage", method: "set", params: { key: "d", value: "half a thought" } });
     g.session.handle({ uni: 1, id: "kept", ns: "saved", method: "put", params: { entries: { a: 1 } } });
     await new Promise((r) => setTimeout(r, 10));
     expect(gc("draft")).toBeDefined();
-    expect(gc("kept")).toBeDefined();
     expect(gc("draft")).not.toBe("rate_limited");
-    expect(gc("kept")).not.toBe("rate_limited");
+    expect(gc("kept")).toBe("rate_limited");
     // and that budget is 60 of its own: the 61st device call is refused, while the other calls' budget is untouched
     const h = frame();
     for (let i = 0; i < 61; i++) h.session.handle({ uni: 1, id: `s${i}`, ns: "storage", method: "get", params: { key: "d" } });

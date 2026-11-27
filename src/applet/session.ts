@@ -50,7 +50,7 @@ export function createSession(opts: SessionOptions) {
         return typeof raw.ns === "string" && typeof raw.method === "string" && (TAP_CALLS.has(`${raw.ns}.${raw.method}`)
           || (raw.ns === "services" && raw.method === "publish" && typeof content === "string" && content.length <= LIMITS.maxRequestBytes && isCommandApproval(content)));
       };
-      const onDevice = "uni" in raw && (raw.ns === "storage" || raw.ns === "saved");
+      const onDevice = "uni" in raw && raw.ns === "storage";
       const limited = onDevice ? !device.take(now()) : !requests.take(now()) && !(tapCall() && taps.take(now()));
       const env = parseEnvelope(data);
       const isPfr = !!data && typeof data === "object" && "pfr" in (data as object);
