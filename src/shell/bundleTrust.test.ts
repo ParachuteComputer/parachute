@@ -38,12 +38,12 @@ describe("an unsigned bundle record", () => {
     // Aaron's `uni` bundle has its own Home and Journal: it takes Vault alone
     const vault = uni(["vault"]);
     expect(OFFICIAL_NAMES.filter((n) => offersOwn(vault, n))).toEqual(["vault"]);
-    // what the app writes back (a pin made on the device) keeps the names
+    // what the app writes for it (a copy of the bundle) keeps the names
     expect(recordOf(vault).publishers).toEqual([{ url: PARACHUTE_PUBLISHER, applets: ["vault"] }]);
     expect(OFFICIAL_NAMES.filter((n) => offersOwn(bundleOf(recordOf(vault), "Parachute/Bundles/uni", "01UNI")!, n))).toEqual(["vault"]);
     // a name this build doesn't know is left out; a list that isn't names, or names nothing known, offers none
     expect(OFFICIAL_NAMES.filter((n) => offersOwn(uni(["vault", "prism", "connect"]), n))).toEqual(["vault", "connect"]);
-    for (const bad of [[], "vault", "*", ["*"], [["vault"]], [{ name: "vault" }], null, 6, ["prism"]]) expect(OFFICIAL_NAMES.filter((n) => offersOwn(uni(bad), n))).toEqual([]);
+    for (const bad of [[], "vault", "*", ["*"], [["vault"]], [{ name: "vault" }], null, 6, ["prism"], ["vault", 6], ["vault", null]]) expect(OFFICIAL_NAMES.filter((n) => offersOwn(uni(bad), n))).toEqual([]);
     // none named: all of them, as before
     const all = bundleOf({ contract: 1, id: "uni", name: "Uni", publishers: [{ url: PARACHUTE_PUBLISHER }] }, "Parachute/Bundles/uni", "01UNI")!;
     expect(OFFICIAL_NAMES.filter((n) => offersOwn(all, n))).toEqual([...OFFICIAL_NAMES]);

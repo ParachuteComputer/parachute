@@ -6,10 +6,10 @@ missing, its owner. **Left**: why, the owner and the plan. Two gates: the person
 Uni app kept as the fallback) once no daily row is left without an owner and a plan; the Uni app can **go** once every
 daily row is ready. The full feature list is [PARITY.md](PARITY.md).
 
-**Where it stands (11-27).** The first gate is passed: the person uses Parachute daily and goes back to the Uni app
-only when something breaks here. The second gate (the Uni app can go) waits on the rows below that say part or left,
+**Where it stands (11-27).** The first gate is passed (Aaron, 11-27: "I'm now using the Parachute app pretty much full
+time"); the Uni app stays as the fallback for when something breaks here. The second gate (the Uni app can go) waits on the rows below that say part or left,
 and on a week without the fallback. Brought up to date 11-27 with what merged since 11-22: Vault in the person's own
-bundle and the note links Uni writes (this change), a message that is never lost (#239), mail read as mail (#224,
+bundle and the note links Uni writes (#241; `uni:` links while the hub is out of reach, #221), a message that is never lost (#239), mail read as mail (#224,
 #225), updates installed from inside the app on Android (#173).
 
 **Where the tests run.** `e2e/*.spec.ts` drive the web build in Chromium against real servers; the native shell (the

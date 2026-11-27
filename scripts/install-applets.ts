@@ -57,7 +57,8 @@ function args(argv: string[]): Args {
         const names = v === "none" ? [] : v.split(",").filter(Boolean);
         const unknown = names.filter((n) => !OFFICIAL_NAMES.includes(n));
         if (unknown.length || (v !== "none" && !names.length)) throw new Error(`--parachute is all, none, or names from ${OFFICIAL_NAMES.join(", ")}${unknown.length ? ` (not ${unknown.join(", ")})` : ""}`);
-        a.parachute = [...new Set([...(Array.isArray(a.parachute) ? a.parachute : []), ...names])];
+        // names given twice add up; `none` starts over
+        a.parachute = v === "none" ? [] : [...new Set([...(Array.isArray(a.parachute) ? a.parachute : []), ...names])];
       }
     }
     else throw new Error(`unknown ${k}`);

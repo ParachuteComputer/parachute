@@ -97,6 +97,7 @@ import { chosenFiles } from "../applet/upload";
 import { takeMark } from "../open/mark";
 import { chooseStart, startChosenHere, takeStart } from "../shell/start";
 import { barNow, barOwnIds, pinApplet, settingsReadNow, useSettings } from "../shell/homeSettings";
+import { offersOwn } from "../shell/bundles";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
@@ -751,8 +752,10 @@ export default function AppletScreen() {
   const back = (nav: Parameters<typeof backOrLauncher>[0]) => { if (!backToApplet()) backOrLauncher(nav); };
   const plainNote = note ? <Link to={`${noteHref(rec.key, note.id)}?with=vault`}>Open {titleOf(note)} in the vault view</Link> : null;
   const theirsLabel = notMine ? ` · ${rec.vault}'s` : "";
-  // (none on a bar someone else offers, nor for one of Parachute's own the bundle places on the bar itself)
-  const canPin = !!pinVault && !bundleHere.live && !(pinVault === homeVault()?.key && barOwnIds(barHere.entries, bundleHere.look).includes(pinId));
+  // (none on a bar someone else offers, nor for one of Parachute's own the bundle places on the bar itself, or doesn't
+  // offer: the bar wouldn't show it)
+  const ownHere = officialOf(pinId);
+  const canPin = !!pinVault && !bundleHere.live && !(pinVault === homeVault()?.key && barOwnIds(barHere.entries, bundleHere.look).includes(pinId)) && !(ownHere && !offersOwn(bundleHere, ownHere));
   const pinName = !canPin ? null : entry ? name : loaded.state === "newer" ? loaded.entry.manifest.name : null;
   const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : loaded.state === "newer" ? `${loaded.entry.manifest.glyph} ${loaded.entry.manifest.name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu}>
     {pinName && <PinButton name={pinName} pinned={pinnedHere} busy={pinBusy} onToggle={togglePin} />}

@@ -74,7 +74,8 @@ export const Note = memo(function Note({ id, body, path, tags, fields, onLink, f
       let out = "", at = 0;
       for (const f of findNoteRefs(text)) {
         // not inside a link's label (`[see uni:…](…)`): that link stands as written
-        if (f.ref.kind !== "short" || !leads.includes(f.raw) || count(text.slice(0, f.start), "[") > count(text.slice(0, f.start), "]")) continue;
+        // nor a link's own target (`[the note](/surface/…/n/<id>)`): the tap follows it
+        if (f.ref.kind !== "short" || !leads.includes(f.raw) || count(text.slice(0, f.start), "[") > count(text.slice(0, f.start), "]") || text.slice(0, f.start).endsWith("](")) continue;
         out += text.slice(at, f.start) + `[${f.raw}](${SHORT}${encodeURIComponent(f.raw)})`;
         at = f.end;
       }

@@ -77,7 +77,7 @@ more. Until then, a `publishers` entry other than Parachute's is read as nothing
 ["vault"] }` offers Vault and none of the others (not listed, not pinnable, not Simplified's home). It is for a bundle
 with its own Home and Journal, as Aaron's `uni` is: two applets called Journal in one list is one too many. Naming only
 narrows: a list that isn't names offers none, and a name the app doesn't know is left out (`bundleTrust.test.ts`). A
-build from before 11-28 doesn't read `applets` and offers all six. `scripts/install-applets.ts --parachute vault`
+build from before this (#241) doesn't read `applets` and offers all six. `scripts/install-applets.ts --parachute vault`
 writes it (`--parachute all` for every one, `none` to take the entry out).
 
 ## What it holds against

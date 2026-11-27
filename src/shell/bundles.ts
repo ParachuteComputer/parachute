@@ -154,7 +154,7 @@ export function bundleOf(raw: unknown, path: string | null, noteId: string | nul
 
 /** What a record's `publishers` says of Parachute's own applets: all of them, the ones its entry names (`applets`), or
  *  none. Naming only narrows, so it is read strictly: a list that isn't names is none, and a name this build doesn't
- *  know (a newer app's applet) is left out. A build from before 11-28 doesn't read `applets` and offers all six. */
+ *  know (a newer app's applet) is left out. A build from before this (#241) doesn't read `applets` and offers all six. */
 function ownOf(publishers: unknown, d: Bundle | null): { parachute: boolean; own: OfficialName[] | null } {
   if (!Array.isArray(publishers)) return { parachute: d?.parachute ?? false, own: d?.own ?? null };
   const entry = publishers.slice(0, 20).find((p) => plain(p) && p.url === PARACHUTE_PUBLISHER) as Record<string, unknown> | undefined;

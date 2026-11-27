@@ -34,8 +34,10 @@ test("install-applets --parachute vault: the person's own bundle offers Vault al
   const [rec] = await tagged("parachute-app");
   expect(rec.metadata.app.publishers).toEqual([{ url: PUBLISHER, applets: ["vault"] }]);
   expect(install(...uni, "--apply")).toContain("bundle uni: unchanged");
-  // more names add to the record's, in the app's order; `none` takes Parachute's own out again
+  // the names given replace the record's (given twice, they add up, in the app's order); `none` starts over, and alone
+  // takes Parachute's own out
   expect(install("--bundle", "uni", "--parachute", "connect", "--parachute", "vault", "--apply")).toContain(`"applets":["vault","connect"]`);
+  expect(install("--bundle", "uni", "--parachute", "connect", "--parachute", "none", "--apply")).toContain(`"publishers":[]`);
   expect(install(...uni, "--apply")).toContain(`"applets":["vault"]`);
   expect(() => install("--bundle", "uni", "--parachute", "prism")).toThrow(/--parachute is all, none, or names from notes, journal, capture, vault, connect, home \(not prism\)/);
 
