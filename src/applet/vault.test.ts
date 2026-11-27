@@ -133,6 +133,13 @@ describe("the vault, from inside a frame", () => {
     const gc = (id: string) => (g.out.find((m) => "id" in m && m.id === id) as { error?: { code: string } } | undefined)?.error?.code;
     expect(gc("post")).toBe("rate_limited");
     expect(gc("approve")).not.toBe("rate_limited");
+    // what it keeps on the device has its own 60: a busy frame's draft still goes (T-476)
+    g.session.handle({ uni: 1, id: "draft", ns: "storage", method: "set", params: { key: "d", value: "half a thought" } });
+    g.session.handle({ uni: 1, id: "kept", ns: "saved", method: "put", params: { entries: { a: 1 } } });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(gc("draft")).not.toBe("rate_limited");
+    expect(gc("kept")).not.toBe("rate_limited");
+    expect(gc("draft")).toBeDefined();
   });
   it("refuses an unknown namespace and a malformed message", async () => {
     const f = frame();

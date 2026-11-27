@@ -218,7 +218,8 @@ second applet declaring the same server asks for its own token.
 
 **The frame transport.** Requests stay at 8 KB, but `services.fetch` and `services.upload` may carry bytes (an
 `ArrayBuffer`, at most 25 MB, at most 50 MB in flight per frame) outside that budget; replies carry bytes the same way
-(transferred). The frame's limits stand: 60 requests per 10 s, 8 pending; past the 60, a call only a fresh tap can make (record, pick, save, a link, a card's answer) has 10 of its own, so a room busy with its reads never makes a tap wait until it is stale (T-476). `FRAME_CSP` gains `media-src blob: data:`,
+(transferred). The frame's limits stand: 60 requests per 10 s, 8 pending; past the 60, a call only a fresh tap can make (record, pick, save, a link, a card's answer) has 10 of its own, so a room busy with its reads never makes a tap wait until it is stale; and what a frame keeps on the device
+(`storage.*`, the kit's `saved.*`) has 60 per 10 s of its own, so its reads never starve its drafts (T-476). `FRAME_CSP` gains `media-src blob: data:`,
 so a voice note or a video plays from a `blob:` URL; the self-test checks it plays and that a network `src` doesn't.
 
 **The log.** Rust writes a line for each signature it makes for an applet (relay sign-in, event, NIP-98 request, media

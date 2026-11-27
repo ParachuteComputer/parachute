@@ -39,6 +39,10 @@ export const LIMITS = {
    *  mustn't make a tap on Record or Save wait until the tap has gone stale (T-476). Each is refused at once without a
    *  fresh tap, so these few can't be spent on anything else. */
   maxTapRequests: 10,
+  /** What a frame keeps on this device (`storage.*`, the kit's `saved.*`) has 60 per 10 s of its own: a room busy with
+   *  its relay's reads must not starve its drafts and unsent messages until the kit gives them up (T-476: next refused
+   *  storage.set ten times in one rooms.spec run, and on CI a draft was lost). */
+  maxDeviceRequests: 60,
   /** Most notes a tag or content request reads; each read is charged to the limiter. */
   maxScan: 20,
   maxRecent: 30,

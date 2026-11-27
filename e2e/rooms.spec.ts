@@ -184,6 +184,11 @@ test("Uni's turn in a room: a quick reply, working and Stop, muted, a draft with
   const b = rooms.Beds;
   expect((await bob.publish({ kind: 9, content: `The beds are dug ${stamp}. Shall I order more seed potatoes?`, tags: [["h", b], ["p", alice]] })).ok).toBe(true);
   await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
+  page.on("console", (m) => { if (m.text().startsWith("DBG")) console.log(m.text().slice(0, 300)); });
+  await page.addInitScript(() => {
+    if (window === window.top) { window.addEventListener("message", (e) => { const m = e.data; if (m && m.uni && m.ns) console.log(`DBGSEND ${Date.now() % 100000} ${m.id} ${m.ns}.${m.method} ${m.params?.key ?? ""}`); }); return; }
+    window.addEventListener("message", (e) => { const d = e.data; if (d && d.uni && d.id && ("result" in d || "error" in d)) console.log(`DBGANS ${Date.now() % 100000} ${d.id} ${d.error ? d.error.code : "ok"}`); });
+  });
   const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   const mine = async (text: string) => (await bob.query({ kinds: [9], "#h": [b], authors: [alice], limit: 30 })).filter((e) => e.content === text || e.content.includes(text));
   try {
