@@ -12,7 +12,7 @@ import OpenLink, { LinksIn } from "../links/LinksIn";
 import AppletScreen from "../views/AppletScreen";
 import Settings from "../views/Settings";
 import { gateNow, SelfTestRunner } from "../applet/selftest/run";
-import { officialPath } from "../applet/parachuteSource";
+import { officialPath, SIMPLE_HOME } from "../applet/parachuteSource";
 import { arrived, installTapListener } from "../open/mark";
 import { useVaults } from "../vault/hooks";
 import { listVaults } from "../vault/store";
@@ -22,6 +22,9 @@ import OfficialRoute from "../views/OfficialRoute";
 import NoteEdit from "../views/NoteEdit";
 import Pair from "../key/Pair";
 import { keysHere, useKey } from "../key/key";
+import HostedStart, { AddedVault } from "../views/HostedStart";
+import { hostedNow, readHosted, type Hosted } from "../vault/hosted";
+import { inShell } from "../vault/oauth";
 import BottomBar from "./BottomBar";
 import { keptId, KeptApplets } from "./kept";
 import { atFirstEntry } from "../ui/history";
@@ -97,10 +100,27 @@ function AppletRoute() {
 }
 
 /** The first screen, before any vault: getting a key when the device has none (in the app), else adding a vault. */
+/** The Parachute that serves this page, if one does (vault/hosted.ts): undefined until it has been asked. */
+function useHosted(): Hosted | null | undefined {
+  const [hosted, setHosted] = useState<Hosted | null | undefined>(() => hostedNow() ?? (inShell() ? null : undefined));
+  useEffect(() => { let on = true; void readHosted().then((h) => { if (on) setHosted(h); }); return () => { on = false; }; }, []);
+  return hosted;
+}
+
 function FirstRun() {
   const key = useKey();
-  if (key === undefined) return null;
-  return keysHere() && key === null ? <KeyStart first /> : <AddParachute first />;
+  const hosted = useHosted();
+  if (key === undefined || hosted === undefined) return null;
+  // a page Parachute Cloud serves: sign in there, nothing to type (another hub's own page still asks whose it is)
+  if (hosted?.cloud) return <HostedStart hosted={hosted} />;
+  return keysHere() && key === null ? <KeyStart first /> : <AddParachute first hub={hosted?.hub} />;
+}
+
+/** `/?add=<a vault's address>` from the Parachute that serves this page (its console, its welcome mail). */
+function HostedLinks() {
+  const hosted = useHosted();
+  const { pathname, search } = useLocation();
+  return hosted && pathname === "/" && search.includes("add=") ? <AddedVault hosted={hosted} /> : null;
 }
 
 /** How long after a start its decision may be made again, when the settings the vault answers differ from the copy. */
@@ -180,11 +200,12 @@ function ShellRoutes() {
   const shell = /^\/(add|accept|oauth\/callback|settings|open-link|key|key\/pair|connect|capture|journal|vault)$/.test(location.pathname) || /^\/v\/[^/]+\/a\/[^/]+$/.test(location.pathname) || isEditor(location.pathname)
     || (location.pathname === "/" && !vaults.length);
   if (!decided) return null;
-  // Parachute Simplified's home is Parachute's own Notes (docs/design/PARACHUTE-SOURCE.md); where the bundle leaves
-  // Parachute's own out, the frame's Notes stays (and `/?with=vault`, the way back if Notes won't run)
+  // Parachute Simplified's home is Parachute's own Vault, which opens on the vault's notes
+  // (docs/design/PARACHUTE-SOURCE.md); where the bundle leaves it out, the frame's Notes stays (and `/?with=vault`, the
+  // way back if Vault won't run). An address that asks something of the host (`?add=`: HostedLinks) is left to it.
   const homeKey = homeVault(vaults)?.key;
-  if (location.pathname === "/" && !location.search.includes("with=vault") && !shell && homeKey && openBundleNow().look === "notes" && offersOwn(openBundleNow(), "notes"))
-    return <Navigate to={officialPath(homeKey, "notes")} replace />;
+  if (location.pathname === "/" && !location.search.includes("with=vault") && !location.search.includes("add=") && !shell && homeKey && openBundleNow().look === "notes" && offersOwn(openBundleNow(), SIMPLE_HOME))
+    return <Navigate to={officialPath(homeKey, SIMPLE_HOME)} replace />;
   const bar = withBar(location.pathname, shell) && vaults.length > 0;
   const own = keptId(location) !== null;
   return (
@@ -225,6 +246,7 @@ export function AppRoutes() {
       <ThemeWatch />
       <SelfTestRunner />
       <LinksIn />
+      <HostedLinks />
       <ShellRoutes />
       <WriteAsk />
       <Security />

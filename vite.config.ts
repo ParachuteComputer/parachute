@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { build, defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { hostedManifest } from "./src/shell/hostedPolicy";
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string };
 // Which build this is (src/shell/updates.ts): its commit and that commit's time, which only grows along next, so a feed's
@@ -16,6 +17,15 @@ const BUILD = { at: Number(process.env.PARACHUTE_BUILD_AT || git("log", "-1", "-
 const csp = JSON.parse(readFileSync(new URL("./src-tauri/tauri.conf.json", import.meta.url), "utf8")).app?.security?.csp as Record<string, string> | string | null | undefined;
 const cspHeader = typeof csp === "string" ? csp : csp ? Object.entries(csp).map(([k, v]) => `${k} ${v}`).join("; ") : null;
 const headers = cspHeader ? { "Content-Security-Policy": cspHeader } : undefined;
+
+// What the build asks of a web host that serves it (docs/HOSTING.md): dist/hosted.json, its policy from the same source.
+function hosted(): Plugin {
+  return { name: "parachute-hosted", apply: "build", generateBundle() {
+    if (csp && typeof csp === "object") this.emitFile({ type: "asset", fileName: "hosted.json", source: `${JSON.stringify(hostedManifest(csp), null, 2)}\n` });
+    // which build this is, for a host's own checks (Cloud's release job reads the version here)
+    this.emitFile({ type: "asset", fileName: ".parachute/info", source: `${JSON.stringify({ name: "parachute", version: pkg.version, commit: BUILD.commit })}\n` });
+  } };
+}
 
 // The note renderer lives in this repo (packages/surface-render, copied from parachute-surface; AUDIT.md), under its
 // published name, so its imports read the same. Every build below (the app, the frame, the kits) resolves it here.
@@ -88,7 +98,7 @@ function frameKit(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), iifeKit("virtual:vault-client-kit", "./src/applet/kits/vaultClientEntry.ts", "__UniVC"), iifeKit("virtual:react-kit", "./src/applet/kits/reactEntry.ts", "__ParachuteReact"), iifeKit("virtual:react-note-kit", "./src/applet/kits/reactNoteEntry.ts", "__ParachuteReactNote"), frameKit()],
+  plugins: [react(), iifeKit("virtual:vault-client-kit", "./src/applet/kits/vaultClientEntry.ts", "__UniVC"), iifeKit("virtual:react-kit", "./src/applet/kits/reactEntry.ts", "__ParachuteReact"), iifeKit("virtual:react-note-kit", "./src/applet/kits/reactNoteEntry.ts", "__ParachuteReactNote"), frameKit(), hosted()],
   resolve: { alias },
   define: { __APP_VERSION__: JSON.stringify(pkg.version), __BUILD__: JSON.stringify(BUILD) },
   clearScreen: false,

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { beginSignIn, cloudClientName, SHELL_RETURN, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
+import { forgetHosted, readHosted } from "./hosted";
 
 const PENDING = "parachute.oauth.pending.v1";
 const P = { hub: "https://hub.example", issuer: "https://hub.example", accountMcp: "https://hub.example/account/mcp", vaultTemplate: "https://hub.example/vault/{name}" };
@@ -157,6 +158,32 @@ describe("beginSignIn", () => {
     await beginSignIn(begin({ step: "list", fresh: true }), discovery(META, reg));
     const next = new URL(await beginSignIn(begin({ vault: "recipes" }), discovery(META, reg)));
     expect(next.searchParams.get("client_id")).toBe("client-1");
+  });
+  it("on a page Parachute Cloud itself serves, the app is Parachute: Cloud keeps that name for its own addresses (T-476)", async () => {
+    const names: string[] = [];
+    const cloud = { ...P, hub: "https://cloud.example", issuer: "https://cloud.example", door: "cloud" as const };
+    const meta = { ...META, issuer: "https://cloud.example", authorization_endpoint: "https://cloud.example/oauth/authorize", token_endpoint: "https://cloud.example/oauth/token", registration_endpoint: "https://cloud.example/oauth/register" };
+    // a Cloud that takes the name from its own pages' return address
+    const own = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/.well-known/oauth-authorization-server")) return new Response(JSON.stringify(meta));
+      if (url.endsWith("/oauth/register")) { names.push(String(JSON.parse(String(init?.body ?? "{}")).client_name ?? "")); return new Response(JSON.stringify({ client_id: `client-${names.length}` }), { status: 201 }); }
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch;
+    forgetHosted();
+    await readHosted((async () => new Response(JSON.stringify({ issuer: "https://cloud.example", door: "cloud" }), { headers: { "content-type": "application/json" } })) as unknown as typeof fetch);
+    try {
+      await beginSignIn({ parachute: cloud, step: "list", how: "page" }, own);
+      expect(names).toEqual(["Parachute"]);
+      // a Cloud that doesn't count this page as its own refuses the name: the other name, as from any app outside it
+      localStorage.clear(); names.length = 0;
+      const url = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(meta, names)));
+      expect(names).toEqual(["Parachute", "Vault app on Linux"]);
+      expect(url.searchParams.get("client_id")).toBe("client-2");
+      // and that registration is the one kept: the next step registers nothing
+      await beginSignIn({ parachute: cloud, step: "open", vault: "home", how: "page" }, cloudLike(meta, names));
+      expect(names).toEqual(["Parachute", "Vault app on Linux"]);
+    } finally { forgetHosted(); }
   });
   it("on Parachute Cloud, registers under a name Cloud takes from an app outside it (it keeps \"Parachute\" for its own pages)", async () => {
     const names: string[] = [];

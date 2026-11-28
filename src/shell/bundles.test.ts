@@ -35,7 +35,7 @@ describe("the bundle record", () => {
     expect(bundleOf({ contract: 1, id: "mine", name: "Mine", everywhere: true }, "Parachute/Bundles/mine", "n")!.sources).toEqual([{ hub: "*", vault: "*", applet: "*" }]);
     for (const raw of DEFAULT_BUNDLES) expect(bundleOf(raw, null, null), String(raw.id)).not.toBeNull();
     // what makes Simple Simple is its record: Notes as home, Capture and Connect on its bar, every applet offered
-    expect(def("simple")).toMatchObject({ look: "notes", sources: [{ hub: "*", vault: "*", applet: "*" }], bar: null, base: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { shipped: "vault" }, { screen: "connect" }] });
+    expect(def("simple")).toMatchObject({ look: "notes", sources: [{ hub: "*", vault: "*", applet: "*" }], bar: null, base: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { screen: "connect" }] });
     expect(def("everything")).toMatchObject({ look: "launcher", base: [] });
   });
   it("an older build's Simplified record (sources: [], no everywhere) still offers every applet, as its Notes look did", () => {
@@ -75,7 +75,15 @@ describe("the bar and home an app gives", async () => {
   const S = { bar: [{ vault: "home", applet: "Applets/Mail" }], start: { vault: "home", applet: "Applets/Rooms" }, hubs: [], services: [], bundle: null as string | null };
   it("no record: the default's start of a bar, then the settings note's pins and home (read until 2026-12-20)", () => {
     expect(effective(S, bundlesFrom([]))).toMatchObject({ bar: S.bar, start: S.start });
-    expect(effective({ ...S, bundle: "simple" }, bundlesFrom([]))).toMatchObject({ bar: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { shipped: "vault" }, { screen: "connect" }, ...S.bar], start: S.start });
+    expect(effective({ ...S, bundle: "simple" }, bundlesFrom([]))).toMatchObject({ bar: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { screen: "connect" }, ...S.bar], start: S.start });
+    // Simplified's home is Vault now (T-476): a bar written when it was Notes names Vault beside the home, and shows it once
+    const older = bundleOf({ contract: 1, id: "simple", bar: [{ screen: "home" }, { shipped: "journal" }, { shipped: "vault" }, { screen: "connect" }] }, "Parachute/Bundles/simple", "01S")!;
+    expect(effective({ ...S, bundle: "simple" }, bundlesFrom([older])).bar).toEqual([{ screen: "home" }, { shipped: "journal" }, { screen: "connect" }]);
+    // a bar with no home place keeps Vault where it was put; so does a bundle that isn't Simplified's look
+    const noHome = bundleOf({ contract: 1, id: "simple", bar: [{ shipped: "vault" }, { shipped: "journal" }] }, "Parachute/Bundles/simple", "01S")!;
+    expect(effective({ ...S, bundle: "simple" }, bundlesFrom([noHome])).bar).toEqual([{ shipped: "vault" }, { shipped: "journal" }]);
+    const list = bundleOf({ contract: 1, id: "everything", bar: [{ screen: "home" }, { shipped: "vault" }] }, "Parachute/Bundles/everything", "01E")!;
+    expect(effective({ ...S, bundle: "everything" }, bundlesFrom([list])).bar).toEqual([{ screen: "home" }, { shipped: "vault" }]);
   });
   it("a record's own bar, and the settings note's home when it says none; an explicit null home is none", () => {
     const only = bundleOf({ contract: 1, id: "lab", name: "Lab", sources: [], bar: [{ vault: "home", applet: "Applets/Ideas" }] }, "Parachute/Bundles/lab", "1")!;
@@ -95,17 +103,17 @@ describe("the bar and home an app gives", async () => {
 
 describe("what a bundle puts on the bar", () => {
   it("names its places in order, its home screen where it names none, Settings never", () => {
-    expect(barNames(def("simple"))).toEqual(["Notes", "Journal", "Capture", "Vault", "Connect"]);
+    expect(barNames(def("simple"))).toEqual(["Vault", "Journal", "Capture", "Connect"]);
     expect(barNames(def("everything"))).toEqual(["Applets"]);
     expect(barNames(uni)).toEqual(["Journal", "Applets"]);
     const pinned = bundleOf({ contract: 1, id: "desk", name: "Desk", look: "notes", bar: [{ shipped: "capture" }, { vault: "home", applet: "Applets/Rooms.tsx" }, { screen: "home" }] }, "Parachute/Bundles/desk", "d")!;
-    expect(barNames(pinned)).toEqual(["Capture", "Rooms", "Notes"]);
+    expect(barNames(pinned)).toEqual(["Capture", "Rooms", "Vault"]);
   });
   it("a bundle with no bar of its own: its default's places, then the person's pins, by the name they are listed with", () => {
     const pins = [{ vault: "letters", applet: "Applets/Post.html" }, { vault: "home", applet: "Applets/Rooms" }];
     const named = (p: { applet: string }) => (p.applet === "Applets/Post.html" ? "Letters" : null);
     expect(barNames(def("everything"), pins, named)).toEqual(["Letters", "Rooms", "Applets"]);
-    expect(barNames(def("simple"), pins)).toEqual(["Notes", "Journal", "Capture", "Vault", "Connect", "Post", "Rooms"]);
+    expect(barNames(def("simple"), pins)).toEqual(["Vault", "Journal", "Capture", "Connect", "Post", "Rooms"]);
     // a bar of its own: the pins aren't on it
     expect(barNames(uni, pins)).toEqual(["Journal", "Applets"]);
   });

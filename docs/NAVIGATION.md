@@ -21,15 +21,15 @@ opens it; Back goes back; a chat keeps its box to write in pinned at the foot. N
 Three layers, from what no record can touch to what is most yours.
 
 1. **What every Parachute has.** The app draws these itself, under any bundle or frame: **Settings**, the bar's last
-   place wherever the bar shows; a way home on the bar (**Applets**, the list of the bundle's applets, or **Notes** in a bundle
+   place wherever the bar shows; a way home on the bar (**Applets**, the list of the bundle's applets, or **Vault** in a bundle
    that looks like Parachute Simplified; added at the end when the bundle's bar names none); the top bar's **⋯** on the app's own screens (Settings, or a running
    applet's menu, which ends with Settings); the line that says a newer Parachute is ready; and every card and approval
    (an applet's access, a frame, the self-test). No record removes them (a bundle's bar may place its way home itself).
 2. **The bar.** The rest of the bar is the open bundle's `bar`: its places in its order, or none (`"bar": []` leaves
    only the app's own). A frame of your own ([CHANGE-YOUR-FRAME.md](CHANGE-YOUR-FRAME.md)) replaces the list, a vault
    and a note, never the bar or what every Parachute has.
-3. **The first screen.** What the app opens on: the bundle's `start`, one of your applets, or the list (`null`; Notes
-   for a bundle that looks like Parachute Simplified). Home is one choice; Rooms is another. You change it in Settings →
+3. **The first screen.** What the app opens on: the bundle's `start`, one of your applets, or the list (`null`; Vault, at your
+   notes, for a bundle that looks like Parachute Simplified). Home is one choice; Rooms is another. You change it in Settings →
    **Your bundle** → **Opens on** (the list, or one of your applets pinned on the bar), or by long-pressing a place: **Open on start**.
 
 ## The four rules
@@ -81,7 +81,7 @@ Any applet in a vault of yours can be your **home**, the screen the app opens on
 [OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)): it opens when the app starts. With no home, the app opens on the list. While the home vault holds nothing of the person's (only the hub's guide notes
 and Parachute's own records), the list starts with **Start here**: *Bring in what you have* (Vault: Import from Notion,
 or a starter pack) and *Connect your AI* (Connect). A record of theirs, or a pack they added, and it is gone (read across the vault, past Parachute's own records and the guide notes, not from the 200 newest alone; a vault with over 2,000 of those and none of theirs shows no Start here). It is read before the list draws (and kept per vault), so
-it never pushes the list down. Parachute Simplified opens on Notes, not the list, so it has no Start here. An applet opens on start by itself only when two things hold on this device: you allowed its code
+it never pushes the list down. Parachute Simplified opens on Vault at your notes, not the list, so it has no Start here. An applet opens on start by itself only when two things hold on this device: you allowed its code
 (its card), and you chose it as home here (the long-press, or the Open button the app shows the first time). If the
 choice came from somewhere else (your agent wrote it, or a frame of your own set it), the first start shows the
 applet's card or its Open button, and your tap is the choice (also when Allow goes on to your hub's page and back). A
@@ -145,7 +145,7 @@ That is the record as `create-record` takes it (on a hub before 0.9, `create-not
 `vault` is the vault's name (add `"hub": "https://…"` when two hubs hold vaults of the same name). `applet` is the
 applet note's path or id. A place that names an applet this device can't find is left off the bar, not an error.
 
-`bundle` says which bundle a new device opens: `"simple"` (Parachute Simplified: Notes, Journal, Capture, Vault, Connect: [SIMPLE.md](SIMPLE.md)),
+`bundle` says which bundle a new device opens: `"simple"` (Parachute Simplified: Vault, Journal, Capture, Connect: [SIMPLE.md](SIMPLE.md)),
 `"everything"` (every applet, and the bar above), or the id of one of your bundle records (below). Left out,
 everything. A person new to the app on Parachute Cloud gets `"simple"` at their first sign-in; Settings → **Your
 bundle** changes it. Until 2026-12-20 write it under its older name `app` too, with the same id: builds from before
@@ -189,7 +189,7 @@ scripts/migrate-bundles.ts` moves them all once no device of yours runs such a b
   its code changes.
 - **`bar` and `start`** are this bundle's, and live nowhere else. A pin or an Open on start made while this bundle is
   open goes to its record (made the first time). A place on the bar is an applet or one of the app's own: `{"screen":
-  "home"}` (Notes or the list, by `look`), `{"screen": "connect"}`, `{"shipped": "journal"}`, `{"shipped": "capture"}`.
+  "home"}` (Vault at your notes, or the list, by `look`), `{"screen": "connect"}`, `{"shipped": "journal"}`, `{"shipped": "capture"}`.
   When nothing on it leads home, the app adds that one place at the end, so a record can't take the way back away.
 - **`opens`** says which applet opens a kind of note, for every device; `"applet": null` is the plain view. This
   device's own **Always** still wins here.

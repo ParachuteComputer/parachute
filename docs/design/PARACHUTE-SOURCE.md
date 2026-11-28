@@ -98,6 +98,7 @@ writes it (`--parachute all` for every one, `none` to take the entry out).
 | Was in the shell | Now | Goes |
 |---|---|---|
 | Notes (the frame's `NotesHome.tsx`) as Simplified's home | Parachute's Notes applet | now; the frame's stays only at `/?with=vault`, the way back |
+| Parachute's Notes applet as Simplified's home (a list that sent each note to Vault) | Vault, which opens on a vault's notes (T-476, 11-28) | now; Notes stays one of Parachute's own, for bars and records that name it, until 2026-12-20 |
 | Connect (`src/views/Connect.tsx`, its own copy button) | Parachute's Connect applet; `copy` an app word, on a tap | now (deleted) |
 | **Add Capture**, **Add Journal**, **Add Vault**: a write into the home, then a card (`src/applet/shipped.ts`, `src/views/ShippedEntry.tsx`) | Parachute's own, no write, no card | now (deleted); `/capture`, `/journal`, `/vault`, `/connect` lead to the applet |
 | A note opening in the plain note view, Edit in the shell's editor (`NoteEdit.tsx`, Keep mine / Use theirs) | Vault, Edit words (a conflict reads the note again and keeps the words) | now; plain view and editor stay at `?with=vault` |

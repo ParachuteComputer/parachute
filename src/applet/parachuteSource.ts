@@ -41,6 +41,11 @@ export type OfficialName = (typeof OFFICIAL_NAMES)[number];
 export type OfficialRecord = { path: string; extension: "tsx" | "jsx" | "html"; tags: string[]; fields: Record<string, unknown> };
 export type Official = { name: OfficialName; version: number; record: OfficialRecord; body: string; from: "app" | "update" };
 
+/** The applet that is the home of a bundle that looks like Parachute Simplified (`look: "notes"`): Vault, which opens on
+ *  a vault's notes (T-476, 11-28; until then it was Notes, which listed notes and sent each one to Vault to be read).
+ *  Notes stays among Parachute's own for bars and records that name it, until 2026-12-20. */
+export const SIMPLE_HOME: OfficialName = "vault";
+
 const PREFIX = "parachute:";
 /** An official applet's note id in its address: `parachute:<name>`. A hub's note ids are ULIDs, never this. */
 export const officialId = (name: OfficialName) => `${PREFIX}${name}`;

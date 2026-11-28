@@ -16,6 +16,7 @@ import {
 } from "@openparachute/surface-client";
 import { isLoopback } from "./address";
 import { canList, levelIn, LIST_SCOPE, scopeFor, type Level, type Parachute } from "./parachute";
+import { servedBy } from "./hosted";
 
 export const CLIENT_NAME = "Parachute";
 /** Parachute Cloud refuses a name like "Parachute" from an app whose return address isn't one of Cloud's own (its guard
@@ -173,10 +174,21 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   // told apart (an authorization server mix-up); and not where the hub refused it before
   const iss = (meta as { authorization_response_iss_parameter_supported?: unknown }).authorization_response_iss_parameter_supported === true;
   const reserved = !!parachute.appClientId && redirect === SHELL_RETURN && iss && !reservedRefused(parachute.issuer);
-  const as = parachute.door === "cloud" ? cloudClientName() : undefined;
-  let clientId = reserved ? parachute.appClientId! : cachedClient(parachute.issuer, redirect, as);
+  // on Parachute Cloud the app registers under another name (cloudClientName), except where Cloud itself serves this
+  // page (vault/hosted.ts): the return address is then one of Cloud's own, which may keep the name Parachute
+  const own = parachute.door === "cloud" && !inShell() && servedBy(parachute.issuer);
+  let as = parachute.door === "cloud" && !own ? cloudClientName() : undefined;
+  // (a registration kept under the other name, from a Cloud that refused this one, is used as it is)
+  let clientId = reserved ? parachute.appClientId! : cachedClient(parachute.issuer, redirect, as) ?? (own ? cachedClient(parachute.issuer, redirect, cloudClientName()) : null);
   if (!clientId) {
-    clientId = (await registerClient(meta.registration_endpoint, { clientName: as ?? CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
+    try {
+      clientId = (await registerClient(meta.registration_endpoint, { clientName: as ?? CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
+    } catch (e) {
+      // a Cloud that doesn't count this page's address as its own refuses the name: the other name, as anywhere else
+      if (!own || !/reserved/i.test(e instanceof Error ? e.message : String(e))) throw e;
+      as = cloudClientName();
+      clientId = cachedClient(parachute.issuer, redirect, as) ?? (await registerClient(meta.registration_endpoint, { clientName: as, redirectUri: redirect }, fetchImpl)).client_id;
+    }
     cacheClient(parachute.issuer, redirect, clientId, as);
     // the registration an earlier build kept under the plain name goes: it is never used again
     if (as) dropClient(parachute.issuer, redirect);

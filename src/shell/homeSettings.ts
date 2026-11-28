@@ -22,7 +22,7 @@
 //                 if_updated_at; applets can't (their writes are content-only, and they can't tag a note parachute-*).
 //   open on start the shell's rule, in start.ts: never on the record alone.
 import { failureNow, type Failure } from "../vault/failure";
-import { officialFace, officialId, officialOf, officialPath } from "../applet/parachuteSource";
+import { officialFace, officialId, officialOf, officialPath, SIMPLE_HOME } from "../applet/parachuteSource";
 import { useSyncExternalStore } from "react";
 import { appletsNow, refreshApplets, subscribeApplets } from "../applet/useApplets";
 import { plain, stripExt } from "../applet/contract";
@@ -368,7 +368,7 @@ export type Pin = Found & { place: Place };
  *  screen of a bundle that looks like Parachute Simplified): on the bar already, but not pins, so they offer no Pin. */
 export function barOwnIds(entries: readonly (Pin | AppPlace)[], look: string | undefined): string[] {
   return entries.flatMap((e) => ("href" in e ? [] : "shipped" in e ? [officialId(e.shipped)] : e.screen === "connect" ? [officialId("connect")]
-    : look === "notes" ? [officialId("notes")] : []));
+    : look === "notes" ? [officialId(SIMPLE_HOME)] : []));
 }
 /** The bar as this device can show it, in the bundle's order: the app's own places as written, and the pins it can find,
  *  each once; and the home applet, which is on the bar only when it is pinned (the bundle's bar is the bar). `pins`: the
@@ -507,7 +507,10 @@ export function effective(s: Settings, apps: readonly Bundle[]): Settings {
   // a bundle someone else offers: a place that names no hub is on theirs
   const at = (p: Place): Place => (app.hubOf && !p.hub ? { ...p, hub: app.hubOf } : p);
   // the bundle's own places mean its hub; the settings note's pins are the person's, as written
-  const own = (app.bar ?? app.base).map((e) => (isAppPlace(e) ? e : at(e)));
+  // (a bar written when Simplified's home was Notes names Vault beside the home: one place now, the home)
+  const twice = (e: BarEntry) => app.look === "notes" && isAppPlace(e) && "shipped" in e && e.shipped === SIMPLE_HOME;
+  const bar = app.bar ?? app.base;
+  const own = (bar.some((e) => isAppPlace(e) && "screen" in e && e.screen === "home") ? bar.filter((e) => !twice(e)) : bar).map((e) => (isAppPlace(e) ? e : at(e)));
   return { ...s, bar: app.bar ? own : [...own, ...s.bar], start: app.start === undefined ? s.start : app.start && at(app.start) };
 }
 

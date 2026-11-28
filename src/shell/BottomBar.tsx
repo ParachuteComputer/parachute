@@ -14,7 +14,7 @@ import type { AppPlace } from "./bundles";
 import { chooseStart, forgetStart } from "./start";
 import { clearMark } from "../open/mark";
 import { homeVault } from "./frameSource";
-import { officialFace, officialPath, type OfficialName } from "../applet/parachuteSource";
+import { officialFace, officialPath, SIMPLE_HOME, type OfficialName } from "../applet/parachuteSource";
 import { useVaults } from "../vault/hooks";
 import { useBadge } from "../services/signals";
 import { fromTab } from "./placeMotion";
@@ -85,9 +85,10 @@ function AppPlaceLink({ place, notes, pathname }: { place: AppPlace; notes: bool
   if ("shipped" in place) return <ShippedPlace which={place.shipped} pathname={pathname} />;
   // Connect is Parachute's own applet now (docs/design/PARACHUTE-SOURCE.md)
   if (place.screen === "connect") return <ShippedPlace which="connect" pathname={pathname} />;
-  // the home: "/", which opens Parachute's own Notes in Parachute Simplified (shell/App.tsx), or the list
-  const [glyph, name] = notes ? ["¶", "Notes"] : ["⁂", "Applets"];
-  const at = pathname === "/" || (notes && !!home && pathname === officialPath(home.key, "notes"));
+  // the home: "/", which opens Parachute's own Vault in Parachute Simplified (shell/App.tsx), or the list
+  const face = officialFace(SIMPLE_HOME);
+  const [glyph, name] = notes ? [`${face.glyph}\uFE0E`, face.name] : ["⁂", "Applets"];
+  const at = pathname === "/" || (notes && !!home && (pathname === officialPath(home.key, SIMPLE_HOME) || pathname === `/${SIMPLE_HOME}`));
   return <Link className="home-bar-place" to="/" aria-current={at ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{glyph}</span>{name}</Link>;
 }
 function ShippedPlace({ which, pathname }: { which: OfficialName; pathname: string }) {

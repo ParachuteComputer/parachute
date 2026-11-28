@@ -20,7 +20,7 @@ import { plain, stripExt } from "../applet/contract";
 import { APP_LEVEL, tooNew } from "../applet/level";
 import { askedOf, stricterAsked, type Asked } from "./levelRules";
 import defaults from "./default-bundles.json";
-import { OFFICIAL_NAMES, officialFace, PARACHUTE_PUBLISHER, type OfficialName } from "../applet/parachuteSource";
+import { OFFICIAL_NAMES, officialFace, PARACHUTE_PUBLISHER, SIMPLE_HOME, type OfficialName } from "../applet/parachuteSource";
 
 export const BUNDLE_TAG = "parachute-bundle";
 export const BUNDLE_FOLDER = "Parachute/Bundles/";
@@ -240,7 +240,7 @@ export function followed(own: Bundle, raw: unknown, theirs: Record<string, unkno
  *  person's pins (`pins`, the settings note's); each applet by `nameOf` (its name as listed) or its note's path; and
  *  its home screen (Notes or Applets) where it names none. Settings, always last on every bar, isn't said. */
 export function barNames(b: Bundle, pins: readonly BarEntry[] = [], nameOf: (p: Place) => string | null = () => null): string[] {
-  const home = b.look === "notes" ? "Notes" : "Applets";
+  const home = b.look === "notes" ? officialFace(SIMPLE_HOME).name : "Applets";
   const entries = b.bar ?? [...b.base, ...pins];
   const names = entries.map((e) => (!isAppPlace(e) ? nameOf(e) ?? stripExt(e.applet.split("/").pop() ?? e.applet)
     : "shipped" in e ? officialFace(e.shipped).name : e.screen === "connect" ? officialFace("connect").name : home));

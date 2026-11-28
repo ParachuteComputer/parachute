@@ -80,8 +80,9 @@ test("on Parachute Simplified, the bar's own places are listed and not offered a
   await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "simple" } } });
   await page.goto("/settings");
   const onBar = page.getByRole("group", { name: "On the bar" });
-  await expect(onBar.getByRole("list", { name: "On the bar now" }).getByRole("listitem")).toHaveText([/Notes/, /Journal/, /Capture/, /Vault/, /Connect/]);
+  // Vault is the home (it opens on your notes): once on the bar, first
+  await expect(onBar.getByRole("list", { name: "On the bar now" }).getByRole("listitem")).toHaveText([/Vault/, /Journal/, /Capture/, /Connect/]);
   await onBar.getByText("Pin another applet").click();
-  for (const name of ["Notes", "Journal", "Capture", "Vault", "Connect"]) await expect(onBar.getByRole("button", { name: `Pin ${name}` })).toHaveCount(0);
+  for (const name of ["Journal", "Capture", "Vault", "Connect"]) await expect(onBar.getByRole("button", { name: `Pin ${name}` })).toHaveCount(0);
   await expect(onBar.getByRole("button", { name: "Pin Home" })).toBeVisible();
 });
