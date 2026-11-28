@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { beginSignIn, cloudClientName, SHELL_RETURN, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
+import { beginSignIn, cloudClientName, cloudOwnName, SHELL_RETURN, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
+import { forgetHosted, readHosted } from "./hosted";
 
 const PENDING = "parachute.oauth.pending.v1";
 const P = { hub: "https://hub.example", issuer: "https://hub.example", accountMcp: "https://hub.example/account/mcp", vaultTemplate: "https://hub.example/vault/{name}" };
@@ -157,6 +158,39 @@ describe("beginSignIn", () => {
     await beginSignIn(begin({ step: "list", fresh: true }), discovery(META, reg));
     const next = new URL(await beginSignIn(begin({ vault: "recipes" }), discovery(META, reg)));
     expect(next.searchParams.get("client_id")).toBe("client-1");
+  });
+  it("on a page Parachute Cloud itself serves, the app is Parachute: Cloud keeps that name for its own addresses (T-476)", async () => {
+    const names: string[] = [];
+    const cloud = { ...P, hub: "https://cloud.example", issuer: "https://cloud.example", door: "cloud" as const };
+    const meta = { ...META, issuer: "https://cloud.example", authorization_endpoint: "https://cloud.example/oauth/authorize", token_endpoint: "https://cloud.example/oauth/token", registration_endpoint: "https://cloud.example/oauth/register" };
+    // a Cloud that takes the name from its own pages' return address
+    const own = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/.well-known/oauth-authorization-server")) return new Response(JSON.stringify(meta));
+      if (url.endsWith("/oauth/register")) { names.push(String(JSON.parse(String(init?.body ?? "{}")).client_name ?? "")); return new Response(JSON.stringify({ client_id: `client-${names.length}` }), { status: 201 }); }
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch;
+    forgetHosted();
+    await readHosted((async () => new Response(JSON.stringify({ issuer: "https://cloud.example", door: "cloud" }), { headers: { "content-type": "application/json" } })) as unknown as typeof fetch);
+    try {
+      await beginSignIn({ parachute: cloud, step: "list", how: "page" }, own);
+      // with the browser and the kind of device: every browser returns to the same address there, and Cloud ends an
+      // earlier sign-in of the same name (a phone's browser would sign the laptop's out)
+      expect(names).toEqual([cloudOwnName()]);
+      expect(names[0]).toMatch(/^Parachute( in \w+)?( on [\w ]+)?$/);
+      expect(cloudOwnName("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15")).toBe("Parachute in Safari on a Mac");
+      expect(cloudOwnName("Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36")).toBe("Parachute in Chrome on Android");
+      expect(cloudOwnName("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0")).toBe("Parachute in Firefox on Windows");
+      expect(cloudOwnName("")).toBe("Parachute");
+      // a Cloud that doesn't count this page as its own refuses the name: the other name, as from any app outside it
+      localStorage.clear(); names.length = 0;
+      const url = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(meta, names)));
+      expect(names).toEqual([cloudOwnName(), "Vault app on Linux"]);
+      expect(url.searchParams.get("client_id")).toBe("client-2");
+      // and that registration is the one kept: the next step registers nothing
+      await beginSignIn({ parachute: cloud, step: "open", vault: "home", how: "page" }, cloudLike(meta, names));
+      expect(names).toEqual([cloudOwnName(), "Vault app on Linux"]);
+    } finally { forgetHosted(); }
   });
   it("on Parachute Cloud, registers under a name Cloud takes from an app outside it (it keeps \"Parachute\" for its own pages)", async () => {
     const names: string[] = [];

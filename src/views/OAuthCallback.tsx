@@ -8,6 +8,7 @@ import PickVaults from "./PickVaults";
 import { afterSignIn, listWaiting } from "../shell/parachutes";
 import { homeVault } from "../shell/frameSource";
 import { listVaults } from "../vault/store";
+import { hostedNow } from "../vault/hosted";
 import { markTap } from "../open/mark";
 
 /** Where the hub sends the person back: after a sign-in's listing, on to the consent for one vault (or a pick first);
@@ -30,7 +31,8 @@ export default function OAuthCallback() {
     once.current = true;
     const code = params.get("code"), state = params.get("state"), denied = params.get("error");
     // where the ask came from: the way back after a no, too
-    const from = peekPending(state)?.back ?? null;
+    // (with no vault held there is nowhere inside to go back to: the first screen)
+    const from = listVaults().length ? peekPending(state)?.back ?? null : null;
     setBack(from);
     if (denied) {
       dropPending();
@@ -65,7 +67,7 @@ export default function OAuthCallback() {
           <a className="primary" href={approve}>Approve on your hub</a>
         </> : error ? <>
           <p className="error" role="alert">{error}</p>
-          {back ? <Link to={back}>Go back</Link> : listVaults().length ? <Link to="/">Open your applets</Link> : <Link to="/add">Try again</Link>}
+          {back ? <Link to={back}>Go back</Link> : listVaults().length ? <Link to="/">Open your applets</Link> : <Link to={hostedNow()?.cloud ? "/" : "/add"}>Try again</Link>}
         </> : <p>{saying}</p>}
       </div>}
     </main>

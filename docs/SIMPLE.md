@@ -8,19 +8,18 @@ is the same Parachute app with a smaller set of screens, and Settings switches b
 come with the app, run with no card and write nothing into a vault to be added. It leaves out **Rooms** and approval
 cards (they need a relay, a key and an agent), **Mail** (a mail gateway that checks a key's signature; a Cloud account
 has neither), the agent's applets (accounts, areas), Matrix, and the key and pairing screens. An applet the person or
-their AI writes into their home shows on Notes under **Your applets**, where its card asks.
+their AI writes into their home shows in Vault behind **Applets** (a fourth small button, once there is one), where its card asks.
 
 ## What a person sees
 
 | | Where | What it does |
 |---|---|---|
-| **Notes** | the home (`/`) | Every vault's newest notes in one list, a search across all of them, the vaults as tabs, **New note** (its first line names it), and the applets in the home. A note opens where notes open: in Vault (Parachute's own applets claim no notes), or an applet of the person's that claims it. Each vault the sign-in didn't read is a line in Settings, not here. |
+| **Vault** | the home (`/`) | Parachute's own viewer ([VAULT.md](VAULT.md)), opening on the home vault's notes as a notes app does: newest first with their first words, a search, **New note** (one tap; kept as you write; its first line names it), a tap to read a note and a tap in its words to write. One step away: types and tables, Changes (what your AI changed, with **Put it back**), Sharing, and the applets in the vault. With more vaults ticked for it, **Your vaults** and a search across them come first. Each vault the sign-in didn't read is a line in Settings, not here. (Until 11-28 the home was a separate applet, Notes, which listed notes and sent each to Vault to be read: one list now.) |
 | **Journal** | the bar | The Uni app's Journal: a line a day or many, written or said, kept by day in `Journal/` of the home vault, or of the vault you pick for it (*Journal keeps its notes in kitchen · Change*, [ACCESS.md](ACCESS.md) proposal 5). |
 | **Capture** | the bar | Write a line, or **Say it** (the app's own recorder): it lands in `Inbox/` of the home vault (or the vault you pick for it) as a note of its own, and a voice note gets its words from the hub's transcription. |
-| **Vault** | the bar | Parachute's own viewer ([VAULT.md](VAULT.md)): a vault's notes first (a list, a tap to read, a tap in the words to write, **New note**), and one step away its types and counts, a type's records as a table, a record's fields (changed where they stand), links and history, and Changes: what your AI changed, with **Put it back**. |
 | **Connect** | the bar | The hub's one address for an AI (`https://…/mcp`: every vault you give it there) with **Copy**, how to add it to Claude and ChatGPT, what to ask it for next (an applet, with the guide's address, **Copy**), and each vault's own address under **Just one vault**. A hub without one (older, or Parachute Cloud today) shows each vault's own address. |
 
-Each is one of Parachute's own applets (`applets/notes`, `journal`, `capture`, `vault`, `connect`), at
+Each is one of Parachute's own applets (`applets/vault`, `journal`, `capture`, `connect`), at
 `/v/<home>/a/parachute:<name>`. Settings is the bar's last place on each screen (and ⋯ at the top); it has **Your bundle: Parachute Simplified / Everything**,
 and, behind one line that counts them, each vault the sign-in didn't read (**Open letters**).
 
@@ -45,10 +44,11 @@ written then. A settings note already there is never changed this way. Settings 
 - **The applets** load from the Parachute source (`src/applet/parachuteSource.ts`): the copy built into the app, or a
   newer one signed with Parachute's release key. Each runs sealed in its frame and is held to its manifest like any
   applet; only the card goes. Notes, Vault and Connect see the vaults you give each of them through the `vaults` word
-  (`src/applet/modules/vaults.ts`): the home until you tick more ([ACCESS.md](ACCESS.md) proposal 5); Connect copies on a tap with `copy`; Notes and Vault open a note with `open`.
-- **The home** `/` goes to Notes when the open bundle's `look` is `"notes"` and it keeps Parachute's source
-  (`src/shell/App.tsx`). `/?with=vault` is the frame's own Notes (`src/frame/views/NotesHome.tsx`), the way back if
-  Parachute's Notes won't run.
+  (`src/applet/modules/vaults.ts`): the home until you tick more ([ACCESS.md](ACCESS.md) proposal 5); Connect copies on a tap with `copy`; Notes and Vault open a note with `open`; Vault also follows a link in a note's words on a tap (`links`: another note by its short form or address, a web page, a mail address), as Mail and Rooms do.
+- **The home** `/` goes to Vault when the open bundle's `look` is `"notes"` and it offers Vault from Parachute's
+  source (`src/shell/App.tsx`, `SIMPLE_HOME`). `/?with=vault` is the frame's own Notes
+  (`src/frame/views/NotesHome.tsx`), the way back if Vault won't run. The Notes applet stays among Parachute's own
+  for bars and records that name it, until 2026-12-20.
 - **Editing** is in Vault: a tap in a note's words, kept as you write (each save names the version it changes, so
   words an AI changed meanwhile are never written over unasked: yours stay, with **Keep mine** and **Use theirs**,
   and are kept as a note of their own if you leave with neither chosen).
@@ -59,8 +59,8 @@ written then. A settings note already there is never changed this way. Settings 
 
 Parachute Simplified is a bundle record the app ships (`src/shell/default-bundles.json`, id `simple`), read like any
 other ([NAVIGATION.md](NAVIGATION.md#bundles)): `"look": "notes"`, `"everywhere": true`, `"publishers"` naming
-Parachute's source, and a `bar` of `{"screen": "home"}`, `{"shipped": "journal"}`, `{"shipped": "capture"}`,
-`{"shipped": "vault"}`, `{"screen": "connect"}`. A record `Parachute/Bundles/simple` says only what it changes;
+Parachute's source, and a `bar` of `{"screen": "home"}` (Vault), `{"shipped": "journal"}`, `{"shipped": "capture"}`,
+`{"screen": "connect"}`. (A bar written before 11-28 also names `{"shipped": "vault"}`: the bar shows Vault once, as the home.) A record `Parachute/Bundles/simple` says only what it changes;
 `"publishers": []` leaves Parachute's own applets out of what it offers by itself: the home is then the frame's Notes,
 and the bar's places still open what they name.
 

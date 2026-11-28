@@ -12,11 +12,11 @@ const isRefusal = (e: unknown): e is Refusal => !!e && typeof e === "object" && 
 /** Add a Parachute (docs/design/ONE-SIGN-IN.md): its address, or Parachute Cloud; whose it is; then one sign-in on its
  *  hub that reads their home vault and lists the others (docs/design/SCOPES.md). With this device's key: the hub's key door and one consent.
  *  Without: the hub's own sign-in, a consent to see which vaults are theirs, and one to read the home. */
-export default function AddParachute({ first = false }: { first?: boolean }) {
+export default function AddParachute({ first = false, hub }: { first?: boolean; /** the Parachute that serves this page (vault/hosted.ts): filled in, still asked about */ hub?: string }) {
   const key = useKey();
   const [params] = useSearchParams();
   // a Parachute from the person's list (the launcher's or Settings' Sign in): filled in, still asked about
-  const [input, setInput] = useState(() => params.get("hub") ?? "");
+  const [input, setInput] = useState(() => params.get("hub") ?? hub ?? "");
   const [error, setError] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [busy, setBusy] = useState(false);

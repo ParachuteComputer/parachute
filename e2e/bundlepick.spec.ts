@@ -22,7 +22,7 @@ test("Your bundle lists the bundles in the person's other vaults and says what e
     // what Everything and Simplified are, in plain words
     await expect(choice.getByRole("radio", { name: /Everything/ })).toBeChecked();
     await expect(choice).toContainText("Everything: every applet in every vault you open here, in one list. On the bar: Applets.");
-    await expect(choice).toContainText("Parachute Simplified: your notes first. On the bar: Notes, Journal, Capture, Vault, Connect.");
+    await expect(choice).toContainText("Parachute Simplified: your notes first. On the bar: Vault, Journal, Capture, Connect.");
     // the bundle in pantry, by name, where it is, and its bar
     const uni = choice.getByRole("radio", { name: /Uni/ });
     await expect(uni).toBeVisible();

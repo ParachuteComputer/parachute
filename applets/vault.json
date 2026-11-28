@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 4,
   "path": "Applets/Vault",
   "extension": "tsx",
   "tags": ["applet"],
@@ -9,9 +9,9 @@
       "id": "vault-view",
       "name": "Vault",
       "glyph": "▦",
-      "note": "your vaults: their types, records, fields, links, history and what changed"
+      "note": "your notes, and the types, tables and history behind them"
     },
     "needs": 6,
-    "app": ["vaults", "sharing", "copy"]
+    "app": ["vaults", "sharing", "copy", "open", "links"]
   }
 }

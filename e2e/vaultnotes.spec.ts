@@ -82,6 +82,23 @@ test.describe("Vault's notes", () => {
     await expect(notes(page).getByRole("button").first()).toContainText("Smoke first");
   });
 
+  test("a link to another note in a note's words opens that note (the short form Uni writes, and a note's address); it doesn't start writing", async ({ page }) => {
+    test.setTimeout(60_000);
+    const swap = (await under("Garden/Seed swap"))[0];
+    await api(hub(), "POST", "notes", { path: "Garden/From Uni", content: `The swap list is here: ${VAULT}:${swap.id}\n\nBy its address: /surface/parachute/v/${VAULT}/n/${swap.id}` });
+    await openVault(page);
+    for (const which of [0, 1]) {
+      await notes(page).getByRole("button", { name: /From Uni/ }).click();
+      const note = vaultUi(page).getByRole("article", { name: "From Uni" });
+      await note.getByRole("link").nth(which).click();
+      await expect(vaultUi(page).getByRole("article", { name: "Seed swap" })).toContainText("Mira brings the beans", { timeout: 15_000 });
+      await expect(vaultUi(page).getByRole("textbox", { name: "The note's words" })).toHaveCount(0);
+      // and from there the vault's notes are one step back
+      await vaultUi(page).getByRole("button", { name: `← ${VAULT}` }).click();
+      await expect(notes(page).getByRole("button", { name: /From Uni/ })).toBeVisible();
+    }
+  });
+
   test("a note opens to its words; a tap in them writes, kept as you go; fields, links and history are under one line", async ({ page }) => {
     test.setTimeout(60_000);
     await openVault(page);

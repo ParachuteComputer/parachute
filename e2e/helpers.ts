@@ -4,14 +4,15 @@ import { withImports, type AppletRecord } from "../applets/record.ts";
 import { keyDoor } from "./keys";
 
 /** The app back from the hub with every vault kept: on the list of applets (once `vault`'s are read: they, or the
- *  line that there are none); or, for a person whose settings choose Parachute Simplified (docs/SIMPLE.md), on Notes. */
+ *  line that there are none); or, for a person whose settings choose Parachute Simplified (docs/SIMPLE.md), on Vault,
+ *  at their notes. */
 async function backOnTheLauncher(page: Page, vault: string) {
   void vault;
   const list = ui(page).getByRole("list", { name: "Applets" });
-  // the list, or Parachute Simplified's Notes: Parachute's own applet (docs/design/PARACHUTE-SOURCE.md), or the frame's
-  await expect(page.locator('iframe.app-frame, iframe.applet-frame[title="Notes"]').first()).toBeVisible({ timeout: 20_000 });
-  if (await page.locator('iframe.applet-frame[title="Notes"]').count()) {
-    await expect(page.frameLocator('iframe.applet-frame[title="Notes"]').getByRole("heading", { level: 1, name: "Notes" })).toBeVisible({ timeout: 20_000 });
+  // the list, or Parachute Simplified's home: Vault, Parachute's own applet (docs/design/PARACHUTE-SOURCE.md), or the frame's Notes
+  await expect(page.locator('iframe.app-frame, iframe.applet-frame[title="Vault"]').first()).toBeVisible({ timeout: 20_000 });
+  if (await page.locator('iframe.applet-frame[title="Vault"]').count()) {
+    await expect(page.frameLocator('iframe.applet-frame[title="Vault"]').getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
     return;
   }
   await expect(list.getByRole("link").first().or(list.getByText("No applets here yet.")).or(ui(page).getByRole("heading", { level: 1, name: "Notes" }))).toBeVisible({ timeout: 20_000 });
@@ -26,8 +27,8 @@ export async function approveUntilBack(page: Page, hubOrigin: string, appOrigin:
   const pick = page.getByRole("button", { name: "Continue" });
   const where = async () => {
     const u = new URL(page.url());
-    // back on "/" (or where it leads in Parachute Simplified: Parachute's own Notes)
-    if (u.origin === appOrigin && (u.pathname === backAt || (backAt === "/" && /^\/v\/[^/]+\/a\/parachute%3Anotes$/.test(u.pathname)))) return "back";
+    // back on "/" (or where it leads in Parachute Simplified: Parachute's own Vault, at the home's notes)
+    if (u.origin === appOrigin && (u.pathname === backAt || (backAt === "/" && /^\/v\/[^/]+\/a\/parachute%3Avault$/.test(u.pathname)))) return "back";
     if (u.origin === appOrigin && await pick.isVisible().catch(() => false)) return "pick";
     return u.origin === hubOrigin && await approve.isVisible().catch(() => false) ? "asked" : "wait";
   };

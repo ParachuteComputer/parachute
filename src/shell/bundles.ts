@@ -20,7 +20,7 @@ import { plain, stripExt } from "../applet/contract";
 import { APP_LEVEL, tooNew } from "../applet/level";
 import { askedOf, stricterAsked, type Asked } from "./levelRules";
 import defaults from "./default-bundles.json";
-import { OFFICIAL_NAMES, officialFace, PARACHUTE_PUBLISHER, type OfficialName } from "../applet/parachuteSource";
+import { OFFICIAL_NAMES, officialFace, PARACHUTE_PUBLISHER, SIMPLE_HOME, type OfficialName } from "../applet/parachuteSource";
 
 export const BUNDLE_TAG = "parachute-bundle";
 export const BUNDLE_FOLDER = "Parachute/Bundles/";
@@ -165,6 +165,15 @@ function ownOf(publishers: unknown, d: Bundle | null): { parachute: boolean; own
 }
 /** Does this bundle offer this one of Parachute's own applets (listed, pinnable, where a record opens)? */
 export const offersOwn = (b: Pick<Bundle, "parachute" | "own">, name: OfficialName): boolean => b.parachute && (!b.own || b.own.includes(name));
+/** The home place of a bundle, as the bar and Settings name it: in Parachute Simplified, Parachute's own Vault where the
+ *  bundle offers it (`/` opens it, shell/App.tsx) and the frame's Notes where it doesn't; the list of applets in any
+ *  other. `vault`: the home is Vault itself, so Vault named beside it on a bar is the same place. */
+export function homeFace(b: Pick<Bundle, "look" | "parachute" | "own">): { glyph: string; name: string; vault: boolean } {
+  if (b.look !== "notes") return { glyph: "⁂", name: "Applets", vault: false };
+  if (!offersOwn(b, SIMPLE_HOME)) return { glyph: "¶", name: "Notes", vault: false };
+  const face = officialFace(SIMPLE_HOME);
+  return { glyph: face.glyph, name: face.name, vault: true };
+}
 
 /** Stands for every hub, from `everywhere` only: no source can say it (`hubOk` refuses it). */
 export const ANY_HUB = "*";
@@ -240,10 +249,10 @@ export function followed(own: Bundle, raw: unknown, theirs: Record<string, unkno
  *  person's pins (`pins`, the settings note's); each applet by `nameOf` (its name as listed) or its note's path; and
  *  its home screen (Notes or Applets) where it names none. Settings, always last on every bar, isn't said. */
 export function barNames(b: Bundle, pins: readonly BarEntry[] = [], nameOf: (p: Place) => string | null = () => null): string[] {
-  const home = b.look === "notes" ? "Notes" : "Applets";
+  const home = homeFace(b).name;
   const entries = b.bar ?? [...b.base, ...pins];
   const names = entries.map((e) => (!isAppPlace(e) ? nameOf(e) ?? stripExt(e.applet.split("/").pop() ?? e.applet)
     : "shipped" in e ? officialFace(e.shipped).name : e.screen === "connect" ? officialFace("connect").name : home));
-  const wayHome = entries.some((e) => isAppPlace(e) && "screen" in e && e.screen === "home");
-  return [...new Set(wayHome ? names : [...names, home])];
+  // the home is on every bar, named there or added last (a name said twice is one place: Vault beside a home that is Vault)
+  return [...new Set([...names, home])];
 }

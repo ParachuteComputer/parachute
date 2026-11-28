@@ -6,7 +6,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { appletsNow, subscribeApplets } from "../applet/useApplets";
 import { OFFICIAL_NAMES, officialFace, officialId } from "../applet/parachuteSource";
-import { offered, offersOwn } from "../shell/bundles";
+import { homeFace, offered, offersOwn } from "../shell/bundles";
 import { barOwnIds, copyBundle, move, pinApplet, useSettings } from "../shell/homeSettings";
 import { homeVault } from "../shell/frameSource";
 import { useVaults } from "../vault/hooks";
@@ -34,10 +34,10 @@ export default function BarSettings() {
     .map((a) => ({ vault: v.key, noteId: a.noteId, name: a.manifest.name, glyph: a.manifest.glyph, where: v.vault })) : []; });
   // one of Parachute's own the bar already has as a place of the bundle's: shipped there, Connect, or Notes as the home
   // screen (the list, in other bundles, is no applet)
-  const onBarAlready = new Set(barOwnIds(bar.entries, bundle.look));
+  const onBarAlready = new Set(barOwnIds(bar.entries, bundle));
   const more = [...own, ...theirs].filter((a) => !pinned.has(`${a.vault} ${a.noteId}`) && !onBarAlready.has(a.noteId));
   const many = new Set(theirs.map((a) => a.vault)).size > 1;
-  const appName = (e: (typeof bar.entries)[number]) => ("href" in e ? null : "shipped" in e ? officialFace(e.shipped).name : e.screen === "connect" ? officialFace("connect").name : bundle.look === "notes" ? "Notes" : "Applets");
+  const appName = (e: (typeof bar.entries)[number]) => ("href" in e ? null : "shipped" in e ? officialFace(e.shipped).name : e.screen === "connect" ? officialFace("connect").name : homeFace(bundle).name);
   return (
     <fieldset className="plain bar-settings" aria-busy={busy}>
       <legend className="settings-sub">On the bar</legend>

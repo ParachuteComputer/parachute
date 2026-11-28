@@ -5,6 +5,7 @@
 // The hub describes itself at /.well-known/parachute-account (core 0.8, 0.9 and Cloud): its OAuth issuer, its account
 // MCP (where `list-vaults` answers which vaults the person may reach) and where its vaults live.
 import { cleanVaultNames, isLoopback, isVaultName, MAX_VAULTS } from "./address";
+import { servedBy } from "./hosted";
 
 export const CLOUD = "https://cloud.parachute.computer";
 export const CLOUD_NAME = "Parachute Cloud";
@@ -32,7 +33,8 @@ export function parseHub(input: string): HubParse {
 
 /** What a hub says about itself: where to sign in, where to ask which vaults are the person's, where vaults live.
  *  Tokens go to those addresses, so they must be on the hub's own origin; only Parachute Cloud keeps its vaults and
- *  account on another host of its own domain (cloud.parachute.computer → my.parachute.computer). */
+ *  account on another host of its own domain (cloud.parachute.computer → my.parachute.computer), and so may the
+ *  Parachute that serves this page (vault/hosted.ts). */
 export type Parachute = { hub: string; issuer: string; accountMcp: string; vaultTemplate: string;
   /** "cloud": the hub says it is Parachute Cloud (its descriptor's `door`), which keeps the name "Parachute" for its own
    *  pages: the app registers there under another (oauth.ts cloudClientName: "Vault app on Android", "on a Mac"…) */
@@ -61,7 +63,11 @@ const safe = (raw: unknown): raw is string => {
 const onHubOrDomain = (raw: string, hub: string) => {
   const u = new URL(raw);
   if (u.origin === hub) return true;
-  return hub === CLOUD && u.protocol === "https:" && u.hostname.endsWith(".parachute.computer");
+  if (u.protocol !== "https:") return false;
+  // Parachute Cloud keeps its vaults and account on another host of its own domain; and the Parachute that serves this
+  // very page (vault/hosted.ts: Cloud's staging door, a door on someone's own Cloudflare) may keep its on another host
+  // too: the page already runs what that host sent
+  return (hub === CLOUD && u.hostname.endsWith(".parachute.computer")) || servedBy(hub);
 };
 
 /** Read the hub's own description; a hub with none (older than 0.8) is read as one that keeps everything on its origin. */

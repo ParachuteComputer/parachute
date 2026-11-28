@@ -15,11 +15,12 @@ export default defineConfig({
   use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure" },
   projects: [
     { name: "setup", testMatch: /auth\.setup\.ts/, use: { ...devices["Pixel 7"], browserName: "chromium" } },
-    { name: "phone", dependencies: ["setup"], testIgnore: [/webkit\.spec\.ts/, /vaultpick\.spec\.ts/, /vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /packs\.spec\.ts/, /notion\.spec\.ts/, /start\.spec\.ts/, /plainwords\.spec\.ts/, /libfirst\.spec\.ts/, /leaving\.spec\.ts/, /voice\.spec\.ts/, /expiry\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
+    { name: "phone", dependencies: ["setup"], testIgnore: [/webkit\.spec\.ts/, /vaultpick\.spec\.ts/, /vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /packs\.spec\.ts/, /notion\.spec\.ts/, /start\.spec\.ts/, /plainwords\.spec\.ts/, /libfirst\.spec\.ts/, /leaving\.spec\.ts/, /voice\.spec\.ts/, /expiry\.spec\.ts/, /hosted\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // signing in again retires the sign-in the tests above share, so these run last (a refresh doesn't: e2e/test.ts keeps it)
     { name: "signs-in", dependencies: ["phone"], testMatch: [/vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /start\.spec\.ts/, /leaving\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // after those: each test signs in for itself, the saved sign-in being retired by now
-    { name: "packs", dependencies: ["signs-in"], testMatch: [/packs\.spec\.ts/, /notion\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
+    // (and the web build as a hosted page, e2e/hosted.spec.ts: another origin, so a sign-in of its own from the hub's kept session)
+    { name: "packs", dependencies: ["signs-in"], testMatch: [/packs\.spec\.ts/, /notion\.spec\.ts/, /hosted\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // after those (the walk of every screen reaches what an older hub refuses: Sharing, Changes), on a
     // sign-in of its own: the one the specs before it shared is retired by now
     { name: "plain-setup", dependencies: ["packs"], testMatch: /auth\.setup\.ts/, use: { ...devices["Pixel 7"], browserName: "chromium" } },

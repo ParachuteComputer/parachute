@@ -1,5 +1,5 @@
 // Parachute Simplified (docs/SIMPLE.md), as a person whose settings choose it signs in on a new device: they land on
-// Notes, find a note, change it (the first Save saves), write a new one, copy the hub's one address and a vault's own, capture a
+// Vault at their notes, find a note, change it (kept as it is written), write a new one, copy the hub's one address and a vault's own, capture a
 // line into Inbox/ and write a Journal entry, both Parachute's own applets with no card. Against the real hub: what the app writes is read back.
 import { expect, test } from "./test";
 import { moreVaults, signIn } from "./helpers";
@@ -7,7 +7,7 @@ import { api, hubState, VAULT } from "./hub";
 
 type Row = { id: string; path: string; content?: string; tags?: string[] };
 
-test("Parachute Simplified: sign in → Notes → find, edit and write a note → Connect → Capture a line → Journal", async ({ page, context }) => {
+test("Parachute Simplified: sign in → Vault, at your notes → find, edit and write a note → Connect → Capture a line → Journal", async ({ page, context }) => {
   // one walk through five screens and a sign-in: 25-30 s on its own, past 30 s after a long run of specs
   test.setTimeout(60_000);
   const hub = hubState();
@@ -23,26 +23,27 @@ test("Parachute Simplified: sign in → Notes → find, edit and write a note �
   for (let i = 0; i < 13; i++) made.push((await api(hub, "POST", "notes", { path: `Inbox/2026-01-${String(i + 1).padStart(2, "0")} 09-00 old line ${i} ${stamp}`, content: `old line ${i}` }) as Row).id);
   try {
     await signIn(page);
-    // Notes: Parachute's own applet (docs/design/PARACHUTE-SOURCE.md), no card: the home's newest notes; the bar says
-    // Notes, Journal, Capture, Vault, Connect
-    const notes = page.frameLocator('iframe.applet-frame[title="Notes"]');
-    await expect(notes.getByRole("heading", { level: 1, name: "Notes" })).toBeVisible();
+    // Vault, Parachute's own applet (docs/design/PARACHUTE-SOURCE.md), no card, is the home: it opens on the home vault's
+    // notes; the bar says Vault, Journal, Capture, Connect (Vault once: it is the home)
+    const vault = page.frameLocator('iframe.applet-frame[title="Vault"]');
+    await expect(vault.getByRole("heading", { level: 1, name: VAULT })).toBeVisible();
+    await expect(page).toHaveURL(/\/a\/parachute%3Avault$/);
     await expect(page.getByRole("button", { name: "Allow" })).toHaveCount(0);
     const bar = page.getByRole("navigation", { name: "Bar" });
-    await expect(bar.getByRole("link", { name: "Notes" })).toHaveAttribute("aria-current", "page");
+    await expect(bar.getByRole("link", { name: "Vault" })).toHaveCount(1);
+    await expect(bar.getByRole("link", { name: "Vault" })).toHaveAttribute("aria-current", "page");
+    await expect(bar.getByRole("link", { name: "Notes" })).toHaveCount(0);
     await expect(bar.getByRole("link", { name: "Capture" })).toBeVisible();
     // each vault the sign-in didn't read is a line in Settings
     await page.goto("/settings");
     await moreVaults(page);
     await expect(page.getByRole("button", { name: "Open letters", exact: true })).toBeVisible();
-    await bar.getByRole("link", { name: "Notes" }).click();
+    await bar.getByRole("link", { name: "Vault" }).click();
 
-    // find it by its words, across the vaults: it opens in Vault, Parachute's own (no card), where its words change
-    await notes.getByRole("searchbox", { name: "Search every vault" }).fill(`north bed`);
-    await notes.getByRole("region", { name: "Search results" }).getByRole("button", { name: new RegExp(`Garden plan ${stamp}`) }).click();
-    await expect(page).toHaveURL(/\/a\/parachute%3Avault\?/);
+    // find it by its words: it opens right there, where its words change
+    await vault.getByRole("searchbox", { name: `Search ${VAULT}` }).fill(`north bed`);
+    await vault.getByRole("region", { name: "Found" }).getByRole("button", { name: new RegExp(`Garden plan ${stamp}`) }).click();
     await expect(page.getByRole("button", { name: "Allow" })).toHaveCount(0);
-    const vault = page.frameLocator('iframe.applet-frame[title="Vault"]');
     const rec = vault.getByRole("article", { name: `Garden plan ${stamp}` });
     await rec.getByRole("button", { name: "Edit words" }).click();
     const words = rec.getByLabel("The note's words");
@@ -67,17 +68,20 @@ test("Parachute Simplified: sign in → Notes → find, edit and write a note �
     await expect(rec.getByText("Mine, from the phone.")).toBeVisible();
     expect(((await api(hub, "GET", `notes/${note.id}?include_content=true`)) as Row).content).toContain("Mine, from the phone.");
 
-    // a new note, in Notes: its first line names it
-    await bar.getByRole("link", { name: "Notes" }).click();
-    await notes.getByRole("button", { name: "New note" }).click();
-    await notes.getByRole("textbox", { name: "The new note" }).fill(`Seed order ${stamp}\n\nBeans, chard, nasturtiums.`);
-    await notes.getByRole("button", { name: `Save to ${VAULT}` }).click();
-    // it opens where a note opens: in Vault
-    await expect(vault.getByText("Beans, chard, nasturtiums.")).toBeVisible();
+    // a new note: one tap, typed, kept without a Save; its first line names it
+    await vault.getByRole("button", { name: `← ${VAULT}` }).click();
+    await vault.getByRole("button", { name: "New note" }).click();
+    const fresh = vault.getByRole("textbox", { name: "The note's words" });
+    await expect(fresh).toBeFocused();
+    await fresh.pressSequentially(`Seed order ${stamp}\n\nBeans, chard, nasturtiums.`);
+    await expect(vault.getByText("Saved", { exact: true })).toBeVisible({ timeout: 10_000 });
+    await vault.getByRole("button", { name: "Done" }).click();
+    await expect(vault.getByRole("article", { name: `Seed order ${stamp}` })).toContainText("Beans, chard, nasturtiums.");
     const rows = await api(hub, "GET", `notes?search=${encodeURIComponent("nasturtiums")}&include_content=true&limit=10`) as Row[];
-    const fresh = rows.find((r) => r.path === `Seed order ${stamp}`);
-    expect(fresh, "the new note, at the path its first line names").toBeTruthy();
-    made.push(fresh!.id);
+    const kept = rows.find((r) => r.content === `Seed order ${stamp}\n\nBeans, chard, nasturtiums.`);
+    expect(kept, "the new note, in the vault with the words typed").toBeTruthy();
+    expect(kept!.path).toMatch(/^Notes\//);
+    made.push(kept!.id);
 
     // Connect: the hub's one address for an AI first (T-476: `mcp_endpoint`, or on a hub from before it the account
     // door it names), then the vault's own under "Just one vault"; each to copy

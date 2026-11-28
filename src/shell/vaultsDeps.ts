@@ -6,6 +6,7 @@ import { NOT_GIVEN, type AccessRow, type HeldVault, type HubRow, type ReachRow, 
 import { askManage } from "../vault/signInFlow";
 import { endManage, endReach, hubLists, listReach, makeKey, ManageEndedError, manageHeld, type HubGrantRow } from "../vault/manage";
 import { describe, oneAddress } from "../vault/parachute";
+import { readHosted } from "../vault/hosted";
 import { clientFor, keptClientFor, lastRefreshFailure, signInState } from "../vault/client";
 import { connectorAddress, findVault, hostOf, listVaults, originOf, vaultUrlOf, type VaultRecord } from "../vault/store";
 import { isMine } from "../vault/whose";
@@ -47,7 +48,7 @@ const addressOf = (hub: string) => {
   let a = addresses.get(hub);
   if (!a) {
     const timed: typeof fetch = (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(ASK_MS) });
-    a = describe(hub, timed).then(oneAddress, () => { setTimeout(() => addresses.delete(hub), RETRY_MS); return null; });
+    a = readHosted().then(() => describe(hub, timed)).then(oneAddress, () => { setTimeout(() => addresses.delete(hub), RETRY_MS); return null; });
     addresses.set(hub, a);
   }
   return a;

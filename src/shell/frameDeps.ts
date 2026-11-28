@@ -47,7 +47,7 @@ export const homeNow = () => {
       const lines = Object.fromEntries(fresh.flatMap((vault) => { const l = opensAs(p.hub, vault).line; return l ? [[vault, l]] : []; }));
       return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh, lines } : {}) };
     }), ...(bundle.look === "notes" ? { look: "notes" as const, app: "simple" as const } : {}),
-    ...(bundle.live ? { barTheirs: true as const } : {}), ...(() => { const own = barOwnIds(b.entries, bundle.look); return own.length ? { barOwn: own } : {}; })(), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
+    ...(bundle.live ? { barTheirs: true as const } : {}), ...(() => { const own = barOwnIds(b.entries, bundle); return own.length ? { barOwn: own } : {}; })(), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
     ...viewerNow(), ...officialNow() };
 };
 /** A home's copy of one of Parachute's own (the old Add Capture wrote these), listed beside Parachute's own: said so. */
