@@ -94,7 +94,7 @@ test("a new vault: Start here leads to Vault and Connect; Clients and sessions s
   expect(types.find((t) => t.name === "follow-up")?.fields).toMatchObject({ client: { type: "reference" }, due: { type: "date" }, done: { type: "boolean" } });
   // Vault opens where it was left (Packs, with Clients and sessions installed): back to the vault, its session type
   await expect(app.getByRole("region", { name: "Installed packs" })).toContainText("Clients and sessions", { timeout: 30_000 });
-  await app.getByRole("button", { name: `← ${FRESH}` }).click();
+  await app.getByRole("button", { name: "← Types and tables" }).click();
   await app.getByText("session", { exact: true }).click({ timeout: 30_000 });
   await app.getByLabel("New session").fill("Sam, first session");
   await app.getByRole("button", { name: "Add" }).click();

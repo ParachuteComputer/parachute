@@ -77,6 +77,7 @@ test("5,000 records: a type of 2,000 as a table, the next page, a sort, a record
   await expect(v(page).getByRole("button", { name: /^pantry/ })).toBeVisible();
   await shot(page, "phone-02-vaults");
   await v(page).getByRole("button", { name: /^pantry/ }).click();
+  await v(page).getByRole("button", { name: "Types and tables" }).click();
   const types = v(page).getByRole("region", { name: "Types" });
   await timed(times, "vault: types with counts", () => expect(types.getByRole("button", { name: /task.*2000/ })).toBeVisible());
   await shot(page, "phone-03-vault");
@@ -107,6 +108,7 @@ test("5,000 records: a type of 2,000 as a table, the next page, a sort, a record
   try {
     await addAllow(m);
     await v(m).getByRole("button", { name: /^pantry/ }).click();
+    await v(m).getByRole("button", { name: "Types and tables" }).click();
     await expect(v(m).getByRole("region", { name: "Types" })).toBeVisible();
     await shot(m, "mac-01-vault");
     await v(m).getByRole("region", { name: "Types" }).getByRole("button", { name: /^task/ }).click();

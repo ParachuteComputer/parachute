@@ -1,4 +1,6 @@
-// Vault: Parachute's own way to see what is in your vaults (T-476). Your vaults, each one's types with how many records
+// Vault: Parachute's own way to see what is in your vaults (T-476). A vault opens on its notes, as a notes app does
+// (Aaron, 11-27: "Good simple defaults like an apple notes"): newest first, each with its first words, a search, and New
+// note, typed straight in and kept as you go. One step away: your vaults, each one's types with how many records
 // each has, a type's records as a table (its fields as columns: sort, filter, group, saved views), and a record: its
 // fields (changed where they stand), types and tags, its words, what links to it and from it, and its history. A record
 // no other applet opens opens here. Sharing says who reaches a vault in one list (your AIs and agents, then people, then
@@ -22,11 +24,15 @@ type TypeRow = { name: string; kind: "type" | "tag"; count: number; description:
 type Rec = { id: string; path: string; title: string; createdAt: string | null; updatedAt: string | null; types: string[]; tags: string[]; fields: Record<string, unknown>;
   /** the app's own (its settings, approvals, saved views): out of Lately and search unless asked for; absent from an older app */
   own?: boolean;
+  /** its first words on one line, as the hub's lists carry them; absent from an older app */
+  preview?: string;
   body?: string; createdBy?: string | null; createdVia?: string | null; updatedBy?: string | null; updatedVia?: string | null;
   /** who made it and who changed it last, as a person reads them (level 5) */ madeBy?: string; changedBy?: string; links?: { dir: "out" | "in"; id: string; path: string; relationship: string }[] };
 type Where = { field: string; op: string; value: unknown };
 type View = { name: string; layout: "table" | "list"; sort: { by: string; dir: "asc" | "desc" } | null; where: Where[]; group: string | null; id?: string };
-type At = { vault: string | null; type: string | null; record: string | null; sharing?: boolean; changes?: boolean; packs?: boolean };
+type At = { vault: string | null; type: string | null; record: string | null; sharing?: boolean; changes?: boolean; packs?: boolean;
+  /** the vault's types and tables, one step from its notes */ tables?: boolean;
+  /** a new note being written, not in the vault until it has words: its key keeps the box in place when it is made */ fresh?: string | null };
 type Change = { key: string; id: string; path: string; title: string; op: "created" | "changed" | "deleted" | "restored"; at: string; via: string | null; kind: string | null;
   by: string | null; mine: boolean; who: string; unnamed?: boolean; before: number | null; after: number | null; gone: boolean; own: boolean; made?: string | null; recreated?: boolean; seen?: string | null };
 type Side = { path: string; body: string; fields: Record<string, unknown>; types?: string[]; tags?: string[] };
@@ -114,6 +120,23 @@ const CSS = `
 .vlt .ldiff .same { color: var(--muted); }
 .vlt .ldiff .gap { color: var(--muted); font: italic var(--fs-small) var(--serif); }
 .vlt .ldiff .sign { display: inline-block; width: 1.2em; font-family: var(--mono); }
+/* the vault's notes: a calm list (a title, its first words on one line, when), the open note beside it on a computer */
+.vlt .np { display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(var(--gap) * 2); }
+@media (min-width: 900px) { .vlt .np.pair { grid-template-columns: minmax(260px, 22rem) minmax(0, 1fr); align-items: start; } .vlt .np.pair > .paper { position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow: auto; padding-left: calc(var(--gap) * 2); border-left: 1px solid var(--line); } }
+.vlt .np .pa-row-meta { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vlt .np .pa-list { margin-bottom: calc(var(--gap) * 1.25); }
+.vlt .np .pa-row[aria-current="true"] .pa-row-aside { padding-right: 8px; }
+.vlt .doors { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 calc(var(--gap) * 1.25); }
+.vlt .hint { margin: 18vh 0 0; text-align: center; font: italic var(--fs-body) var(--serif); color: var(--muted); }
+/* a note's words as a page to write on: no box, the page's own type, as tall as what is written */
+.vlt .paper .words { cursor: text; min-height: 4em; }
+.vlt .paper .words a, .vlt .paper .words button, .vlt .paper .words summary { cursor: pointer; }
+.vlt .paper .pa-write-box { min-height: 9em; padding: 0; border: 0; border-radius: 0; background: transparent; font: var(--fs-lead)/var(--leading, 1.6) var(--serif); resize: none; overflow: hidden; }
+/* (no ring around the page: a quiet line beside the words says where the caret is) */
+.vlt .paper .pa-write-box:focus, .vlt .paper .pa-write-box:focus-visible { outline: none; border: 0; box-shadow: -10px 0 0 -8px var(--accent); }
+.vlt .paper .pa-write-row { position: sticky; bottom: 0; padding: 8px 0; background: var(--bg, var(--paper, transparent)); }
+.vlt .paper .state { font: italic var(--fs-small) var(--serif); color: var(--muted); }
+.vlt .paper details.more { margin-top: calc(var(--gap) * 2); }
 /* what a change did fills in after the list shows: one line, so a row never grows under the finger */
 .vlt .chg .pa-row-meta { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 `;
@@ -128,22 +151,28 @@ export default function Vault() {
     // the app sends a vault, and a record in it, when it opens one here (a tap on a record no other applet opens)
     // (Home's line sends `show: "changes"`: the vault's Changes)
     // (and the way back from the hub's yes to manage who reaches a vault: `show: "sharing"`)
-    const take = (l: { vault?: string; record?: string; show?: string } | null) => { if (l?.vault) setAt({ vault: l.vault, type: null, record: l.record ?? null, changes: l.show === "changes" && !l.record, sharing: l.show === "sharing" && !l.record }); };
+    // (and a new vault's "Bring in what you have": `show: "tables"`, its types and tables)
+    const take = (l: { vault?: string; record?: string; show?: string } | null) => { if (l?.vault) setAt({ vault: l.vault, type: null, record: l.record ?? null, changes: l.show === "changes" && !l.record, sharing: l.show === "sharing" && !l.record, tables: l.show === "tables" && !l.record }); };
     ready().then((r: { launch?: { vault?: string; record?: string; show?: string } }) => { take(r.launch ?? null); return load(); }, setFailed);
+    // a new note never written in isn't where a return to Vault opens
+    setAt((a: At) => (a.fresh && !a.record ? { ...a, fresh: null } : a));
     return onLaunch(take);
   }, []);
   if (failed) return <Page title="Vault"><Problem error={failed} onRetry={load}>Your vaults couldn't be read</Problem></Page>;
   if (!list) return <Page title="Vault"><Loading /></Page>;
   const v = list.find((x) => x.key === at.vault) ?? (list.length === 1 ? list[0] : null);
-  if (!v) return <Vaults list={list} onOpen={(key) => go({ vault: key, type: null, record: null })} onRecord={(vault, record) => go({ vault, record })} />;
-  const back = list.length > 1 ? { label: "Your vaults", onPress: () => go({ vault: null, type: null, record: null }) } : undefined;
+  if (!v) return <Vaults list={list} onOpen={(key) => go({ vault: key, type: null, record: null, tables: false, fresh: null })} onRecord={(vault, record) => go({ vault, record, tables: false, fresh: null })} />;
+  const back = list.length > 1 ? { label: "Your vaults", onPress: () => go({ vault: null, type: null, record: null, tables: false, fresh: null }) } : undefined;
   if (at.sharing) return <Sharing v={v} back={{ label: v.name, onPress: () => go({}) }} />;
-  if (at.changes) return <ChangesScreen v={v} back={{ label: v.name, onPress: () => go({}) }} open={(record) => go({ record })} />;
-  if (at.packs) return <Packs v={v} back={{ label: v.name, onPress: () => go({}) }} openType={(type) => go({ type, record: null })} />;
-  if (at.type) return <TypeScreen key={`${v.key}|${at.type}`} v={v} type={at.type} record={at.record} open={(record) => go({ record })} back={{ label: v.name, onPress: () => go({ type: null, record: null }) }} />;
-  if (at.record) return <Page className="vlt"><style>{CSS}</style><RecordView key={at.record} v={v} id={at.record} open={(record) => go({ record })} back={{ label: v.name, onPress: () => go({ record: null }) }} /></Page>;
-  return <VaultScreen v={v} back={back} openType={(type) => go({ type, record: null })} open={(record) => go({ record })} sharing={() => setAt((a: At) => ({ ...a, sharing: true }))}
-    changes={() => setAt((a: At) => ({ ...a, changes: true }))} packs={() => setAt((a: At) => ({ ...a, packs: true }))} />;
+  if (at.changes) return <ChangesScreen v={v} back={{ label: v.name, onPress: () => go({}) }} open={(record) => go({ record, type: null, tables: false, fresh: null })} />;
+  if (at.packs) return <Packs v={v} back={{ label: "Types and tables", onPress: () => go({}) }} openType={(type) => go({ type, record: null })} />;
+  if (at.type) return <TypeScreen key={`${v.key}|${at.type}`} v={v} type={at.type} record={at.record} open={(record) => go({ record })} back={{ label: "Types and tables", onPress: () => go({ type: null, record: null, tables: true }) }} />;
+  // one step from the notes: the vault's types and tables (a search hit there opens among the notes)
+  if (at.tables && !at.record) return <VaultScreen v={v} back={{ label: v.name, onPress: () => go({ tables: false }) }} openType={(type) => go({ type, record: null })} open={(record) => go({ record, tables: false, fresh: null })}
+    packs={() => setAt((a: At) => ({ ...a, packs: true }))} />;
+  return <NotesScreen v={v} back={back} record={at.record} fresh={at.fresh ?? null} open={(record) => go({ record, fresh: null })} write={(fresh) => go({ record: null, fresh })}
+    made={(record) => setAt((a: At) => ({ ...a, record }))} tables={() => go({ tables: true, record: null, fresh: null })}
+    sharing={() => setAt((a: At) => ({ ...a, sharing: true }))} changes={() => setAt((a: At) => ({ ...a, changes: true }))} />;
 }
 
 /** The vaults the person gave Vault (docs/ACCESS.md proposal 5), and a search across all of them. */
@@ -173,27 +202,200 @@ function Vaults({ list, onOpen, onRecord }: { list: Held[]; onOpen: (key: string
   );
 }
 
-/** The newest 8 records the person (or their AI) wrote: a page of 20, then further pages of 50 while the app's own fill
- *  them (a run of approvals), 4 pages at most. */
-async function latelyIn(vault: string): Promise<Rec[]> {
-  const out: Rec[] = [];
-  let offset = 0;
-  for (let i = 0; i < 4 && out.length < 8; i++) {
-    const x: { records: Rec[]; more: boolean; read?: number } = await vaults.query(vault, { limit: i ? 50 : 20, offset });
-    out.push(...x.records.filter((r) => !r.own));
-    if (!x.more) break;
+/** A page of the vault's notes, newest first: what the person (or their AI) wrote, read past a run of the app's own
+ *  (approvals, settings), four of the hub's pages at most. `next`: where the page after starts, or null at the end. */
+async function notesFrom(vault: string, offset: number): Promise<{ rows: Rec[]; next: number | null }> {
+  const rows: Rec[] = [];
+  let more = true;
+  for (let i = 0; i < 4 && rows.length < 30 && more; i++) {
+    const x: { records: Rec[]; more: boolean; read?: number } = await vaults.query(vault, { limit: 50, offset });
+    rows.push(...x.records.filter((r) => !r.own));
+    more = x.more;
     offset += x.read ?? x.records.length;
   }
-  return out.slice(0, 8);
+  return { rows, next: more ? offset : null };
+}
+// ── pure helpers (tested in src/applet/vaultNotes.test.ts) ──
+/** A note's first words for its line in the list: the hub's preview without its markdown, and without its own title
+ *  said again; its types first when it is a record of a type. */
+function wordsOf(r: { title: string; preview?: string; types: string[] }): string {
+  // a link reads as its words (a wikilink by its note's name, not its folder); a name keeps its own underscores
+  const flat = (x: string) => x.replace(/!?\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, a: string, b?: string) => b ?? a.split("/").pop() ?? a).replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/(^|\s)#{1,6}\s+/g, "$1")
+    .replace(/[*`~>]/g, "").replace(/(^|\s)_+(?=\S)|(?<=\S)_+(?=\s|$)/g, "$1").replace(/\s+/g, " ").trim();
+  const raw = (r.preview ?? "").trim();
+  let words = flat(raw);
+  const title = flat(r.title).replace(/…$/, "");
+  // its own title, said first, isn't said again: the whole title, ending where a word ends ("Plan" isn't cut out of "Planning")
+  if (title && words.toLowerCase().startsWith(title.toLowerCase()) && !/^[\p{L}\p{N}_]/u.test(words.slice(title.length))) words = words.slice(title.length);
+  // it opens with a heading that is the start of its name ("# Journal" in "Journal 2026-11-27"): those words go too
+  else if (raw.startsWith("#")) { const t = title.split(" "), w = words.split(" "); let n = 0; while (n < t.length && n < w.length - 1 && t[n].toLowerCase() === w[n].toLowerCase()) n++; words = w.slice(n).join(" "); }
+  return [...r.types.map((t) => t.replace(/_/g, " ")), words.replace(/^[\s.:,;–—-]+/, "")].filter(Boolean).join(" · ");
+}
+/** The stretches a list of notes is told in, as a notes app does: today, yesterday, the last seven days, the month, the
+ *  year, and before. Each row says its own date. */
+function dayOf(at: string | null, now = Date.now()): string {
+  const t = at ? new Date(at).getTime() : NaN;
+  if (Number.isNaN(t)) return "Undated";
+  // where today, this month and this year began, by the device's clock
+  const day = new Date(now); day.setHours(0, 0, 0, 0);
+  const month = new Date(day); month.setDate(1);
+  const year = new Date(month); year.setMonth(0);
+  const start = day.getTime();
+  if (t >= start) return "Today";
+  if (t >= start - 86_400_000) return "Yesterday";
+  if (t >= start - 6 * 86_400_000) return "Last 7 days";
+  if (t >= month.getTime()) return "Earlier this month";
+  if (t >= year.getTime()) return "Earlier this year";
+  return "Before this year";
+}
+/** Do a note's own words say its name: it is named by its first words (its path ends in an id), or it opens with its
+ *  name as its first line? Then the name isn't drawn over them a second time. */
+function saysItsName(r: { id: string; path: string; title: string; body?: string }): boolean {
+  const last = (r.path.split("/").filter(Boolean).pop() ?? "").replace(/\.(md|html?|tsx|jsx)$/i, "");
+  if (!r.id || !last || /^(?:[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$/i.test(last)) return true;
+  const first = ((r.body ?? "").split("\n").find((l) => l.trim()) ?? "").replace(/^\s*#{1,6}\s+/, "").trim();
+  return !!first && first.toLowerCase() === r.title.trim().toLowerCase();
+}
+/** A notes list after a save from the note open beside it: that note leads, with its new words; nothing is read. */
+function withSaved<T extends { id: string }>(rows: readonly T[], n: T & { body?: string }): T[] {
+  const { body, ...row } = n;
+  const was = rows.find((r) => r.id === n.id);
+  return [{ ...(was ?? {}), ...(row as unknown as T), ...(body !== undefined ? { preview: body.replace(/\s+/g, " ").trim().slice(0, 120) } : {}) }, ...rows.filter((r) => r.id !== n.id)];
+}
+// ── end pure helpers ──
+/** Is the frame as wide as a computer's page, where the open note sits beside the list? Follows the window. */
+function useWide(): boolean {
+  const q = "(min-width: 900px)";
+  const [wide, setWide] = useState(() => typeof matchMedia === "function" && matchMedia(q).matches);
+  useEffect(() => {
+    if (typeof matchMedia !== "function") return;
+    const m = matchMedia(q), on = () => setWide(m.matches);
+    on(); m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return wide;
+}
+/** A new note before it is in the vault. */
+const NEW_NOTE: Rec = { id: "", path: "", title: "New note", createdAt: null, updatedAt: null, types: [], tags: [], fields: {}, body: "" };
+const freshKey = () => `new-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+
+/** A vault's first screen: its notes. A calm list, newest first; a search; New note in one tap; the open note beside the
+ *  list on a computer, in its place on a phone. Types and tables, Changes and Sharing are one step away. */
+function NotesScreen({ v, back, record, fresh, open, write, made, tables, sharing, changes }: { v: Held; back?: { label: string; onPress: () => void }; record: string | null; fresh: string | null;
+  open: (id: string | null) => void; write: (fresh: string) => void; made: (id: string) => void; tables: () => void; sharing: () => void; changes: () => void }) {
+  const [rows, setRows] = useState<Rec[] | null>(null);
+  const [next, setNext] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<unknown>(null);
+  // what is typed in the search stays with what it found, across a note opened from it and back
+  const [q, setQ] = useState("");
+  const [term, setTerm] = useState("");
+  const [found, setFound] = useState<Rec[] | null>(null);
+  const wide = useWide();
+  // the box a new note is written in stays the same box once the note is made (its id comes after its first words)
+  const slot = useRef<{ key: string; id: string | null } | null>(null);
+  if (fresh && slot.current?.key !== fresh) slot.current = { key: fresh, id: null };
+  // (kept only while it is that note: a new note left with no words leaves nothing behind for the next note to sit in)
+  if (!fresh && !(slot.current?.id && slot.current.id === record)) slot.current = null;
+  const rowsRef = useRef<Rec[] | null>(null);
+  rowsRef.current = rows;
+  // the newest again, laid over what is shown: a note changed comes to the top, one made shows, the rest stay
+  const load = () => notesFrom(v.key, 0).then(({ rows: head, next: n }) => {
+    const ids = new Set(head.map((r) => r.id)), was = rowsRef.current;
+    const oldest = head[head.length - 1]?.updatedAt ?? "";
+    // what was read further down stays; what should be in the newest page and isn't was deleted or moved out
+    setRows(was && n !== null ? [...head, ...was.filter((r) => !ids.has(r.id) && (r.updatedAt ?? "") < oldest)] : head);
+    setNext((cur: number | null) => (was && n !== null && cur !== null ? Math.max(cur, n) : n));
+    setFailed(null);
+  }, setFailed);
+  const older = () => {
+    if (next === null || busy) return;
+    setBusy(true);
+    notesFrom(v.key, next).then(({ rows: page, next: n }) => { setRows((was: Rec[] | null) => { const ids = new Set((was ?? []).map((r) => r.id)); return [...(was ?? []), ...page.filter((r) => !ids.has(r.id))]; }); setNext(n); },
+      (e: unknown) => toast(`Older notes couldn't be read: ${said(e)}`, { error: true })).then(() => setBusy(false));
+  };
+  // the list is read while it shows: on a phone an open note has taken its place, and a note opened straight from a
+  // link or from Changes reads only itself (a frame's reads are counted: applet/contract.ts)
+  const listed = wide || (record === null && fresh === null);
+  useEffect(() => { setRows(null); setNext(null); }, [v.key]);
+  useEffect(() => {
+    if (!listed) return;
+    void load();
+    // what an AI writes shows as it lands: one read again for each second of changes
+    let soon: ReturnType<typeof setTimeout> | null = null;
+    const stop = vaults.watch(v.key, null, (e: { remove?: string }) => {
+      if (e.remove) setRows((was: Rec[] | null) => was && was.filter((r) => r.id !== e.remove));
+      soon ??= setTimeout(() => { soon = null; void load(); }, 1000);
+    });
+    return () => { stop(); if (soon) clearTimeout(soon); };
+  }, [v.key, listed]);
+  useEffect(() => {
+    if (!term) { setFound(null); return; }
+    let on = true;
+    vaults.query(v.key, { search: term, limit: 50 }).then((x: { records: Rec[] }) => { if (on) setFound(x.records.filter((r) => !r.own)); }, (e: unknown) => toast(`Search failed: ${said(e)}`, { error: true }));
+    return () => { on = false; };
+  }, [term, v.key]);
+  // the older notes come as the list's end scrolls into view (the button under it does the same): watched wherever
+  // the list's end is drawn (it leaves and comes back with the list on a phone)
+  const olderRef = useRef(older);
+  olderRef.current = older;
+  const io = useRef<IntersectionObserver | null>(null);
+  const end = useCallback((el: HTMLDivElement | null) => {
+    io.current?.disconnect(); io.current = null;
+    if (!el || typeof IntersectionObserver !== "function") return;
+    io.current = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) olderRef.current(); }, { rootMargin: "400px" });
+    io.current.observe(el);
+  }, []);
+  useEffect(() => () => io.current?.disconnect(), []);
+  const canWrite = v.mine || v.level === "write";
+  // on a computer a note is always open beside the list, as in any notes app: the one picked, else the newest
+  // (the newest as it was when the list came: it stays put while newer notes land above it)
+  const [newest, setNewest] = useState<string | null>(null);
+  useEffect(() => { setNewest(null); }, [v.key]);
+  useEffect(() => { if (rows && rows.length && !(newest && rows.some((r) => r.id === newest))) setNewest(rows[0].id); }, [rows, newest]);
+  const shown = record ?? (wide && fresh === null && !found ? newest : null);
+  const openNow = shown !== null || fresh !== null;
+  const noteBack = { label: v.name, onPress: () => open(null) };
+  const note = openNow
+    ? <RecordView key={slot.current?.key ?? shown!} v={v} id={shown} notes beside={wide} open={(id) => open(id)} back={wide ? undefined : noteBack}
+        onMade={(id) => { if (slot.current) slot.current.id = id; made(id); if (wide) void load(); }} onSaved={(n) => setRows((was: Rec[] | null) => was && withSaved(was, n))} />
+    : null;
+  // a phone: the open note takes the list's place
+  if (note && !wide) return <Page className="vlt"><style>{CSS}</style><div className="paper">{note}</div></Page>;
+  // under Today and Yesterday a row says its time (the stretch already says the day); further back, its day
+  const row = (r: Rec, day?: string) => ({ key: r.id, title: r.title, meta: wordsOf(r), aside: day === "Today" || day === "Yesterday" ? when.time(r.updatedAt) : when.short(r.updatedAt), current: r.id === shown, onPress: () => open(r.id) });
+  const days: { day: string; rows: Rec[] }[] = [];
+  for (const r of rows ?? []) { const day = dayOf(r.updatedAt); if (days[days.length - 1]?.day === day) days[days.length - 1].rows.push(r); else days.push({ day, rows: [r] }); }
+  return (
+    <Page title={v.name} kicker={v.mine ? "Your vault" : "Someone else's vault"} back={back} wide className="vlt" onRefresh={load}
+      aside={canWrite ? <Button kind="primary" onClick={() => write(freshKey())}>New note</Button> : undefined}>
+      <style>{CSS}</style>
+      <div className={`np${wide ? " pair" : ""}`}>
+        <div>
+          <Search label={`Search ${v.name}`} placeholder={`Search ${v.name}`} value={q} onChange={setQ} onSearch={setTerm} live={300} />
+          <div className="doors"><Button small onClick={tables}>Types and tables</Button><Button small onClick={changes}>Changes</Button><Button small onClick={sharing}>Sharing</Button></div>
+          {found ? (found.length ? <List label="Found" rows={found.map((r) => row(r))} /> : <Empty>Nothing matches.</Empty>)
+            : failed && !rows ? <ReadProblem error={failed} v={v} onRetry={load}>{`${v.name} couldn't be read`}</ReadProblem>
+            : !rows ? <Loading>Reading your notes…</Loading>
+            : !rows.length ? <Empty>{canWrite ? "Nothing written here yet. New note starts one." : "Nothing written here yet."}</Empty>
+            : <section aria-label="Notes">
+                {days.map((d, i) => <List key={d.day} label={d.day} rows={d.rows.map((r) => row(r, d.day))} more={i === days.length - 1 && next !== null ? { label: "Older notes", onPress: older, busy } : undefined} />)}
+                <div ref={end} />
+              </section>}
+        </div>
+        {wide && (note ? <div className="paper">{note}</div> : <p className="hint">{found ? "Pick a note to read it here." : ""}</p>)}
+      </div>
+    </Page>
+  );
 }
 
-/** A vault: its types with their counts, its tags, a search, and a way to make a type. */
-function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: Held; back?: { label: string; onPress: () => void }; openType: (t: string) => void; open: (id: string) => void; sharing: () => void; changes: () => void; packs: () => void }) {
+/** A vault's types and tables, one step from its notes: its types with their counts, its tags, a search, and a way to
+ *  make a type. */
+function VaultScreen({ v, back, openType, open, packs }: { v: Held; back?: { label: string; onPress: () => void }; openType: (t: string) => void; open: (id: string) => void; packs: () => void }) {
   const [types, setTypes] = useState<TypeRow[] | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
   const [term, setTerm] = useState("");
   const [found, setFound] = useState<Rec[] | null>(null);
-  const [recent, setRecent] = useState<Rec[] | null>(null);
   // "Parachute's own": the records the app keeps for itself here (settings, approvals, saved views), in place of Lately,
   // and in search; out of both otherwise
   const [own, setOwn] = useState(false);
@@ -208,9 +410,7 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
     return Promise.all(["Parachute/", ".parachute/"].map((path) => vaults.query(v.key, { path, limit: 100 }).then((x: { records: Rec[] }) => x.records, () => [] as Rec[])))
       .then((all: Rec[][]) => { if (n === asked.current) { setOwnedCut(all.some((x) => x.length >= 100)); setOwned(all.flat().filter((r) => r.own).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))); } });
   };
-  // Lately is what the person (or their AI) wrote: the newest 8 of theirs, read past a run of the app's own
-  const load = () => Promise.all([vaults.types(v.key), latelyIn(v.key)])
-    .then(([t, r]: [TypeRow[], Rec[]]) => { setTypes(t); setRecent(r); setFailed(null); if (ownRef.current) void readOwned(); }, setFailed);
+  const load = () => vaults.types(v.key).then((t: TypeRow[]) => { setTypes(t); setFailed(null); if (ownRef.current) void readOwned(); }, setFailed);
   useEffect(() => { setOwned(null); if (own) void readOwned(); else asked.current++; }, [own, v.key]);
   useEffect(() => {
     void load();
@@ -240,8 +440,7 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
     } catch (e) { toast(`${t} wasn't made: ${said(e)}`, { error: true }); throw e; }
   };
   return (
-    <Page title={v.name} kicker={v.mine ? "Your vault" : "Someone else's vault"} back={back} wide className="vlt" onRefresh={load}
-      aside={<><Button small onClick={changes}>Changes</Button> <Button small onClick={sharing}>Sharing</Button></>}>
+    <Page title="Types and tables" back={back} wide className="vlt" onRefresh={load}>
       <style>{CSS}</style>
       <Search label={`Search ${v.name}`} placeholder={`Search ${v.name}`} onSearch={setTerm} live={300} />
       {found ? (found.length
@@ -271,7 +470,7 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
                     <List label="Parachute's own" rows={(owned ?? []).map((r) => ({ key: r.id, title: r.title, meta: r.types.join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />
                     {owned === null ? <Loading /> : <p className="lede">{owned.length ? `What Parachute keeps for itself here: its settings, the applets you allowed, saved views${ownedCut ? " (the newest of them)" : ""}. Parachute changes these, not you.` : "Parachute keeps nothing of its own here."}</p>}
                   </>
-                : recent && recent.length > 0 && <List label="Lately" rows={recent.map((r) => ({ key: r.id, title: r.title, meta: [...r.types, folderOf(r.path)].filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />}
+                : null}
             </section>
           </div>}
     </Page>
@@ -408,47 +607,67 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
 }
 
 /** One record: its fields, types and tags, words, links both ways, and history. */
-function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: string) => void; back: { label: string; onPress: () => void } }) {
-  const [r, setR] = useState<Rec | null>(null);
+function RecordView({ v, id: given, open, back, notes, beside, onMade, onSaved }: { v: Held; /** null: a new note, in the vault once it has words */ id: string | null; open: (id: string | null) => void;
+  back?: { label: string; onPress: () => void }; /** among the vault's notes: its fields, links and history wait under one line unless it is a record of a type */ notes?: boolean;
+  /** it stands beside the vault's notes (a computer's page) */ beside?: boolean;
+  onMade?: (id: string) => void; /** its words were kept: the record as it is now */ onSaved?: (r: Rec) => void }) {
+  const [madeId, setMadeId] = useState<string | null>(null);
+  const id = given ?? madeId;
+  const [got, setR] = useState<Rec | null>(null);
+  // a new note, before it is in the vault, is an empty one
+  const r: Rec | null = got ?? (id ? null : NEW_NOTE);
   const [spec, setSpec] = useState<Record<string, Spec>>({});
   const [failed, setFailed] = useState<unknown>(null);
-  const [editing, setEditing] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(given === null ? "" : null);
   const [busy, setBusy] = useState(false);
+  // the words as you write them are kept as you go (a new note is made with its first words): what the vault has now,
+  // whether a save is under way, and one waiting behind it
+  const [state, setState] = useState<"" | "saving" | "saved" | "failed" | "changed">("");
+  const [why, setWhy] = useState("");
+  const [more, setMore] = useState<boolean | null>(null);
+  const kept = useRef<string | null>(null), stuck = useRef(false), gone = useRef(false);
+  const chain = useRef<Promise<boolean>>(Promise.resolve(true));
+  const idRef = useRef(id);
+  idRef.current = id;
+  const rRef = useRef<Rec | null>(null);
+  const box = useRef<HTMLTextAreaElement | null>(null);
   const [history, setHistory] = useState<{ ix: number; at: string; via: string | null; op?: string; kind?: string | null; who?: string; mine?: boolean }[] | null>(null);
   const [opened, setOpened] = useState<Change | null>(null);
   const [histFailed, setHistFailed] = useState<unknown>(null);
   const [puts, setPuts] = useSaved<string[]>(`puts:${v.key}`, []);
-  const readHistory = () => vaults.history(v.key, id).then((h: typeof history) => { setHistory(h); setHistFailed(null); }, setHistFailed);
+  const readHistory = () => vaults.history(v.key, id!).then((h: typeof history) => { setHistory(h); setHistFailed(null); }, setHistFailed);
   const editingRef = useRef(editing);
   editingRef.current = editing;
   // its pictures, from the files attached to it (a Parachute before 11-22 has no vaults.file: their names show in their place)
-  const fetchBlob = useCallback((src: string): Promise<Blob> => vaults.file(v.key, id, src), [v.key, id]);
+  const fetchBlob = useCallback((src: string): Promise<Blob> => vaults.file(v.key, id!, src), [v.key, id]);
   const pictures = typeof (vaults as { file?: unknown }).file === "function" ? fetchBlob : undefined;
   const top = useRef<HTMLElement | null>(null);
   // a record opened from a long table comes into view
-  useEffect(() => { top.current?.scrollIntoView?.({ block: "start" }); }, [id]);
+  // (beside the list its place doesn't move: nothing to bring into view, and the page's head stays)
+  useEffect(() => { if (!beside) top.current?.scrollIntoView?.({ block: "start" }); }, [id]);
   const shownRef = useRef<Rec | null>(null);
   // a read that fails once the record shows says so and keeps it (the next change reads it again)
   // the latest read or save wins: a read that lands after a later one (reads can land out of order) changes nothing
   const seq = useRef(0);
-  const load = () => { const n = ++seq.current; return vaults.get(v.key, id).then((x: Rec) => { if (n !== seq.current) return; shownRef.current = x; setR(x); setFailed(null); },
+  const load = () => { if (!idRef.current) return Promise.resolve(); const n = ++seq.current; return vaults.get(v.key, idRef.current).then((x: Rec) => { if (n !== seq.current) return; shownRef.current = x; rRef.current = x; setR(x); setFailed(null); },
     (e: unknown) => { if (n !== seq.current) return; if (shownRef.current) toast(`Couldn't read it again: ${said(e)}`, { error: true }); else setFailed(e); }); };
-  useEffect(() => { void load(); }, [v.key, id]);
-  // what changed it, and who: read with it (one read), and again when it changes
-  useEffect(() => { setOpened(null); void readHistory(); }, [v.key, id, r?.updatedAt]);
+  useEffect(() => { if (given !== null && !shownRef.current) void load(); }, [v.key, given]);
+  // what changed it, and who: read when its history is in view, and again when it changes (not at each save while writing)
+  const moreOpen = more ?? (!notes || (!!r && (r.types.length > 0 || Object.keys(r.fields).length > 0)));
+  useEffect(() => { setOpened(null); if (id && moreOpen && editing === null) void readHistory(); }, [v.key, id, r?.updatedAt, moreOpen, editing === null]);
   useEffect(() => { if (!r) return; vaults.types(v.key).then((t: TypeRow[]) => setSpec(Object.assign({}, ...t.filter((x) => r.types.includes(x.name)).map((x) => x.fields ?? {}))), () => {}); }, [r?.types.join(",")]);
   // shown from what was read before, at once: read again when the vault's answer differs (and not while it is written in)
   // (a Parachute from before 11-21 has no onFresh, and reads the vault each time)
   useEffect(() => (typeof onFresh === "function" ? onFresh(() => { if (editingRef.current === null) void load(); }) : undefined), [v.key, id]);
   // changed elsewhere (an AI, another device) while open: read again, unless the person is writing in it
-  useEffect(() => vaults.watch(v.key, null, (e: { upsert?: Rec }) => { if (e.upsert?.id === id && editingRef.current === null) void load(); }), [v.key, id]);
+  useEffect(() => vaults.watch(v.key, null, (e: { upsert?: Rec }) => { if (idRef.current && e.upsert?.id === idRef.current && editingRef.current === null) void load(); }), [v.key]);
   const canWrite = v.mine || v.level === "write";
   const change = async (c: Record<string, unknown>, done?: string) => {
     if (!r) return;
     try {
       const x: Rec = await vaults.update(v.key, r.id, { if_updated_at: r.updatedAt, ...c });
       // what the save hands back shows at once (its links come with the read after)
-      if (x?.id) { ++seq.current; setR((cur: Rec | null) => { const n = cur ? { ...cur, ...x, body: x.body ?? cur.body, links: cur.links } : x; shownRef.current = n; return n; }); }
+      if (x?.id) { ++seq.current; setR((cur: Rec | null) => { const n = cur ? { ...cur, ...x, body: x.body ?? cur.body, links: cur.links } : x; shownRef.current = n; rRef.current = n; return n; }); }
       await load(); if (done) toast(done); return x;
     }
     catch (e: any) {
@@ -458,8 +677,99 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       throw e;
     }
   };
-  if (failed) return <><Button kind="quiet" onClick={back.onPress}>{back.label}</Button><Problem error={failed} onRetry={load}>This record couldn't be read</Problem></>;
+  const hexId = () => Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => b.toString(16).padStart(2, "0")).join("");
+  /** Words that can't go where they were written (the record changed somewhere else, and the person has left it):
+   *  kept as a note of their own. Never written over the other change, never dropped. */
+  const keepAside = (text: string) => {
+    void vaults.create(v.key, { path: `Notes/${hexId()}`, body: text }).then(() => toast("It had changed somewhere else, so your words were kept as a new note."),
+      (e: unknown) => toast(`Your words weren't kept: ${said(e)}`, { error: true }));
+  };
+  /** One save of the words as they are now. A new note is made with its first words (named by them: its path ends in
+   *  an id); after that each save names the version it changes, so words changed elsewhere meanwhile are never written
+   *  over unasked. true: the vault has them (or there was nothing to keep). */
+  const saveOnce = async (): Promise<boolean> => {
+    const text = editingRef.current;
+    if (text === null) return true;
+    // (a record this box never began writing in is never written to: `kept` is what the vault had when writing began)
+    if (idRef.current ? kept.current === null || text === kept.current : !text.trim()) return true;
+    if (stuck.current) return false;
+    if (!gone.current) setState("saving");
+    try {
+      if (!idRef.current) {
+        const x: Rec = await vaults.create(v.key, { path: `Notes/${hexId()}`, body: text });
+        const n = { ...x, body: text };
+        idRef.current = x.id; kept.current = text; ++seq.current; shownRef.current = n; rRef.current = n;
+        // left before it was made (Back within a moment of typing): it is in the vault, and the list shows it; nothing
+        // here opens it again
+        if (!gone.current) { setR(n); setMadeId(x.id); onMade?.(x.id); } else onSaved?.(n);
+      } else {
+        const x: Rec = await vaults.update(v.key, idRef.current, { if_updated_at: rRef.current?.updatedAt, body: text });
+        kept.current = text;
+        const cur = rRef.current, n = cur ? { ...cur, ...(x?.id ? x : {}), body: text, links: cur.links } : x;
+        ++seq.current; shownRef.current = n; rRef.current = n;
+        if (!gone.current) setR(n);
+        onSaved?.(n);
+      }
+      if (!gone.current) setState("saved");
+      return true;
+    } catch (e) {
+      const m = said(e);
+      // (left meanwhile: the words as they were when the person left, not as this save began with them)
+      if (/conflict/.test(m)) { stuck.current = true; if (gone.current) keepAside(editingRef.current ?? text); else setState("changed"); }
+      else if (gone.current) { if (!/not_confirmed/.test(m)) toast(`Your last words weren't kept: ${m}`, { error: true }); }
+      else if (/not_confirmed|needs_tap/.test(m)) { setState(""); quiet(e, "Not saved"); }
+      else { setWhy(m); setState("failed"); }
+      return false;
+    }
+  };
+  /** Keep the words: one save at a time, each of the words as they are when its turn comes. Resolves once everything
+   *  asked for so far is done (so Done, tapped while a save is on its way, waits for it and then closes). */
+  const saveWords = (): Promise<boolean> => {
+    const next = chain.current.then(saveOnce, saveOnce);
+    chain.current = next.catch(() => false);
+    return next;
+  };
+  const write = () => { const cur = rRef.current; kept.current = cur?.body ?? ""; stuck.current = false; setState(""); setEditing(cur?.body ?? ""); };
+  // a published record asks on the app's own sheet at each change: its words are saved when you say, not as you go
+  const publishedNow = !!r && (r.fields.published === true || [...r.types, ...r.tags].some((t) => t === "publish"));
+  const auto = !publishedNow;
+  const autoRef = useRef(auto);
+  autoRef.current = auto;
+  useEffect(() => {
+    if (editing === null || !auto || stuck.current) return;
+    if (idRef.current ? editing === kept.current : !editing.trim()) return;
+    setState((x: string) => (x === "saved" || x === "failed" ? "" : x) as typeof state);
+    const t = setTimeout(() => { void saveWords(); }, 800);
+    return () => clearTimeout(t);
+  }, [editing, auto]);
+  // leaving it (another note, back, the app hidden) keeps what was written. Under "It changed somewhere else", with
+  // neither Keep mine nor Use theirs chosen, leaving keeps the words as a note of their own
+  useEffect(() => {
+    gone.current = false;
+    const off = typeof onShown === "function" ? onShown((on: boolean) => { if (!on && autoRef.current && !stuck.current) void saveWords(); }) : undefined;
+    return () => {
+      off?.(); gone.current = true;
+      if (!autoRef.current) return;
+      const text = editingRef.current;
+      if (stuck.current) { if (text !== null && text.trim() && text !== kept.current) keepAside(text); return; }
+      void saveWords();
+    };
+  }, []);
+  // (a box is one note's: handed a record it didn't make and never began writing in, it is that record, read)
+  useEffect(() => { if (given !== null && given !== madeId && kept.current === null && editingRef.current !== null) setEditing(null); }, [given]);
+  // the box is the page: it takes the caret when writing starts, and is as tall as what is written
+  const writing = editing !== null;
+  useEffect(() => { const el = box.current; if (writing && el) { el.focus({ preventScroll: true }); el.setSelectionRange(el.value.length, el.value.length); } }, [writing]);
+  useEffect(() => { const el = box.current; if (!el || !writing || !notes) return; el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`; }, [editing, writing]);
+  const done = async () => {
+    if (!autoRef.current) return;
+    const ok = await saveWords();
+    if (!idRef.current) { if (!editingRef.current?.trim()) open(null); return; }
+    if (ok) { setEditing(null); setState(""); void load(); }
+  };
+  if (failed) return <>{back && <Button kind="quiet" onClick={back.onPress}>{back.label}</Button>}<Problem error={failed} onRetry={load}>This record couldn't be read</Problem></>;
   if (!r) return <Loading />;
+  const isNew = !id;
   const names = [...new Set([...Object.keys(spec), ...Object.keys(r.fields)])];
   const links = r.links ?? [];
   const out = links.filter((l) => l.dir === "out"), into = links.filter((l) => l.dir === "in");
@@ -470,27 +780,42 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
   const canCopy = typeof (app as { copy?: unknown }).copy === "function";
   return (
     <article aria-label={r.title} ref={top}>
-      <Button kind="quiet" onClick={back.onPress}>{`← ${back.label}`}</Button>
-      <h2 className="pa-title">{r.title}</h2>
-      <p className="note-meta">{whereOf(r) || "/"} · changed {when.ago(r.updatedAt)}{r.changedBy ? ` · ${r.changedBy}` : ""}</p>
+      {back && <Button kind="quiet" onClick={back.onPress}>{`← ${back.label}`}</Button>}
+      {/* its name, unless its words say it: a note named by its first line, or one that opens with its name as a heading */}
+      {!saysItsName(r) && <h2 className="pa-title">{r.title}</h2>}
+      <p className="note-meta">{isNew ? `A new note in ${v.name}` : <>{whereOf(r) ? `${whereOf(r)} · ` : ""}changed {when.ago(r.updatedAt)}{r.changedBy ? ` · ${r.changedBy}` : ""}</>}</p>
       <div className="chips">
         {r.types.map((t) => <span key={t} className="chip type">{label(t)}{canWrite && <Button small kind="quiet" onClick={() => void change({ types: { remove: [t] } }, `No longer a ${t}.`)}>×</Button>}</span>)}
         {r.tags.map((t) => <span key={t} className="chip">#{t}{canWrite && !["publish", "published"].includes(t.toLowerCase()) && <Button small kind="quiet" onClick={() => void change({ tags: { remove: [t] } })}>×</Button>}</span>)}
       </div>
-      <p className="sect">Words</p>
       {editing !== null
-        ? <Write label="The record's words" value={editing} onChange={setEditing} send={busy ? "Saving…" : "Save"} busy={busy} onSend={async () => {
-            setBusy(true);
-            try { await change({ body: editing }, "Saved."); setEditing(null); } catch { /* the words stay */ }
-            setBusy(false);
-          }}><Button kind="quiet" onClick={() => setEditing(null)}>Cancel</Button></Write>
+        ? (auto
+          // kept as you write: no Save. Done reads it as written
+          ? <Write label="The note's words" value={editing} onChange={setEditing} placeholder={isNew ? "Write. The first line names it." : undefined} inputRef={box} send="Done" canSend onSend={done}>
+              {state === "changed"
+                ? <><span className="state">It changed somewhere else while you wrote. Your words are still here.</span>
+                    <Button small onClick={async () => { try { const now: Rec = await vaults.get(v.key, idRef.current!); rRef.current = now; kept.current = now.body ?? ""; stuck.current = false; await saveWords(); } catch (e) { toast(`Not saved: ${said(e)}`, { error: true }); } }}>Keep mine</Button>
+                    <Button small kind="quiet" onClick={() => { stuck.current = false; setState(""); setEditing(null); void load(); }}>Use theirs</Button></>
+                : <span className="state">{state === "saving" ? "Saving…" : state === "saved" ? "Saved" : state === "failed" ? `Not saved yet: ${why}` : ""}</span>}
+              {state === "failed" && <Button small onClick={() => void saveWords()}>Try again</Button>}
+            </Write>
+          : <Write label="The note's words" value={editing} onChange={setEditing} inputRef={box} send={busy ? "Saving…" : "Save"} busy={busy} onSend={async () => {
+              setBusy(true);
+              try { await change({ body: editing }, "Saved."); setEditing(null); } catch { /* the words stay */ }
+              setBusy(false);
+            }}><Button kind="quiet" onClick={() => setEditing(null)}>Cancel</Button></Write>)
         : <>
-            {(r.body ?? "").trim() ? <Note body={r.body ?? ""} path={r.path} tags={[...r.types, ...r.tags]} fields={r.fields} fetchBlob={pictures} onLink={(target) => {
-              const hit = links.find((l) => l.path === target || l.path.split("/").pop() === target);
-              if (hit) open(hit.id);
-            }} /> : <p className="note-meta">No words yet.</p>}
-            {canWrite && <Button small onClick={() => setEditing(r.body ?? "")}>Edit words</Button>}
+            {/* a tap in the words writes in them (a link, a picture and a selection keep their own tap) */}
+            <div className="words" onClick={canWrite ? (e) => { if ((e.target as HTMLElement).closest('a, [role="link"], button, summary, label, input, img, video, audio') || String(getSelection?.() ?? "")) return; write(); } : undefined}>
+              {(r.body ?? "").trim() ? <Note body={r.body ?? ""} path={r.path} tags={[...r.types, ...r.tags]} fields={r.fields} fetchBlob={pictures} onLink={(target) => {
+                const hit = links.find((l) => l.path === target || l.path.split("/").pop() === target);
+                if (hit) open(hit.id);
+              }} /> : <p className="note-meta">No words yet.</p>}
+            </div>
+            {canWrite && <Button small onClick={write}>Edit words</Button>}
           </>}
+      <details className="more" open={moreOpen} onToggle={(e) => setMore((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary>Fields, links, history, sharing</summary>
       <p className="sect">Fields</p>
       {/* a reference is edited by its paths here (the table shows names): a reference to many as a list of them */}
       {/* (a list whose path holds a comma, "…/@November 21, 2026", would be split by the list's commas: shown, not edited) */}
@@ -536,6 +861,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
           <Button small onClick={() => vaults.publish(v.key, r.id, !published).then((x: { published: boolean; changed: boolean }) => { toast(x.changed ? (x.published ? "Published." : "No longer published.") : x.published ? "It was published already." : "It wasn't published."); return load(); }, (e: unknown) => quiet(e, "Not changed"))}>{published ? "Unpublish" : "Publish"}</Button>
         </div>
       </>}
+      </details>
     </article>
   );
 }

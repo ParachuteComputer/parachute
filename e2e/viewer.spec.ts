@@ -58,9 +58,10 @@ test.describe("Vault", () => {
     // Parachute's own: no card (docs/design/PARACHUTE-SOURCE.md)
     await addAndAllow(page);
 
-    // the person's vaults (three at home), then one: its types with how many records each has
+    // the person's vaults (three at home), then one: its notes, and one step away its types with how many records each has
     const v = vaultUi(page);
     await v.getByRole("button", { name: new RegExp(`^${VAULT}`) }).click();
+    await v.getByRole("button", { name: "Types and tables" }).click();
     const types = v.getByRole("region", { name: "Types" });
     await expect(types.getByRole("button", { name: /shelfbook.*30/ })).toBeVisible();
     await types.getByRole("button", { name: /shelfbook/ }).click();
@@ -146,6 +147,9 @@ test.describe("Vault", () => {
     // a vault's own address opens it in Vault too
     await page.goto(`/v/${VAULT}`);
     await expect(page).toHaveURL(new RegExp(`/a/[^/?]+\\?vault=${VAULT}$`));
+    // it opens on the vault's notes; the types are one step away
+    await expect(vaultUi(page).getByRole("region", { name: "Notes" })).toBeVisible();
+    await vaultUi(page).getByRole("button", { name: "Types and tables" }).click();
     await expect(vaultUi(page).getByRole("region", { name: "Types" })).toBeVisible();
   });
 
@@ -170,6 +174,7 @@ test.describe("Vault", () => {
     await addAndAllow(page);
     const v = vaultUi(page);
     await v.getByRole("button", { name: new RegExp(`^${VAULT}`) }).click();
+    await v.getByRole("button", { name: "Types and tables" }).click();
     await v.getByRole("region", { name: "Types" }).getByRole("button", { name: /shelfbook/ }).click();
     const table = v.getByRole("table", { name: "shelfbook" });
     // a filter saved as a view: a record in Parachute/Views/, and a tab
@@ -188,9 +193,11 @@ test.describe("Vault", () => {
     const rec = v.getByRole("article", { name: "Book 02" });
     const book2 = async () => (await api(hub(), "GET", `notes?path=${encodeURIComponent("Shelf/Book 02")}&include_content=true`))[0];
     await rec.getByRole("button", { name: "Edit words" }).click();
-    await rec.getByLabel("The record's words").fill("New words for book two.");
-    await rec.getByRole("button", { name: "Save" }).click();
+    await rec.getByLabel("The note's words").fill("New words for book two.");
+    // kept as it is written: no Save; Done reads it as written
     await expect.poll(async () => (await book2()).content).toBe("New words for book two.");
+    await expect(rec.getByText("Saved", { exact: true })).toBeVisible();
+    await rec.getByRole("button", { name: "Done" }).click();
     // the record as read again after the save (a change goes to the version it was read at)
     await expect(rec.getByText("New words for book two.")).toBeVisible();
     await expect(rec.getByRole("button", { name: "Edit words" })).toBeVisible();
@@ -216,7 +223,7 @@ test.describe("Vault", () => {
     await expect(rec.getByText("A made-up book.")).toBeVisible();
     // a new type, made with its first record
     await rec.getByRole("button", { name: "← Close" }).click();
-    await v.getByRole("button", { name: new RegExp(`${VAULT}$`) }).first().click();
+    await v.getByRole("button", { name: "← Types and tables" }).click();
     await v.getByLabel("New type").fill("seedling");
     await v.getByRole("button", { name: "Make" }).click();
     await expect(v.getByRole("article", { name: "First seedling" })).toBeVisible();

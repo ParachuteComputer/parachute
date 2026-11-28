@@ -91,6 +91,8 @@ export type Rec = {
   types: string[]; tags: string[]; fields: Record<string, unknown>;
   /** the app's own record (its settings, approvals, saved views, an applet's code): left out of what the person wrote */
   own: boolean;
+  /** its first words on one line, as the hub's lists carry them (a list has no body): for a line under its title */
+  preview?: string;
   body?: string; createdBy?: string | null; createdVia?: string | null; updatedBy?: string | null; updatedVia?: string | null;
   links?: { dir: "out" | "in"; id: string; path: string; relationship: string }[];
 };
@@ -261,6 +263,8 @@ export function recOf(raw: unknown, typeNames?: ReadonlySet<string>): Rec | null
     own: isAppOwn({ path, tags: [...types, ...tagsIn], extension: typeof raw.extension === "string" ? raw.extension : null }),
   };
   if (body !== undefined) out.body = body;
+  const preview = strOr(raw.preview);
+  if (preview) out.preview = preview.slice(0, 300);
   if ("createdBy" in raw) { out.createdBy = strOr(raw.createdBy); out.createdVia = strOr(raw.createdVia); out.updatedBy = strOr(raw.lastUpdatedBy); out.updatedVia = strOr(raw.lastUpdatedVia); }
   if (Array.isArray(raw.links)) {
     out.links = raw.links.flatMap((l) => {

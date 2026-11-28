@@ -172,8 +172,8 @@ function StartHere({ v }: { v: FrameVault }) {
   const own = (name: string) => (home.official ?? []).find((a) => a.manifest.name === name);
   const vault = own("Vault"), connect = own("Connect");
   if (!vault && !connect) return null;
-  const row = (a: FrameApplet, name: string, life: string) => (
-    <li><Link className="entry" to={appletPath(v.key, a.noteId)}>
+  const row = (a: FrameApplet, name: string, life: string, ask = "") => (
+    <li><Link className="entry" to={`${appletPath(v.key, a.noteId)}${ask}`}>
       <span className="entry-glyph" aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span>
       <span className="entry-name">{name}</span>
       <span className="entry-life">{life}</span>
@@ -183,7 +183,8 @@ function StartHere({ v }: { v: FrameVault }) {
     <section aria-label="Start here">
       <h2 className="lately-label">Start here</h2>
       <ol className="entries start-here">
-        {vault && row(vault, "Bring in what you have", "Import from Notion, or start from a pack: clients and sessions, a reading list, people and projects")}
+        {/* Vault opens on a vault's notes; importing and packs are one step from them, and this row leads straight there */}
+        {vault && row(vault, "Bring in what you have", "Import from Notion, or start from a pack: clients and sessions, a reading list, people and projects", `?${new URLSearchParams({ vault: v.key, show: "tables" })}`)}
         {connect && row(connect, "Connect your AI", "one address for Claude or ChatGPT; choose Write so it can save here")}
       </ol>
     </section>

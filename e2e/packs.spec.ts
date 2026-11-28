@@ -65,6 +65,7 @@ async function openPacks(page: Page) {
   await page.goto(`/v/${VAULT}`);
   await expect(page).toHaveURL(/\/a\/parachute%3Avault/);
   const app = frame(page);
+  await app.getByRole("button", { name: "Types and tables" }).click({ timeout: 30_000 });
   await app.getByRole("button", { name: /^(Add a pack|Packs)$/ }).click({ timeout: 30_000 });
   await expect(app.getByRole("heading", { level: 1, name: "Packs" })).toBeVisible();
   return app;

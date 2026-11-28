@@ -70,6 +70,8 @@ declare module "parachute" {
     tags: string[];
     fields: Record<string, unknown>;
     own: boolean;
+    /** its first words on one line, in a list (which carries no body) */
+    preview?: string;
     body?: string;
     createdBy?: string | null;
     createdVia?: string | null;
