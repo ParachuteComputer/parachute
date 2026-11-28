@@ -44,7 +44,7 @@ written then. A settings note already there is never changed this way. Settings 
 - **The applets** load from the Parachute source (`src/applet/parachuteSource.ts`): the copy built into the app, or a
   newer one signed with Parachute's release key. Each runs sealed in its frame and is held to its manifest like any
   applet; only the card goes. Notes, Vault and Connect see the vaults you give each of them through the `vaults` word
-  (`src/applet/modules/vaults.ts`): the home until you tick more ([ACCESS.md](ACCESS.md) proposal 5); Connect copies on a tap with `copy`; Notes and Vault open a note with `open`.
+  (`src/applet/modules/vaults.ts`): the home until you tick more ([ACCESS.md](ACCESS.md) proposal 5); Connect copies on a tap with `copy`; Notes and Vault open a note with `open`; Vault also follows a link in a note's words on a tap (`links`: another note by its short form or address, a web page, a mail address), as Mail and Rooms do.
 - **The home** `/` goes to Vault when the open bundle's `look` is `"notes"` and it offers Vault from Parachute's
   source (`src/shell/App.tsx`, `SIMPLE_HOME`). `/?with=vault` is the frame's own Notes
   (`src/frame/views/NotesHome.tsx`), the way back if Vault won't run. The Notes applet stays among Parachute's own
