@@ -701,7 +701,7 @@ function RecordView({ v, id: given, open, back, notes, beside, onMade, onSaved }
         idRef.current = x.id; kept.current = text; ++seq.current; shownRef.current = n; rRef.current = n;
         // left before it was made (Back within a moment of typing): it is in the vault, and the list shows it; nothing
         // here opens it again
-        if (!gone.current) { setR(n); setMadeId(x.id); onMade?.(x.id); }
+        if (!gone.current) { setR(n); setMadeId(x.id); onMade?.(x.id); } else onSaved?.(n);
       } else {
         const x: Rec = await vaults.update(v.key, idRef.current, { if_updated_at: rRef.current?.updatedAt, body: text });
         kept.current = text;
@@ -714,7 +714,8 @@ function RecordView({ v, id: given, open, back, notes, beside, onMade, onSaved }
       return true;
     } catch (e) {
       const m = said(e);
-      if (/conflict/.test(m)) { stuck.current = true; if (gone.current) keepAside(text); else setState("changed"); }
+      // (left meanwhile: the words as they were when the person left, not as this save began with them)
+      if (/conflict/.test(m)) { stuck.current = true; if (gone.current) keepAside(editingRef.current ?? text); else setState("changed"); }
       else if (gone.current) { if (!/not_confirmed/.test(m)) toast(`Your last words weren't kept: ${m}`, { error: true }); }
       else if (/not_confirmed|needs_tap/.test(m)) { setState(""); quiet(e, "Not saved"); }
       else { setWhy(m); setState("failed"); }
@@ -744,6 +745,7 @@ function RecordView({ v, id: given, open, back, notes, beside, onMade, onSaved }
   // leaving it (another note, back, the app hidden) keeps what was written. Under "It changed somewhere else", with
   // neither Keep mine nor Use theirs chosen, leaving keeps the words as a note of their own
   useEffect(() => {
+    gone.current = false;
     const off = typeof onShown === "function" ? onShown((on: boolean) => { if (!on && autoRef.current && !stuck.current) void saveWords(); }) : undefined;
     return () => {
       off?.(); gone.current = true;
