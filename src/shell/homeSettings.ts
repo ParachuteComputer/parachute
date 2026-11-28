@@ -34,7 +34,7 @@ import { homeVault, setHome } from "./frameSource";
 import { parseHub } from "../vault/parachute";
 import { normalUrl } from "../applet/services";
 import type { Levels } from "./levels";
-import { ANY_HUB, recordOf, BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, defaultBundles, followed, isAppPlace, newerBundle, NEWCOMER_BUNDLE, offersOwn, openBundle, BUNDLE_FOLDER, type AppPlace, type BarEntry, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
+import { ANY_HUB, recordOf, BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, defaultBundles, followed, homeFace, isAppPlace, newerBundle, NEWCOMER_BUNDLE, offersOwn, openBundle, BUNDLE_FOLDER, type AppPlace, type BarEntry, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
 
 export const SETTINGS_TAG = "parachute-settings";
 export const SETTINGS_PATH = "Parachute/Settings";
@@ -364,11 +364,12 @@ export async function startApplet(vault: string, noteId: string | null): Promise
 }
 
 export type Pin = Found & { place: Place };
-/** Parachute's own applets the bar holds as places of the bundle's own (shipped there, Connect, or Notes as the home
- *  screen of a bundle that looks like Parachute Simplified): on the bar already, but not pins, so they offer no Pin. */
-export function barOwnIds(entries: readonly (Pin | AppPlace)[], look: string | undefined): string[] {
+/** Parachute's own applets the bar holds as places of the bundle's own (shipped there, Connect, or Vault as the home
+ *  screen of a bundle that looks like Parachute Simplified and offers it): on the bar already, but not pins, so they
+ *  offer no Pin. */
+export function barOwnIds(entries: readonly (Pin | AppPlace)[], bundle: Pick<Bundle, "look" | "parachute" | "own">): string[] {
   return entries.flatMap((e) => ("href" in e ? [] : "shipped" in e ? [officialId(e.shipped)] : e.screen === "connect" ? [officialId("connect")]
-    : look === "notes" ? [officialId(SIMPLE_HOME)] : []));
+    : homeFace(bundle).vault ? [officialId(SIMPLE_HOME)] : []));
 }
 /** The bar as this device can show it, in the bundle's order: the app's own places as written, and the pins it can find,
  *  each once; and the home applet, which is on the bar only when it is pinned (the bundle's bar is the bar). `pins`: the
@@ -508,9 +509,14 @@ export function effective(s: Settings, apps: readonly Bundle[]): Settings {
   const at = (p: Place): Place => (app.hubOf && !p.hub ? { ...p, hub: app.hubOf } : p);
   // the bundle's own places mean its hub; the settings note's pins are the person's, as written
   // (a bar written when Simplified's home was Notes names Vault beside the home: one place now, the home)
-  const twice = (e: BarEntry) => app.look === "notes" && isAppPlace(e) && "shipped" in e && e.shipped === SIMPLE_HOME;
+  // (so does one that names Vault and no home: the bar adds the home, which is Vault)
+  const same = homeFace(app).vault;
+  const twice = (e: BarEntry) => same && isAppPlace(e) && "shipped" in e && e.shipped === SIMPLE_HOME;
   const bar = app.bar ?? app.base;
-  const own = (bar.some((e) => isAppPlace(e) && "screen" in e && e.screen === "home") ? bar.filter((e) => !twice(e)) : bar).map((e) => (isAppPlace(e) ? e : at(e)));
+  // (where the bar names the home too, Vault beside it goes; where it doesn't, Vault's place on the bar is the home's)
+  const named = bar.some((e) => isAppPlace(e) && "screen" in e && e.screen === "home");
+  const first = bar.find(twice);
+  const own = bar.flatMap((e): BarEntry[] => (!twice(e) ? [e] : !named && e === first ? [{ screen: "home" }] : [])).map((e) => (isAppPlace(e) ? e : at(e)));
   return { ...s, bar: app.bar ? own : [...own, ...s.bar], start: app.start === undefined ? s.start : app.start && at(app.start) };
 }
 

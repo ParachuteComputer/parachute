@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { useHold } from "../ui/hold";
 import { Link, useLocation } from "react-router";
 import { move, pinApplet, setStart, useSettings, type Found, type Pin, type Place } from "./homeSettings";
-import type { AppPlace } from "./bundles";
+import { homeFace, type AppPlace } from "./bundles";
 import { chooseStart, forgetStart } from "./start";
 import { clearMark } from "../open/mark";
 import { homeVault } from "./frameSource";
@@ -23,7 +23,7 @@ type Item = Found & { place: Place; home: boolean };
 
 export default function BottomBar() {
   const { bar, bundle } = useSettings();
-  const notes = bundle.look === "notes";
+  const notes = homeFace(bundle);
   const { pathname } = useLocation();
   const [asked, setAsked] = useState<Item | null>(null);
   const item = (p: Pin): Item => ({ ...p, home: !!bar.start && bar.start.href === p.href });
@@ -80,16 +80,14 @@ export default function BottomBar() {
 
 /** One of the app's own places a bundle's bar names (docs/SIMPLE.md): its home screen (Notes, or the list), Connect an
  *  AI, or one of Parachute's own applets, Journal, Capture or Vault (docs/design/PARACHUTE-SOURCE.md). */
-function AppPlaceLink({ place, notes, pathname }: { place: AppPlace; notes: boolean; pathname: string }) {
+function AppPlaceLink({ place, notes: face, pathname }: { place: AppPlace; notes: ReturnType<typeof homeFace>; pathname: string }) {
   const home = homeVault(useVaults());
   if ("shipped" in place) return <ShippedPlace which={place.shipped} pathname={pathname} />;
   // Connect is Parachute's own applet now (docs/design/PARACHUTE-SOURCE.md)
   if (place.screen === "connect") return <ShippedPlace which="connect" pathname={pathname} />;
   // the home: "/", which opens Parachute's own Vault in Parachute Simplified (shell/App.tsx), or the list
-  const face = officialFace(SIMPLE_HOME);
-  const [glyph, name] = notes ? [`${face.glyph}\uFE0E`, face.name] : ["⁂", "Applets"];
-  const at = pathname === "/" || (notes && !!home && (pathname === officialPath(home.key, SIMPLE_HOME) || pathname === `/${SIMPLE_HOME}`));
-  return <Link className="home-bar-place" to="/" aria-current={at ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{glyph}</span>{name}</Link>;
+  const at = pathname === "/" || (face.vault && !!home && (pathname === officialPath(home.key, SIMPLE_HOME) || pathname === `/${SIMPLE_HOME}`));
+  return <Link className="home-bar-place" to="/" aria-current={at ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{face.glyph === "⁂" ? face.glyph : `${face.glyph}\uFE0E`}</span>{face.name}</Link>;
 }
 function ShippedPlace({ which, pathname }: { which: OfficialName; pathname: string }) {
   // named on the bar, it is there, whatever the bundle's publishers say (they decide what is offered on their own: the

@@ -314,6 +314,7 @@ function NotesScreen({ v, back, record, fresh, open, write, made, tables, sharin
     }
     return out;
   };
+  useEffect(() => () => local.current.clear(), [v.key]);
   // the newest again, laid over what is shown: a note changed comes to the top, one made shows, the rest stay
   const load = () => notesFrom(v.key, 0).then(({ rows: head, next: n }) => {
     const ids = new Set(head.map((r) => r.id)), was = rowsRef.current;
@@ -349,7 +350,7 @@ function NotesScreen({ v, back, record, fresh, open, write, made, tables, sharin
     // what an AI writes shows as it lands: one read again for each second of changes
     let soon: ReturnType<typeof setTimeout> | null = null;
     const stop = vaults.watch(v.key, null, (e: { remove?: string }) => {
-      if (e.remove) setRows((was: Rec[] | null) => was && was.filter((r) => r.id !== e.remove));
+      if (e.remove) { local.current.delete(e.remove); setRows((was: Rec[] | null) => was && was.filter((r) => r.id !== e.remove)); }
       soon ??= setTimeout(() => { soon = null; void load(); }, 1000);
     });
     return () => { stop(); if (soon) clearTimeout(soon); };

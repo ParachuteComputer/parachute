@@ -30,7 +30,8 @@ export default function OAuthCallback() {
     once.current = true;
     const code = params.get("code"), state = params.get("state"), denied = params.get("error");
     // where the ask came from: the way back after a no, too
-    const from = peekPending(state)?.back ?? null;
+    // (with no vault held there is nowhere inside to go back to: the first screen)
+    const from = listVaults().length ? peekPending(state)?.back ?? null : null;
     setBack(from);
     if (denied) {
       dropPending();

@@ -51,10 +51,15 @@ export function readHosted(fetchImpl: typeof fetch = fetch.bind(globalThis)): Pr
   reading ??= (async () => {
     let found: Hosted | null = null;
     try {
-      const res = await fetchImpl(`${location.origin}/.well-known/parachute-account`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(READ_MS) });
+      // (never followed elsewhere: the answer is the serving origin's own, or none)
+      const res = await fetchImpl(`${location.origin}/.well-known/parachute-account`, { headers: { Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(READ_MS) });
       // a plain file host answers its own page (text/html) to any address: only JSON is a descriptor
       if (res.ok && /json/i.test(res.headers.get("content-type") ?? "")) found = hostedFrom(await res.json());
-    } catch { /* no Parachute here */ }
+    } catch {
+      // no answer this time (the network, a slow moment): not kept as "no Parachute here", so the next ask asks again
+      reading = null;
+      return null;
+    }
     known = found;
     try { if (found) { sessionStorage.setItem(KEY, JSON.stringify({ issuer: found.hub })); sessionStorage.setItem(`${KEY}.cloud`, found.cloud ? "1" : "0"); } } catch { /* a tab with no storage reads again */ }
     return found;

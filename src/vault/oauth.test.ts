@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { beginSignIn, cloudClientName, SHELL_RETURN, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
+import { beginSignIn, cloudClientName, cloudOwnName, SHELL_RETURN, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
 import { forgetHosted, readHosted } from "./hosted";
 
 const PENDING = "parachute.oauth.pending.v1";
@@ -174,15 +174,22 @@ describe("beginSignIn", () => {
     await readHosted((async () => new Response(JSON.stringify({ issuer: "https://cloud.example", door: "cloud" }), { headers: { "content-type": "application/json" } })) as unknown as typeof fetch);
     try {
       await beginSignIn({ parachute: cloud, step: "list", how: "page" }, own);
-      expect(names).toEqual(["Parachute"]);
+      // with the browser and the kind of device: every browser returns to the same address there, and Cloud ends an
+      // earlier sign-in of the same name (a phone's browser would sign the laptop's out)
+      expect(names).toEqual([cloudOwnName()]);
+      expect(names[0]).toMatch(/^Parachute( in \w+)?( on [\w ]+)?$/);
+      expect(cloudOwnName("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15")).toBe("Parachute in Safari on a Mac");
+      expect(cloudOwnName("Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36")).toBe("Parachute in Chrome on Android");
+      expect(cloudOwnName("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0")).toBe("Parachute in Firefox on Windows");
+      expect(cloudOwnName("")).toBe("Parachute");
       // a Cloud that doesn't count this page as its own refuses the name: the other name, as from any app outside it
       localStorage.clear(); names.length = 0;
       const url = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(meta, names)));
-      expect(names).toEqual(["Parachute", "Vault app on Linux"]);
+      expect(names).toEqual([cloudOwnName(), "Vault app on Linux"]);
       expect(url.searchParams.get("client_id")).toBe("client-2");
       // and that registration is the one kept: the next step registers nothing
       await beginSignIn({ parachute: cloud, step: "open", vault: "home", how: "page" }, cloudLike(meta, names));
-      expect(names).toEqual(["Parachute", "Vault app on Linux"]);
+      expect(names).toEqual([cloudOwnName(), "Vault app on Linux"]);
     } finally { forgetHosted(); }
   });
   it("on Parachute Cloud, registers under a name Cloud takes from an app outside it (it keeps \"Parachute\" for its own pages)", async () => {

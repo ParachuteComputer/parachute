@@ -10,6 +10,7 @@
 // vaults they waved away (Not now, or signed out of on purpose), so those don't come back.
 import { beginSignIn, dropPending } from "./oauth";
 import { describe, everyVault } from "./parachute";
+import { readHosted } from "./hosted";
 import { MAX_VAULTS } from "./address";
 import { listVaults, originOf } from "./store";
 import { isMine, whoseSaid } from "./whose";
@@ -105,7 +106,7 @@ export const newVaultsRev = () => rev;
 async function reachable(hub: string): Promise<string[] | null> {
   if (keysHere()) {
     try {
-      const listed = await listWithKey(await describe(hub));
+      const listed = await listWithKey(await readHosted().then(() => describe(hub)));
       // (a list cut at MAX_VAULTS isn't every vault for the public list, as at sign-in)
       if (listed) { noteEvery(hub, listed.all && listed.vaults.length < MAX_VAULTS); noteAdmin(hub, listed.all); return listed.vaults; }
     } catch (e) {
@@ -162,6 +163,7 @@ export async function startAddVault(hub: string, vault: string): Promise<string>
   const h = originOf(hub);
   if (!newVaultsOn(h).includes(vault)) throw new Error("That vault isn't on offer here.");
   const { whose } = opensAs(h, vault);
+  await readHosted();
   const parachute = await describe(h);
   const b = { parachute, step: "open" as const, vault, level: "read" as const, why: "open" as const, whose };
   if (keysHere()) {

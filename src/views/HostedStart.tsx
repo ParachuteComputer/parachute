@@ -10,31 +10,32 @@ import type { Hosted } from "../vault/hosted";
 import { signInWords as words, startAdded, startSignIn } from "../vault/signInFlow";
 import { useVaults } from "../vault/hooks";
 
-/** A sign-in the address asked for is started once: coming back from the hub with a no doesn't start it again. */
-const ASKED_KEY = "parachute.hosted.asked";
+/** Was this page reached by Back or Forward? Then a sign-in its address asks for isn't started again by itself (Back
+ *  from the hub's page mustn't bounce the person forward to it); a fresh tap on the link is a new load, and starts it. */
+const cameBack = () => (performance.getEntriesByType?.("navigation")[0] as PerformanceNavigationTiming | undefined)?.type === "back_forward";
 
-/** `/?add=…` on a page a Parachute serves: mounted at the root, for a person signed in here already as for a new one. */
+/** `/?add=…` on a page Parachute Cloud serves: mounted at the root, for a person signed in here already as for a new one. */
 export function AddedVault({ hosted }: { hosted: Hosted }) {
   const [params] = useSearchParams();
   const nav = useNavigate();
   const add = params.get("add");
   const redirect = params.get("redirect");
   const then = redirect === "/new" ? "new" as const : redirect === "/import" ? "tables" as const : null;
+  const more = params.get("more") === "1";
   const once = useRef<string | null>(null);
   useEffect(() => {
-    if (!add || add.length > 500 || once.current === add) return;
+    if (!add || once.current === add) return;
     once.current = add;
-    const asked = `${add}|${then ?? ""}`;
+    // the address has done its work, or has none to do: it is left for the plain one, so the home shows as itself
+    const plain = () => nav("/", { replace: true });
+    if (add.length > 500 || cameBack()) { plain(); return; }
     let on = true;
-    startAdded(hosted.hub, add, then).then((next) => {
-      if (!on || !next) return;
-      if ("open" in next) { nav(next.open, { replace: true }); return; }
-      if (sessionStorage.getItem(ASKED_KEY) === asked) return;
-      sessionStorage.setItem(ASKED_KEY, asked);
-      window.location.assign(next.go);
-    }, () => { /* the first screen offers the sign-in, and says why it failed there */ });
+    startAdded(hosted.hub, add, then, more).then((next) => {
+      if (!on) return;
+      if (!next) plain(); else if ("open" in next) nav(next.open, { replace: true }); else window.location.assign(next.go);
+    }, plain);
     return () => { on = false; };
-  }, [add, then, hosted.hub, nav]);
+  }, [add, then, more, hosted.hub, nav]);
   return null;
 }
 

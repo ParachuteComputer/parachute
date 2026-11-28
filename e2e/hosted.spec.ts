@@ -91,6 +91,17 @@ test("the console's links: /?add=<a vault's address> signs in for that vault wit
   await page.goto(`${origin}/?add=${add}&redirect=${encodeURIComponent("/new")}`);
   // straight to the hub: one consent, for that vault alone (no listing first)
   await page.waitForURL((u) => u.origin === hub.origin);
+  // Back from the hub's page stays back: the first screen, on a plain address (it sent the person forward again)
+  await page.goBack();
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page).toHaveURL(`${origin}/`);
+  // a No on the hub, with nothing held: said, and the way on is the first screen (not an address inside a vault)
+  await page.goto(`${origin}/oauth/callback?error=access_denied&state=x`);
+  await expect(page.getByRole("alert")).toContainText("You said no");
+  await expect(page.getByRole("link", { name: "Go back" })).toHaveCount(0);
+  // the link again, tapped afresh, asks again (nothing is kept in the tab that would stop it)
+  await page.goto(`${origin}/?add=${add}&redirect=${encodeURIComponent("/new")}`);
+  await page.waitForURL((u) => u.origin === hub.origin);
   const asked = await approveUntilBack(page, hub.origin, origin, undefined, `/v/${VAULT}/a/parachute%3Avault`);
   expect(asked).toBe(1);
   // "Write a note": a new note is open (a page that just loaded can't take the caret for itself: one tap, then type)
@@ -109,7 +120,9 @@ test("the console's links: /?add=<a vault's address> signs in for that vault wit
   await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/a/parachute%3Avault\\?vault=${VAULT}`));
   await expect(vaultUi(page).getByRole("heading", { level: 1, name: VAULT })).toBeVisible({ timeout: 20_000 });
 
-  // an address that isn't one of this Parachute's vaults does nothing
+  // an address that isn't one of this Parachute's vaults does nothing: the home, as a plain visit would show it
   await page.goto(`${origin}/?add=${encodeURIComponent("https://elsewhere.example/vault/x")}`);
-  await expect(page).toHaveURL(/\?add=/);
+  await expect(page).not.toHaveURL(/add=/);
+  await expect(page).toHaveURL((u) => u.origin === origin && !/elsewhere/.test(u.href));
+  await expect(page.locator("nav[aria-label=Bar]")).toBeVisible();
 });

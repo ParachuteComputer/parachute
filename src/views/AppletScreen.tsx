@@ -755,7 +755,7 @@ export default function AppletScreen() {
   // (none on a bar someone else offers, nor for one of Parachute's own the bundle places on the bar itself, or doesn't
   // offer: the bar wouldn't show it)
   const ownHere = officialOf(pinId);
-  const canPin = !!pinVault && !bundleHere.live && !(pinVault === homeVault()?.key && barOwnIds(barHere.entries, bundleHere.look).includes(pinId)) && !(ownHere && !offersOwn(bundleHere, ownHere));
+  const canPin = !!pinVault && !bundleHere.live && !(pinVault === homeVault()?.key && barOwnIds(barHere.entries, bundleHere).includes(pinId)) && !(ownHere && !offersOwn(bundleHere, ownHere));
   const pinName = !canPin ? null : entry ? name : loaded.state === "newer" ? loaded.entry.manifest.name : null;
   const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : loaded.state === "newer" ? `${loaded.entry.manifest.glyph} ${loaded.entry.manifest.name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu}>
     {pinName && <PinButton name={pinName} pinned={pinnedHere} busy={pinBusy} onToggle={togglePin} />}

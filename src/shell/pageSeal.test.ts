@@ -27,6 +27,21 @@ describe("the page draws no HTML and seals every frame", () => {
     for (const f of frames) expect(f.tag, f.p).toMatch(/\bsandbox="allow-scripts"/);
     expect(SRC.filter((f) => /allow-same-origin|allow-top-navigation|allow-popups|allow-forms/.test(code(f.text))).map((f) => f.p)).toEqual([]);
   });
+  it("no frame is made any other way, and nothing an applet hands over becomes a document of the page's origin", () => {
+    // frames made by hand, an srcdoc set by hand, a sink reached by its name in brackets
+    const byHand = /createElement\(\s*["']iframe["']|setAttribute\(\s*["']srcdoc["']|\[\s*["'](?:innerHTML|outerHTML|srcdoc)["']\s*\]/;
+    expect(SRC.filter((f) => f.p !== "src/applet/selftest/probe.ts" && byHand.test(code(f.text))).map((f) => f.p)).toEqual([]);
+    // a blob address is a document of this origin if a browser opens it. Each maker of one is read and listed here:
+    //   shell/device.ts    saveFileOut: a download, always typed application/octet-stream (never a page or a picture)
+    const blobs = SRC.filter((f) => /createObjectURL\s*\(/.test(code(f.text))).map((f) => f.p).sort();
+    // (src/kit and src/frame are what applets are built from: they run inside the sealed frame, never in the page. So
+    // does the self-test's probe, which is kept as text and run in a sealed frame of its own.)
+    const inFrame = (p: string) => p.startsWith("src/kit/") || p.startsWith("src/frame/") || p === "src/applet/selftest/probe.ts";
+    expect(blobs.filter((p) => !inFrame(p))).toEqual(["src/shell/device.ts"]);
+    const device = code(SRC.find((f) => f.p === "src/shell/device.ts")!.text);
+    expect(device).toMatch(/createObjectURL\(new Blob\(\[bytes\], \{ type: "application\/octet-stream" \}\)\)/);
+    expect([...device.matchAll(/createObjectURL\s*\(/g)]).toHaveLength(1);
+  });
 });
 
 describe("public/sw.js", () => {

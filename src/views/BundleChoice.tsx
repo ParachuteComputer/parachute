@@ -7,7 +7,7 @@ import BarSettings from "./BarSettings";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { bundlesIn, chooseBundle, chooseBundleIn, effective, find, readSettings, setStart, useSettings, type Pin, type Settings, MAX_PLACES } from "../shell/homeSettings";
 import { chooseStart, forgetStart } from "../shell/start";
-import { barNames, DEFAULT_BUNDLES, isAppPlace, type Bundle } from "../shell/bundles";
+import { barNames, DEFAULT_BUNDLES, homeFace, isAppPlace, type Bundle } from "../shell/bundles";
 import { homeVault, setHome } from "../shell/frameSource";
 import { useVaults } from "../vault/hooks";
 import type { VaultRecord } from "../vault/store";
@@ -78,7 +78,7 @@ export default function BundleChoice() {
       {/* someone else's bundle: its first screen is theirs, as its bar is */}
       {!bundle.live && <fieldset className="plain" disabled={busy}>
         <legend className="settings-sub">Opens on</legend>
-        <label className="line"><span><input type="radio" name="opens-on" checked={now === ""} onChange={(e) => opensOn(e, null)} /> {bundle.look === "notes" ? <><span aria-hidden="true">¶</span> <b>Notes</b></> : <><span aria-hidden="true">⁂</span> <b>Applets</b></>}</span></label>
+        <label className="line"><span><input type="radio" name="opens-on" checked={now === ""} onChange={(e) => opensOn(e, null)} /> <span aria-hidden="true">{homeFace(bundle).glyph}</span> <b>{homeFace(bundle).name}</b></span></label>
         {firsts.map((p) => (
           <label key={`${p.vault}/${p.noteId}`} className="line"><span><input type="radio" name="opens-on" checked={now === keyOf(p)} onChange={(e) => opensOn(e, p)} /> <span aria-hidden="true">{p.glyph}</span> <b>{p.name}</b></span></label>
         ))}

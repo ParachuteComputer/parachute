@@ -140,8 +140,9 @@ export function vaultNamed(template: string, address: string): string | null {
  *  welcome mail: `/?add=<the vault's address>`, with `redirect=/new` or `/import`): to Vault at that vault when this
  *  device holds it; else one sign-in for that vault alone, no listing first, so the hub asks once. null when the
  *  address isn't a vault of that Parachute's: nothing is done with it. `then`: start a new note there (`redirect=/new`),
- *  or show its types and tables, where Import from Notion is (`redirect=/import`). */
-export async function startAdded(hub: string, address: string, then: "new" | "tables" | null): Promise<{ go: string } | { open: string } | null> {
+ *  or show its types and tables, where Import from Notion is (`redirect=/import`). `more`: that Parachute said the
+ *  person has other vaults too (`more=1`), so nobody is taken for new to the app by this one holding no settings. */
+export async function startAdded(hub: string, address: string, then: "new" | "tables" | null, more = false): Promise<{ go: string } | { open: string } | null> {
   const f = fetchFor("mine");
   await readHosted();
   const parachute = await describe(hub, f);
@@ -151,11 +152,11 @@ export async function startAdded(hub: string, address: string, then: "new" | "ta
   const at = (key: string) => `/vault?${new URLSearchParams({ vault: key, ...(then ? { show: then } : {}) })}`;
   if (held) return { open: at(held.key) };
   // the person came from that Parachute's own page for this vault: it is theirs, and the home when this device has none.
-  // (`solo`: taken as their only vault, so someone new to the app there starts simply. A person whose settings are in
-  // another vault and who opens this one first on a new browser starts simply too, and changes it in Settings.)
+  // (`solo`: their only vault, unless the link said they have more: someone new to the app there starts simply, and
+  // nothing is written into one vault of several on a guess, where another may hold the person's settings.)
   const home = !homeVault();
   return { go: await beginSignIn({ parachute, step: "open", vault, level: "write", why: "signin", whose: "mine", how: "page", fresh: true, home,
-    marks: { listed: [vault], whose: "mine", mine: null, solo: true }, ...(home && !then ? {} : { back: at(keyFor(listVaults(), parachute.issuer, vault)) }) }, f) };
+    marks: { listed: [vault], whose: "mine", mine: null, solo: !more }, ...(home && !then ? {} : { back: at(keyFor(listVaults(), parachute.issuer, vault)) }) }, f) };
 }
 
 /** Ask a Parachute this device is signed in to for one vault, at a level (vault/reach.ts says when): through the key
@@ -163,6 +164,7 @@ export async function startAdded(hub: string, address: string, then: "new" | "ta
 export async function askVault(rec: Pick<VaultRecord, "issuer" | "vault">, level: Level, why: Why, back?: string, allow?: AllowAfter): Promise<string> {
   const hub = originOf(rec.issuer);
   const whose: "mine" | "theirs" = whoseOf(rec) === "mine" ? "mine" : "theirs";
+  await readHosted();
   const parachute = await describe(hub, fetchFor(whose));
   const b = { parachute, step: "open" as const, vault: rec.vault, level, why, whose, ...(back ? { back } : {}), ...(allow ? { allow } : {}) };
   if (keysHere()) {
@@ -176,6 +178,7 @@ export async function askVault(rec: Pick<VaultRecord, "issuer" | "vault">, level
 export async function askManage(rec: Pick<VaultRecord, "issuer" | "vault">, back: string, applet: string): Promise<string> {
   const hub = originOf(rec.issuer);
   const whose: "mine" | "theirs" = whoseOf(rec) === "mine" ? "mine" : "theirs";
+  await readHosted();
   const parachute = await describe(hub, fetchFor(whose));
   const b = { parachute, step: "manage" as const, vault: rec.vault, why: "manage" as const, whose, back, applet };
   if (keysHere()) {

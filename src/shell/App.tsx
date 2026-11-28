@@ -116,11 +116,13 @@ function FirstRun() {
   return keysHere() && key === null ? <KeyStart first /> : <AddParachute first hub={hosted?.hub} />;
 }
 
-/** `/?add=<a vault's address>` from the Parachute that serves this page (its console, its welcome mail). */
+/** `/?add=<a vault's address>` from Parachute Cloud when it serves this page (its console, its welcome mail). Only
+ *  Cloud's: there a vault named by its own page is the person's own (vault/whose.ts leaves that to the person anywhere
+ *  else). */
 function HostedLinks() {
   const hosted = useHosted();
   const { pathname, search } = useLocation();
-  return hosted && pathname === "/" && search.includes("add=") ? <AddedVault hosted={hosted} /> : null;
+  return hosted?.cloud && pathname === "/" && new URLSearchParams(search).has("add") ? <AddedVault hosted={hosted} /> : null;
 }
 
 /** How long after a start its decision may be made again, when the settings the vault answers differ from the copy. */
@@ -204,7 +206,7 @@ function ShellRoutes() {
   // (docs/design/PARACHUTE-SOURCE.md); where the bundle leaves it out, the frame's Notes stays (and `/?with=vault`, the
   // way back if Vault won't run). An address that asks something of the host (`?add=`: HostedLinks) is left to it.
   const homeKey = homeVault(vaults)?.key;
-  if (location.pathname === "/" && !location.search.includes("with=vault") && !location.search.includes("add=") && !shell && homeKey && openBundleNow().look === "notes" && offersOwn(openBundleNow(), SIMPLE_HOME))
+  if (location.pathname === "/" && !location.search.includes("with=vault") && !(hostedNow()?.cloud && new URLSearchParams(location.search).has("add")) && !shell && homeKey && openBundleNow().look === "notes" && offersOwn(openBundleNow(), SIMPLE_HOME))
     return <Navigate to={officialPath(homeKey, SIMPLE_HOME)} replace />;
   const bar = withBar(location.pathname, shell) && vaults.length > 0;
   const own = keptId(location) !== null;

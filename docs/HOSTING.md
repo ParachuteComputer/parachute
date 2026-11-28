@@ -53,6 +53,7 @@ draws no HTML from a vault or a hub (everything such is drawn inside a sealed fr
 | `/?add=<a vault's address>` | Signs in for that vault alone, one ask on the hub, and opens it; held already, just opens it. An address that isn't one of the host's vaults does nothing |
 | `/?add=<…>&redirect=/new` | The same, then a new note, ready to type in |
 | `/?add=<…>&redirect=/import` | The same, then the vault's types and tables, where **Import from Notion** is |
+| `…&more=1` | Say it when the person has other vaults on this host too. Without it the vault is taken as their only one, and a person whose vault holds no settings starts on Parachute Simplified (which is written there) |
 | `/connect` | Connect an AI |
 | `/v/<vault>/n/<id>` | A note |
 

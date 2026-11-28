@@ -58,7 +58,10 @@ export async function pictureOut(url: string): Promise<{ type: string; bytes: Ar
  *  browser, the browser's own download, under the name given. */
 export async function saveFileOut(name: string, bytes: ArrayBuffer, type: string): Promise<string> {
   if (inShell()) return invoke<string>("save_file", { name, bytes: b64(new Uint8Array(bytes)), mime: type });
-  const url = URL.createObjectURL(new Blob([bytes], { type }));
+  // always as plain bytes (its name carries its kind): a blob of an applet's choosing, typed as a page or a picture
+  // with script in it, would open in this page's own origin wherever a browser shows it instead of saving it
+  void type;
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
   const a = document.createElement("a");
   a.href = url; a.download = name; a.rel = "noopener"; a.hidden = true;
   document.body.appendChild(a);
