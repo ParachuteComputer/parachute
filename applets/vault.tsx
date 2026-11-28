@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 // Table, Fields and the vaults calls are level 3, Changes' calls (vaults.changes, compare, restore, remove) level 5, and
 // who reaches a vault (vaults.reach, manage, giveKey, endReach, stopManaging) level 6: its record says `needs: 6`, so an
 // older app says to update
-import { app, Button, Empty, Field, Fields, List, Loading, Note, onFresh, onLaunch, onShown, Page, Problem, ready, Search, Table, Tabs, toast, useSaved, vaults, when, Write } from "parachute";
+import { app, Button, Empty, Field, Fields, link as links_, List, Loading, Note, onFresh, onLaunch, onShown, Page, Problem, ready, Search, Table, Tabs, toast, useSaved, vaults, when, Write } from "parachute";
 
 type Held = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where a published record is read (this plus its id): null where the hub has none; absent from an older app */
@@ -857,7 +857,10 @@ function RecordView({ v, id: given, open, back, notes, beside, onMade, onSaved }
             <div className="words" onClick={canWrite ? (e) => { if ((e.target as HTMLElement).closest('a, [role="link"], button, summary, label, input, img, video, audio') || String(getSelection?.() ?? "")) return; write(); } : undefined}>
               {(r.body ?? "").trim() ? <Note body={r.body ?? ""} path={r.path} tags={[...r.types, ...r.tags]} fields={r.fields} fetchBlob={pictures} onLink={(target) => {
                 const hit = links.find((l) => l.path === target || l.path.split("/").pop() === target);
-                if (hit) open(hit.id);
+                if (hit) { open(hit.id); return; }
+                // a note named by its short form or its address (in any vault), a web page, a mail address: the app
+                // opens it, as it would from a room (a name that is none of the record's own links leads nowhere)
+                if (links_.parse(target) || /^(https?:|mailto:)/i.test(target)) void links_.follow(target);
               }} /> : <p className="note-meta">No words yet.</p>}
             </div>
             {canWrite && <Button small onClick={write}>Edit words</Button>}
