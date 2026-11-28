@@ -23,6 +23,8 @@ const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".j
 const KEPT = [/^\/vault(\/|$)/, /^\/mcp(\/|$)/, /^\/oauth\/(?!callback$)/, /^\/account\//, /^\/console(\/|$)/, /^\/login$/, /^\/health$/];
 let server: Server, origin = "";
 const seen: string[] = [];
+/** How long the host takes to say what it is (a slow link). */
+let slowMs = 0;
 
 test.beforeAll(async () => {
   const hub = hubState();
@@ -33,7 +35,7 @@ test.beforeAll(async () => {
     const path = decodeURIComponent(new URL(req.url ?? "/", "http://x").pathname);
     seen.push(`${req.method} ${path}`);
     const send = (status: number, type: string, body: string | Buffer) => { res.writeHead(status, { "content-type": type, "content-security-policy": csp, "cache-control": "no-store" }); res.end(body); };
-    if (path === "/.well-known/parachute-account") return send(200, "application/json", JSON.stringify({ issuer: hub.origin, door: "cloud", account_mcp_endpoint: `${hub.origin}/account/mcp`, vault_url_template: `${hub.origin}/vault/{name}` }));
+    if (path === "/.well-known/parachute-account") return void setTimeout(() => send(200, "application/json", JSON.stringify({ issuer: hub.origin, door: "cloud", account_mcp_endpoint: `${hub.origin}/account/mcp`, vault_url_template: `${hub.origin}/vault/{name}` })), slowMs);
     if (KEPT.some((k) => k.test(path))) return send(503, "application/json", JSON.stringify({ error: "route_missing" }));
     const file = normalize(join(DIST, path));
     if (file.startsWith(DIST) && path !== "/" && existsSync(file) && statSync(file).isFile()) return send(200, TYPES[extname(file)] ?? "application/octet-stream", readFileSync(file));
@@ -119,6 +121,22 @@ test("the console's links: /?add=<a vault's address> signs in for that vault wit
   await page.goto(`${origin}/?add=${add}`);
   await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/a/parachute%3Avault\\?vault=${VAULT}`));
   await expect(vaultUi(page).getByRole("heading", { level: 1, name: VAULT })).toBeVisible({ timeout: 20_000 });
+
+  // a person on Parachute Simplified, whose home opens on Vault, taps "Write a note" in a new tab on a slow link: the
+  // host says what it is only after the app has decided where to start. The link still acts (going home first dropped it).
+  await page.evaluate((v) => localStorage.setItem("parachute.app.open.v1", JSON.stringify({ [v]: "simple" })), VAULT);
+  const tab = await page.context().newPage();
+  await tab.goto(`${origin}/`);
+  await expect(tab).toHaveURL(new RegExp(`/v/${VAULT}/a/parachute%3Avault`));
+  await tab.close();
+  slowMs = 2500;
+  const slow = await page.context().newPage();
+  try {
+    await slow.goto(`${origin}/?add=${add}&redirect=${encodeURIComponent("/new")}`);
+    await expect(slow).toHaveURL(/show=new/, { timeout: 15_000 });
+    await expect(vaultUi(slow).getByRole("textbox", { name: "The note's words" })).toBeVisible({ timeout: 20_000 });
+  } finally { slowMs = 0; await slow.close(); }
+  await page.evaluate(() => localStorage.removeItem("parachute.app.open.v1"));
 
   // an address that isn't one of this Parachute's vaults does nothing: the home, as a plain visit would show it
   await page.goto(`${origin}/?add=${encodeURIComponent("https://elsewhere.example/vault/x")}`);

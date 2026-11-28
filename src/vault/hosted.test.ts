@@ -20,6 +20,25 @@ group("hostedFrom", () => {
 });
 
 group("readHosted", () => {
+  it("a host with no answer this time (the network, a 503, a 429) isn't kept as no host: the next ask asks again", async () => {
+    let n = 0;
+    const flaky = (async () => {
+      n++;
+      if (n === 1) throw new TypeError("network");
+      if (n === 2) return new Response("busy", { status: 503 });
+      if (n === 3) return new Response("slow down", { status: 429 });
+      return new Response(JSON.stringify({ issuer: "https://cloud.parachute.computer", door: "cloud" }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    expect(await readHosted(flaky)).toBeNull();
+    expect(await readHosted(flaky)).toBeNull();
+    expect(await readHosted(flaky)).toBeNull();
+    expect(hostedNow()).toBeNull();
+    expect(await readHosted(flaky)).toEqual({ hub: "https://cloud.parachute.computer", cloud: true });
+    expect(n).toBe(4);
+    // a definite answer is kept: no fifth ask
+    expect(await readHosted(flaky)).toEqual({ hub: "https://cloud.parachute.computer", cloud: true });
+    expect(n).toBe(4);
+  });
   it("asks the page's own origin once, and keeps the answer for the tab", async () => {
     let asked = 0;
     const f = (async (input: RequestInfo | URL) => { asked++; expect(String(input)).toBe(`${location.origin}/.well-known/parachute-account`); return new Response(JSON.stringify({ issuer: "https://stage.example", door: "cloud" }), { headers: { "content-type": "application/json" } }); }) as unknown as typeof fetch;

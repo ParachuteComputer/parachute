@@ -53,6 +53,8 @@ export function readHosted(fetchImpl: typeof fetch = fetch.bind(globalThis)): Pr
     try {
       // (never followed elsewhere: the answer is the serving origin's own, or none)
       const res = await fetchImpl(`${location.origin}/.well-known/parachute-account`, { headers: { Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(READ_MS) });
+      // a host in trouble for a moment hasn't said no
+      if (res.status === 429 || res.status >= 500) throw new Error("no answer");
       // a plain file host answers its own page (text/html) to any address: only JSON is a descriptor
       if (res.ok && /json/i.test(res.headers.get("content-type") ?? "")) found = hostedFrom(await res.json());
     } catch {

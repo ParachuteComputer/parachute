@@ -8,6 +8,7 @@ import PickVaults from "./PickVaults";
 import { afterSignIn, listWaiting } from "../shell/parachutes";
 import { homeVault } from "../shell/frameSource";
 import { listVaults } from "../vault/store";
+import { hostedNow } from "../vault/hosted";
 import { markTap } from "../open/mark";
 
 /** Where the hub sends the person back: after a sign-in's listing, on to the consent for one vault (or a pick first);
@@ -66,7 +67,7 @@ export default function OAuthCallback() {
           <a className="primary" href={approve}>Approve on your hub</a>
         </> : error ? <>
           <p className="error" role="alert">{error}</p>
-          {back ? <Link to={back}>Go back</Link> : listVaults().length ? <Link to="/">Open your applets</Link> : <Link to="/add">Try again</Link>}
+          {back ? <Link to={back}>Go back</Link> : listVaults().length ? <Link to="/">Open your applets</Link> : <Link to={hostedNow()?.cloud ? "/" : "/add"}>Try again</Link>}
         </> : <p>{saying}</p>}
       </div>}
     </main>

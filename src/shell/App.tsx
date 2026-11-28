@@ -116,13 +116,16 @@ function FirstRun() {
   return keysHere() && key === null ? <KeyStart first /> : <AddParachute first hub={hosted?.hub} />;
 }
 
+/** Does this address ask something of the Parachute that serves the page (`/?add=…`, in a browser)? */
+const asksHost = (l: { pathname: string; search: string }) => !inShell() && l.pathname === "/" && new URLSearchParams(l.search).has("add");
+
 /** `/?add=<a vault's address>` from Parachute Cloud when it serves this page (its console, its welcome mail). Only
  *  Cloud's: there a vault named by its own page is the person's own (vault/whose.ts leaves that to the person anywhere
  *  else). */
 function HostedLinks() {
   const hosted = useHosted();
   const { pathname, search } = useLocation();
-  return hosted?.cloud && pathname === "/" && new URLSearchParams(search).has("add") ? <AddedVault hosted={hosted} /> : null;
+  return hosted?.cloud && asksHost({ pathname, search }) ? <AddedVault hosted={hosted} /> : null;
 }
 
 /** How long after a start its decision may be made again, when the settings the vault answers differ from the copy. */
@@ -143,8 +146,9 @@ function useStart(): boolean {
     let on = true;
     void startPlace().then((to) => {
       if (!on) return;
-      // only from where the app started: a link from outside that arrived meanwhile wins
-      if (to && window.location.pathname === "/") { to.go(); navigate(to.href, { replace: true }); }
+      // only from where the app started: a link from outside that arrived meanwhile wins, and so does an address that
+      // asks something of the host (`/?add=`: HostedLinks acts on it once the host has said what it is)
+      if (to && window.location.pathname === "/" && !asksHost(window.location)) { to.go(); navigate(to.href, { replace: true }); }
       if (window.location.pathname === (to?.href ?? "/")) { landed.current = window.location.pathname; landedAt.current = Date.now(); }
       setDecided(true);
     }, () => { if (on) setDecided(true); });
@@ -198,15 +202,18 @@ function ShellRoutes() {
   const location = useLocation();
   const vaults = useVaults();
   const decided = useStart();
+  const hosted = useHosted();
   useSettings();
   const shell = /^\/(add|accept|oauth\/callback|settings|open-link|key|key\/pair|connect|capture|journal|vault)$/.test(location.pathname) || /^\/v\/[^/]+\/a\/[^/]+$/.test(location.pathname) || isEditor(location.pathname)
     || (location.pathname === "/" && !vaults.length);
   if (!decided) return null;
   // Parachute Simplified's home is Parachute's own Vault, which opens on the vault's notes
   // (docs/design/PARACHUTE-SOURCE.md); where the bundle leaves it out, the frame's Notes stays (and `/?with=vault`, the
-  // way back if Vault won't run). An address that asks something of the host (`?add=`: HostedLinks) is left to it.
+  // way back if Vault won't run). An address that asks something of the host (`?add=`: HostedLinks) is left to it,
+  // and held here until the host has said what it is (on a slow link that answer comes after the start is decided:
+  // going to Vault first would drop the ask).
   const homeKey = homeVault(vaults)?.key;
-  if (location.pathname === "/" && !location.search.includes("with=vault") && !(hostedNow()?.cloud && new URLSearchParams(location.search).has("add")) && !shell && homeKey && openBundleNow().look === "notes" && offersOwn(openBundleNow(), SIMPLE_HOME))
+  if (location.pathname === "/" && !location.search.includes("with=vault") && !(asksHost(location) && (hosted === undefined || hosted?.cloud)) && !shell && homeKey && openBundleNow().look === "notes" && offersOwn(openBundleNow(), SIMPLE_HOME))
     return <Navigate to={officialPath(homeKey, SIMPLE_HOME)} replace />;
   const bar = withBar(location.pathname, shell) && vaults.length > 0;
   const own = keptId(location) !== null;
